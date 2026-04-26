@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Xcode user/local state
+DerivedData/
+*.xcuserstate/
+*.xcuserdata/
+*.xcworkspace/
+*.xcodeproj/xcuserdata/
+
+
+# Python cache/env
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Manual input runtime artifacts
+inputs/manual/files/
+inputs/manual/entries.jsonl
+DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata/ramya.xcuserdatad/UserInterfaceState.xcuserstate
+/DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata
