@@ -69,6 +69,29 @@ def load_entries() -> list[dict[str, Any]]:
     return rows
 
 
+def build_chat_reply(prompt: str) -> str:
+    entries = load_entries()
+    recent = entries[:5]
+    if not recent:
+        return (
+            "I received your message, but there are no manual inputs yet. "
+            "Add files, URLs, or text in the Manual Inputs tab first."
+        )
+
+    lines = []
+    for idx, item in enumerate(recent, start=1):
+        kind = item.get("kind", "unknown")
+        value = str(item.get("value", ""))
+        lines.append(f"{idx}. [{kind}] {value}")
+
+    context = "\n".join(lines)
+    return (
+        f"You said: {prompt}\n\n"
+        f"I found {len(recent)} recent manual input(s):\n{context}\n\n"
+        "This is the full frontend-backend cycle response from Python."
+    )
+
+
 class ManualInputHandler(BaseHTTPRequestHandler):
     server_version = "ManualInputServer/1.0"
 
@@ -81,7 +104,7 @@ class ManualInputHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:
-        if self.path != "/manual-input":
+        if self.path not in {"/manual-input", "/chat"}:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
 
@@ -91,6 +114,14 @@ class ManualInputHandler(BaseHTTPRequestHandler):
             payload = json.loads(payload_raw.decode("utf-8"))
         except Exception:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON payload"})
+            return
+
+        if self.path == "/chat":
+            prompt = str(payload.get("prompt", "")).strip()
+            if not prompt:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Payload must include prompt"})
+                return
+            self._send_json(HTTPStatus.OK, {"reply": build_chat_reply(prompt)})
             return
 
         kind = str(payload.get("kind", "")).strip().lower()

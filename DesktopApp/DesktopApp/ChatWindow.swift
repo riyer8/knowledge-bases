@@ -98,6 +98,14 @@ final class ManualInputStore: ObservableObject {
         let entry: BackendEntry
     }
 
+    private struct ChatRequest: Codable {
+        let prompt: String
+    }
+
+    private struct ChatResponse: Codable {
+        let reply: String
+    }
+
     init() {
         Task { await refreshEntries() }
     }
@@ -196,6 +204,19 @@ final class ManualInputStore: ObservableObject {
         return mapBackendEntry(decoded.entry) ?? ManualInputEntry(kind: kind, value: value)
     }
 
+    func sendChat(prompt: String) async throws -> String {
+        var request = URLRequest(url: baseURL.appendingPathComponent("chat"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(ChatRequest(prompt: prompt))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(ChatResponse.self, from: data).reply
+    }
+
     private func mapBackendEntry(_ input: BackendEntry) -> ManualInputEntry? {
         guard let kind = ManualInputKind(rawValue: input.kind.lowercased()) else { return nil }
         let date = iso8601.date(from: input.createdAt) ?? Date()
@@ -208,6 +229,7 @@ struct ChatView: View {
     enum ChatPanel: String, CaseIterable, Identifiable {
         case chat = "Chat"
         case manual = "Manual Inputs"
+        case graph = "Graph View"
 
         var id: String { rawValue }
     }
@@ -286,7 +308,7 @@ struct ChatView: View {
                         }
                     }
                 }
-            } else {
+            } else if selectedPanel == .manual {
                 VStack(spacing: 10) {
                     HStack {
                         Button("Upload Files") {
@@ -374,6 +396,8 @@ struct ChatView: View {
                     .listStyle(.plain)
                 }
                 .background(Color(hex: "#fff7fb"))
+            } else {
+                GraphWindowView(entries: manualInputStore.entries)
             }
 
             Divider()
@@ -405,8 +429,14 @@ struct ChatView: View {
         guard !text.isEmpty else { return }
         inputText = ""
         messages.append(ChatMessage(text: text, isUser: true))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            messages.append(ChatMessage(text: "i'm just text for now! 🦋", isUser: false))
+        Task {
+            do {
+                let reply = try await manualInputStore.sendChat(prompt: text)
+                messages.append(ChatMessage(text: reply, isUser: false))
+            } catch {
+                messages.append(ChatMessage(text: "Backend unavailable. Start manual_input_server.py.", isUser: false))
+            }
         }
     }
+
 }

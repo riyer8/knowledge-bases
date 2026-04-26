@@ -131,12 +131,18 @@ struct PetView: View {
     @State private var bobOffset: CGFloat = 0
     @State private var flapUp: Bool = false
     @State private var isHovered: Bool = false
+    @State private var showIntroBubble: Bool = true
 
     var body: some View {
-        VStack(spacing: 2) {
-            SpeechBubble(text: "hi, i'm text 🦋")
+        ZStack(alignment: .top) {
+            if showIntroBubble || isHovered {
+                SpeechBubble(text: "hi, i'm text 🦋")
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
 
             PixelButterfly(flapUp: flapUp)
+                .padding(.top, 38)
                 .offset(y: bobOffset)
                 .scaleEffect(isHovered ? 1.08 : 1.0)
                 .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: bobOffset)
@@ -145,11 +151,19 @@ struct PetView: View {
                 .onTapGesture { openChat() }
                 .help("Click to chat")
         }
+        .frame(width: 112, height: 112, alignment: .top)
         .padding(8)
         .onAppear {
             bobOffset = -3
+            showIntroBubble = true
             Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { _ in
                 withAnimation(.easeInOut(duration: 0.3)) { flapUp.toggle() }
+            }
+            // keep the intro bubble for three seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showIntroBubble = false
+                }
             }
         }
     }
