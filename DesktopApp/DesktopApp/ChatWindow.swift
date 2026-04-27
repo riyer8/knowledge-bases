@@ -16,7 +16,7 @@ class ChatWindowController: NSWindowController {
         }
 
         let petFrame = petWindow.frame
-        let chatSize = CGSize(width: 320, height: 420)
+        let chatSize = CGSize(width: 520, height: 680)
         var origin = CGPoint(
             x: petFrame.midX - chatSize.width / 2,
             y: petFrame.maxY + 8
@@ -32,13 +32,11 @@ class ChatWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "Chat"
+        window.title = "Desktop Pet"
+        window.minSize = CGSize(width: 460, height: 600)
         window.isReleasedWhenClosed = false
         window.level = .floating
-        window.contentView = NSHostingView(rootView: ChatView(state: state, onClose: {
-            shared?.window?.close()
-            shared = nil
-        }))
+        window.contentView = NSHostingView(rootView: ChatView(state: state))
 
         let controller = ChatWindowController(window: window)
         shared = controller
@@ -74,12 +72,26 @@ struct ManualInputEntry: Identifiable, Codable {
     let kind: ManualInputKind
     let value: String
     let createdAt: Date
+    let sourcePath: String?
+    let text: String?
+    let url: String?
 
-    init(id: UUID = UUID(), kind: ManualInputKind, value: String, createdAt: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        kind: ManualInputKind,
+        value: String,
+        createdAt: Date = Date(),
+        sourcePath: String? = nil,
+        text: String? = nil,
+        url: String? = nil
+    ) {
         self.id = id
         self.kind = kind
         self.value = value
         self.createdAt = createdAt
+        self.sourcePath = sourcePath
+        self.text = text
+        self.url = url
     }
 }
 
@@ -103,6 +115,9 @@ final class ManualInputStore: ObservableObject {
         let kind: String
         let value: String
         let createdAt: String
+        let sourcePath: String?
+        let text: String?
+        let url: String?
     }
 
     private struct BackendSubmitResponse: Codable {
@@ -193,7 +208,7 @@ final class ManualInputStore: ObservableObject {
             entries = backendEntries.compactMap { mapBackendEntry($0) }
             errorMessage = nil
         } catch {
-            errorMessage = "Python backend unavailable. Start manual_input_server.py."
+            errorMessage = "Python backend unavailable. Start python3 main.py."
         }
     }
 
@@ -233,7 +248,15 @@ final class ManualInputStore: ObservableObject {
         guard let kind = ManualInputKind(rawValue: input.kind.lowercased()) else { return nil }
         let date = iso8601.date(from: input.createdAt) ?? Date()
         let id = UUID(uuidString: input.id) ?? UUID()
-        return ManualInputEntry(id: id, kind: kind, value: input.value, createdAt: date)
+        return ManualInputEntry(
+            id: id,
+            kind: kind,
+            value: input.value,
+            createdAt: date,
+            sourcePath: input.sourcePath,
+            text: input.text,
+            url: input.url
+        )
     }
 }
 
@@ -247,7 +270,7 @@ struct ChatView: View {
     }
 
     @ObservedObject var state: ChatWindowState
-    var onClose: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var manualInputStore = ManualInputStore()
     @State private var messages: [ChatMessage] = [
         ChatMessage(text: "hi, i'm text 👋 what's on your mind?", isUser: false)
@@ -256,26 +279,34 @@ struct ChatView: View {
     @State private var manualURLInput: String = ""
     @State private var manualTextInput: String = ""
 
+    private var isDarkMode: Bool { colorScheme == .dark }
+    private var windowBackground: Color { isDarkMode ? Color(nsColor: .windowBackgroundColor) : Color(hex: "#fff7fb") }
+    private var headerBackground: Color { isDarkMode ? Color(nsColor: .controlBackgroundColor) : Color(hex: "#fdf2f8") }
+    private var sectionBackground: Color { isDarkMode ? Color(nsColor: .underPageBackgroundColor) : Color(hex: "#fff7fb") }
+    private var assistantBubble: Color { isDarkMode ? Color(nsColor: .controlColor) : Color(hex: "#fdf2f8") }
+    private var panelTitleColor: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
+    private var assistantTextColor: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
+    private var chatHintBackground: Color { isDarkMode ? Color(nsColor: .textBackgroundColor) : Color(hex: "#fff1f8") }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 HStack(spacing: 8) {
                     Circle().fill(Color(hex: "#ec4899")).frame(width: 10, height: 10)
-                    Text("Desktop Pet")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundColor(Color(hex: "#3d2b1f"))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Desktop Pet Assistant")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundColor(panelTitleColor)
+                        Text("Chat, manual inputs, and graph insights")
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundColor(.secondary)
+                    }
                 }
                 Spacer()
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.gray.opacity(0.6))
-                        .font(.system(size: 16))
-                }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(Color(hex: "#fdf2f8"))
+            .background(headerBackground)
 
             Divider()
 
@@ -287,36 +318,61 @@ struct ChatView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .background(Color(hex: "#fff7fb"))
+            .background(sectionBackground)
 
             if state.selectedPanel == .chat {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(messages) { msg in
-                                HStack {
-                                    if msg.isUser { Spacer(minLength: 40) }
-                                    Text(msg.text)
-                                        .font(.system(size: 13, design: .rounded))
-                                        .foregroundColor(msg.isUser ? .white : Color(hex: "#3d2b1f"))
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 14)
-                                                .fill(msg.isUser ? Color(hex: "#ec4899") : Color(hex: "#fdf2f8"))
-                                                .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
-                                        )
-                                    if !msg.isUser { Spacer(minLength: 40) }
-                                }
-                                .id(msg.id)
-                            }
-                        }
-                        .padding(14)
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(hex: "#ec4899"))
+                        Text("Tip: add files, URLs, or notes in Manual Inputs to improve responses.")
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundColor(.secondary)
+                        Spacer()
                     }
-                    .background(Color(hex: "#fff7fb"))
-                    .onChange(of: messages.count) {
-                        if let last = messages.last {
-                            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(chatHintBackground)
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.top, 10)
+
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(messages) { msg in
+                                    HStack {
+                                        if msg.isUser { Spacer(minLength: 64) }
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(msg.isUser ? "You" : "Text")
+                                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                                .foregroundColor(.secondary)
+                                            Text(msg.text)
+                                                .font(.system(size: 13, design: .rounded))
+                                                .foregroundColor(msg.isUser ? .white : assistantTextColor)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 14)
+                                                        .fill(msg.isUser ? Color(hex: "#ec4899") : assistantBubble)
+                                                        .shadow(color: .black.opacity(0.06), radius: 3, y: 1)
+                                                )
+                                        }
+                                        if !msg.isUser { Spacer(minLength: 64) }
+                                    }
+                                    .id(msg.id)
+                                }
+                            }
+                            .padding(14)
+                        }
+                        .background(sectionBackground)
+                        .onChange(of: messages.count) {
+                            if let last = messages.last {
+                                withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                            }
                         }
                     }
                 }
@@ -357,7 +413,7 @@ struct ChatView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Raw Text")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundColor(Color(hex: "#3d2b1f"))
+                            .foregroundColor(panelTitleColor)
                         TextEditor(text: $manualTextInput)
                             .font(.system(size: 12, design: .rounded))
                             .frame(minHeight: 70, maxHeight: 90)
@@ -390,50 +446,104 @@ struct ChatView: View {
                     }
 
                     List(manualInputStore.entries) { entry in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(entry.kind.rawValue.uppercased())
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(kindBadgeLabel(for: entry))
                                     .font(.system(size: 10, weight: .bold, design: .rounded))
                                     .foregroundColor(Color(hex: "#ec4899"))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color(hex: "#ec4899").opacity(0.12))
+                                    .clipShape(Capsule())
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(manualEntryTitle(entry))
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .lineLimit(1)
+                                    Text(manualEntryDetail(entry))
+                                        .font(.system(size: 11, design: .rounded))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(2)
+                                }
+                                Spacer(minLength: 8)
                                 Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
                                     .font(.system(size: 10, design: .rounded))
                                     .foregroundColor(.secondary)
                             }
-                            Text(entry.value)
-                                .font(.system(size: 12, design: .rounded))
-                                .lineLimit(2)
                         }
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 4)
                     }
                     .listStyle(.plain)
                 }
-                .background(Color(hex: "#fff7fb"))
+                .background(sectionBackground)
             } else {
                 GraphWindowView()
             }
 
-            Divider()
-
-            HStack(spacing: 10) {
-                TextField("Say something...", text: $inputText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13, design: .rounded))
-                    .onSubmit { sendMessage() }
-                Button(action: sendMessage) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(inputText.isEmpty ? .gray.opacity(0.3) : Color(hex: "#ec4899"))
+            if state.selectedPanel == .chat {
+                Divider()
+                HStack(spacing: 10) {
+                    TextField("Say something...", text: $inputText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 14, design: .rounded))
+                        .onSubmit { sendMessage() }
+                    Button(action: sendMessage) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(inputText.isEmpty ? .gray.opacity(0.3) : Color(hex: "#ec4899"))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(inputText.isEmpty)
                 }
-                .buttonStyle(.plain)
-                .disabled(inputText.isEmpty)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(headerBackground)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color(hex: "#fdf2f8"))
-            .opacity(state.selectedPanel == .chat ? 1 : 0.35)
-            .disabled(state.selectedPanel != .chat)
         }
+        .background(windowBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func kindBadgeLabel(for entry: ManualInputEntry) -> String {
+        switch entry.kind {
+        case .file:
+            return "FILE"
+        case .url:
+            return "URL"
+        case .text:
+            return "TEXT"
+        }
+    }
+
+    private func manualEntryTitle(_ entry: ManualInputEntry) -> String {
+        switch entry.kind {
+        case .file:
+            let path = entry.sourcePath ?? entry.value
+            return URL(fileURLWithPath: path).lastPathComponent
+        case .url:
+            let raw = entry.url ?? entry.value
+            if let parsed = URL(string: raw), let host = parsed.host, !host.isEmpty {
+                return host
+            }
+            return raw
+        case .text:
+            let raw = (entry.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if raw.isEmpty { return "Text note" }
+            return String(raw.prefix(70))
+        }
+    }
+
+    private func manualEntryDetail(_ entry: ManualInputEntry) -> String {
+        switch entry.kind {
+        case .file:
+            return entry.sourcePath ?? entry.value
+        case .url:
+            return entry.url ?? entry.value
+        case .text:
+            let raw = (entry.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if raw.isEmpty { return entry.value }
+            return String(raw.prefix(160))
+        }
     }
 
     func sendMessage() {
@@ -446,7 +556,12 @@ struct ChatView: View {
                 let reply = try await manualInputStore.sendChat(prompt: text)
                 messages.append(ChatMessage(text: reply, isUser: false))
             } catch {
-                messages.append(ChatMessage(text: "Backend unavailable. Start manual_input_server.py.", isUser: false))
+                messages.append(
+                    ChatMessage(
+                        text: "Chat backend unavailable. Start python3 main.py from repo root.",
+                        isUser: false
+                    )
+                )
             }
         }
     }

@@ -14,6 +14,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.env
 
 # Manual input runtime artifacts
 inputs/manual/uploads/files/

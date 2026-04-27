@@ -4,18 +4,35 @@ import Combine
 
 struct GraphWindowView: View {
     @StateObject private var graphStore = MarkdownGraphStore()
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedNodeID: String?
     @State private var showOnlyOrphans = false
     @State private var showOnlyUnlinked = false
     @State private var selectedFolder = "All"
+    private var isDarkMode: Bool { colorScheme == .dark }
+    private var sidebarBackground: Color { isDarkMode ? Color(nsColor: .controlBackgroundColor) : Color(hex: "#fff1f8") }
+    private var canvasBackground: Color { isDarkMode ? Color(nsColor: .underPageBackgroundColor) : Color(hex: "#fff7fb") }
+    private var titleColor: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
+    private var selectedRowBackground: Color { isDarkMode ? Color.accentColor.opacity(0.25) : Color(hex: "#fce7f3") }
 
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Knowledge Graph")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(titleColor)
+                    Text("Browse markdown connections and filter by folder.")
+                        .font(.system(size: 10, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+
                 HStack {
                     Text("Files")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundColor(Color(hex: "#3d2b1f"))
+                        .foregroundColor(titleColor)
                     Spacer()
                     Text("\(graphStore.graph.nodes.count)")
                         .font(.system(size: 10, design: .rounded))
@@ -89,18 +106,18 @@ struct GraphWindowView: View {
                         .padding(.vertical, 3)
                     }
                     .buttonStyle(.plain)
-                    .listRowBackground(selectedNodeID == node.id ? Color(hex: "#fce7f3") : Color.clear)
+                    .listRowBackground(selectedNodeID == node.id ? selectedRowBackground : Color.clear)
                 }
                 .listStyle(.plain)
             }
-            .frame(width: 170)
-            .background(Color(hex: "#fff1f8"))
+            .frame(width: 220)
+            .background(sidebarBackground)
 
             Divider()
 
             GraphCanvasView(graph: graphStore.graph, highlightedID: selectedNodeID)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(hex: "#fff7fb"))
+                .background(canvasBackground)
         }
         .task { await refreshGraph() }
     }
@@ -117,10 +134,16 @@ struct GraphWindowView: View {
 private struct GraphCanvasView: View {
     let graph: MarkdownGraph
     let highlightedID: String?
+    @Environment(\.colorScheme) private var colorScheme
     @State private var zoom: CGFloat = 1.0
     @State private var baseZoom: CGFloat = 1.0
     @State private var pan: CGSize = .zero
     @State private var basePan: CGSize = .zero
+    private var isDarkMode: Bool { colorScheme == .dark }
+    private var edgeColor: Color { isDarkMode ? Color.pink.opacity(0.45) : Color(hex: "#f9a8d4").opacity(0.45) }
+    private var arrowColor: Color { isDarkMode ? Color.pink.opacity(0.85) : Color(hex: "#f472b6") }
+    private var nodeTextColor: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
+    private var normalNodeColor: Color { isDarkMode ? Color.pink.opacity(0.8) : Color(hex: "#f472b6") }
 
     var body: some View {
         GeometryReader { geo in
@@ -134,22 +157,22 @@ private struct GraphCanvasView: View {
                                 p.move(to: source.point)
                                 p.addLine(to: target.point)
                             }
-                            .stroke(Color(hex: "#f9a8d4").opacity(0.45), lineWidth: 1.0)
+                            .stroke(edgeColor, lineWidth: 1.0)
                             drawArrowHead(from: source.point, to: target.point)
-                                .fill(Color(hex: "#f472b6"))
+                                .fill(arrowColor)
                         }
                     }
 
                     ForEach(nodes, id: \.id) { node in
                         VStack(spacing: 3) {
                             Circle()
-                                .fill(node.id == highlightedID ? Color(hex: "#ec4899") : Color(hex: "#f472b6"))
+                                .fill(node.id == highlightedID ? Color(hex: "#ec4899") : normalNodeColor)
                                 .frame(width: node.id == highlightedID ? 16 : 11, height: node.id == highlightedID ? 16 : 11)
                             Text(node.label)
                                 .font(.system(size: 9, weight: .medium, design: .rounded))
-                                .foregroundColor(Color(hex: "#3d2b1f"))
+                                .foregroundColor(nodeTextColor)
                                 .lineLimit(1)
-                                .frame(width: 100)
+                                .frame(width: 130)
                         }
                         .position(node.point)
                     }

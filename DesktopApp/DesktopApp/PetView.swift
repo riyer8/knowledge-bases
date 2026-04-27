@@ -4,20 +4,24 @@ import AppKit
 // MARK: - Speech Bubble
 struct SpeechBubble: View {
     let text: String
+    @Environment(\.colorScheme) private var colorScheme
+    private var isDarkMode: Bool { colorScheme == .dark }
+    private var bubbleBackground: Color { isDarkMode ? Color(nsColor: .controlBackgroundColor) : Color(hex: "#fff7fb") }
+    private var bubbleText: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
     var body: some View {
         VStack(spacing: 0) {
             Text(text)
                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundColor(Color(hex: "#3d2b1f"))
+                .foregroundColor(bubbleText)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(hex: "#fff7fb"))
+                        .fill(bubbleBackground)
                         .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
                 )
             Triangle()
-                .fill(Color(hex: "#fff7fb"))
+                .fill(bubbleBackground)
                 .frame(width: 10, height: 6)
                 .offset(y: -1)
         }
