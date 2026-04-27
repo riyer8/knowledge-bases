@@ -86,7 +86,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             openChat(panel: .graph)
             return true
         case "w":
-            ChatWindowController.closeWindow()
+            MainWindowController.closeWindow()
             return true
         case "s":
             requestBackendScreenshot()
@@ -96,9 +96,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func openChat(panel: ChatView.ChatPanel) {
+    private func openChat(panel: MainPanel) {
         guard let petWindow = window else { return }
-        ChatWindowController.open(near: petWindow, preferredPanel: panel)
+        MainWindowController.open(near: petWindow, preferredPanel: panel)
     }
 
     private func requestBackendScreenshot() {
