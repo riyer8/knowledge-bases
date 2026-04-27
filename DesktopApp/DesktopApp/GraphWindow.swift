@@ -230,6 +230,7 @@ private struct GraphCanvasView: View {
     @State private var nodeDragStart: [String: CGSize] = [:]
     @State private var nodeDragAllStart: [String: CGSize] = [:]
     @State private var isDraggingNode = false
+    @State private var hoveredNodeID: String?
     private var isDarkMode: Bool { colorScheme == .dark }
     private var edgeColor: Color { isDarkMode ? Color.pink.opacity(0.45) : Color(hex: "#f9a8d4").opacity(0.45) }
     private var arrowColor: Color { isDarkMode ? Color.pink.opacity(0.85) : Color(hex: "#f472b6") }
@@ -252,9 +253,11 @@ private struct GraphCanvasView: View {
                                 p.move(to: sourcePoint)
                                 p.addLine(to: targetPoint)
                             }
-                            .stroke(edgeColor, lineWidth: 1.0)
+                            .stroke(colorForEdge(edge), lineWidth: hoveredNodeID == nil ? 1.0 : 1.2)
+                            .opacity(opacityForEdge(edge))
                             drawArrowHead(from: sourcePoint, to: targetPoint)
-                                .fill(arrowColor)
+                                .fill(colorForEdge(edge))
+                                .opacity(opacityForEdge(edge))
                         }
                     }
 
@@ -262,7 +265,7 @@ private struct GraphCanvasView: View {
                         let offset = nodeOffsets[node.id] ?? .zero
                         VStack(spacing: 3) {
                             Circle()
-                                .fill(node.id == highlightedID ? Color(hex: "#ec4899") : normalNodeColor)
+                                .fill(colorForNode(nodeID: node.id))
                                 .frame(width: node.id == highlightedID ? 16 : 11, height: node.id == highlightedID ? 16 : 11)
                             Text(node.label)
                                 .font(.system(size: 9, weight: .medium, design: .rounded))
@@ -270,6 +273,7 @@ private struct GraphCanvasView: View {
                                 .lineLimit(1)
                                 .frame(width: 130)
                         }
+                        .opacity(opacityForNode(nodeID: node.id))
                         .position(CGPoint(x: node.point.x + offset.width, y: node.point.y + offset.height))
                         .highPriorityGesture(
                             DragGesture(minimumDistance: 0)
@@ -293,12 +297,14 @@ private struct GraphCanvasView: View {
 
                                     // Nudge directly connected nodes for a dynamic graph feel.
                                     let neighbors = directlyConnectedNodeIDs(for: node.id)
-                                    for neighborID in neighbors {
-                                        let neighborStart = nodeDragAllStart[neighborID] ?? nodeOffsets[neighborID] ?? .zero
-                                        nodeOffsets[neighborID] = CGSize(
-                                            width: neighborStart.width + (delta.width * 0.28),
-                                            height: neighborStart.height + (delta.height * 0.28)
-                                        )
+                                    withAnimation(.interactiveSpring(response: 0.22, dampingFraction: 0.82, blendDuration: 0.2)) {
+                                        for neighborID in neighbors {
+                                            let neighborStart = nodeDragAllStart[neighborID] ?? nodeOffsets[neighborID] ?? .zero
+                                            nodeOffsets[neighborID] = CGSize(
+                                                width: neighborStart.width + (delta.width * 0.28),
+                                                height: neighborStart.height + (delta.height * 0.28)
+                                            )
+                                        }
                                     }
                                 }
                                 .onEnded { _ in
@@ -317,7 +323,7 @@ private struct GraphCanvasView: View {
                             .foregroundColor(.secondary)
                     }
                 }
-                .scaleEffect(zoom)
+                .scaleEffect(zoom, anchor: .topLeading)
                 .offset(pan)
                 .contentShape(Rectangle())
                 .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.9), value: pan)
@@ -350,6 +356,14 @@ private struct GraphCanvasView: View {
                             zoom = baseZoom
                         }
                 )
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let location):
+                        updateHoveredNode(at: location, nodes: nodes)
+                    case .ended:
+                        hoveredNodeID = nil
+                    }
+                }
 
                 HStack(spacing: 8) {
                     Button {
@@ -428,6 +442,39 @@ private struct GraphCanvasView: View {
         return path
     }
 
+    private func updateHoveredNode(at location: CGPoint, nodes: [GraphNode]) {
+        // Convert pointer from rendered space into graph-content space.
+        let adjusted = CGPoint(
+            x: (location.x - pan.width) / max(zoom, 0.0001),
+            y: (location.y - pan.height) / max(zoom, 0.0001)
+        )
+
+        var bestNodeID: String?
+        var bestDistance: CGFloat = .greatestFiniteMagnitude
+        for node in nodes {
+            let offset = nodeOffsets[node.id] ?? .zero
+            let point = CGPoint(x: node.point.x + offset.width, y: node.point.y + offset.height)
+            let dx = point.x - adjusted.x
+            let dy = point.y - adjusted.y
+            let distance = sqrt((dx * dx) + (dy * dy))
+            if distance < bestDistance {
+                bestDistance = distance
+                bestNodeID = node.id
+            }
+        }
+
+        // Snap hover only when cursor is near a node.
+        if bestDistance <= 26, let bestNodeID {
+            if hoveredNodeID != bestNodeID {
+                hoveredNodeID = bestNodeID
+            }
+        } else {
+            if hoveredNodeID != nil {
+                hoveredNodeID = nil
+            }
+        }
+    }
+
     private func directlyConnectedNodeIDs(for nodeID: String) -> Set<String> {
         var neighbors: Set<String> = []
         for edge in graph.edges {
@@ -438,6 +485,89 @@ private struct GraphCanvasView: View {
             }
         }
         return neighbors
+    }
+
+    private enum HoverRelation {
+        case focus
+        case forward
+        case backward
+        case circular
+        case other
+        case none
+    }
+
+    private func relation(for nodeID: String) -> HoverRelation {
+        guard let hovered = hoveredNodeID else { return .none }
+        if nodeID == hovered { return .focus }
+        let forward = Set(graph.edges.filter { $0.source == hovered }.map { $0.target })
+        let backward = Set(graph.edges.filter { $0.target == hovered }.map { $0.source })
+        let circular = forward.intersection(backward)
+        if circular.contains(nodeID) { return .circular }
+        if forward.contains(nodeID) { return .forward }
+        if backward.contains(nodeID) { return .backward }
+        return .other
+    }
+
+    private func colorForNode(nodeID: String) -> Color {
+        switch relation(for: nodeID) {
+        case .focus:
+            return Color(hex: "#ec4899")
+        case .forward:
+            return Color(hex: "#22c55e")
+        case .backward:
+            return Color(hex: "#3b82f6")
+        case .circular:
+            return nodeID == highlightedID ? Color(hex: "#ec4899") : normalNodeColor
+        case .other:
+            return normalNodeColor
+        case .none:
+            return nodeID == highlightedID ? Color(hex: "#ec4899") : normalNodeColor
+        }
+    }
+
+    private func opacityForNode(nodeID: String) -> Double {
+        guard hoveredNodeID != nil else { return 1.0 }
+        switch relation(for: nodeID) {
+        case .other:
+            return 0.25
+        default:
+            return 1.0
+        }
+    }
+
+    private func colorForEdge(_ edge: GraphEdgeDTO) -> Color {
+        guard let hovered = hoveredNodeID else { return edgeColor }
+        let forward = Set(graph.edges.filter { $0.source == hovered }.map { $0.target })
+        let backward = Set(graph.edges.filter { $0.target == hovered }.map { $0.source })
+        let circular = forward.intersection(backward)
+
+        if edge.source == hovered && circular.contains(edge.target) {
+            return arrowColor
+        }
+        if edge.target == hovered && circular.contains(edge.source) {
+            return arrowColor
+        }
+        if edge.source == hovered {
+            return Color(hex: "#22c55e")
+        }
+        if edge.target == hovered {
+            return Color(hex: "#3b82f6")
+        }
+        return edgeColor
+    }
+
+    private func opacityForEdge(_ edge: GraphEdgeDTO) -> Double {
+        guard let hovered = hoveredNodeID else { return 1.0 }
+        if edge.source == hovered || edge.target == hovered {
+            return 1.0
+        }
+        let forward = Set(graph.edges.filter { $0.source == hovered }.map { $0.target })
+        let backward = Set(graph.edges.filter { $0.target == hovered }.map { $0.source })
+        let circular = forward.intersection(backward)
+        if circular.contains(edge.source) && circular.contains(edge.target) {
+            return 1.0
+        }
+        return 0.15
     }
 }
 

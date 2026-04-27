@@ -174,7 +174,7 @@ struct PetView: View {
 
     func openChat() {
         guard let w = NSApp.windows.first(where: { $0.styleMask == .borderless }) else { return }
-        MainWindowController.open(near: w, preferredPanel: .chat)
+        MainWindowController.open(near: w, preferredPanel: .home)
     }
 }
 

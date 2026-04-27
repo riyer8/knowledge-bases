@@ -4,6 +4,7 @@ import Foundation
 import Combine
 
 enum MainPanel: String, CaseIterable, Identifiable {
+    case home = "Home"
     case chat = "Chat"
     case manual = "Manual Inputs"
     case graph = "Graph View"
@@ -66,7 +67,7 @@ class MainWindowController: NSWindowController, NSWindowDelegate {
 
 @MainActor
 final class MainWindowState: ObservableObject {
-    @Published var selectedPanel: MainPanel = .chat
+    @Published var selectedPanel: MainPanel = .home
 }
 
 enum ManualInputKind: String, Codable {
@@ -90,6 +91,7 @@ final class ManualInputStore: ObservableObject {
     @Published private(set) var entries: [ManualInputEntry] = []
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published private(set) var hasFinishedInitialLoad = false
 
     private let baseURL = URL(string: "http://127.0.0.1:8765")!
     private let iso8601 = ISO8601DateFormatter()
@@ -120,6 +122,7 @@ final class ManualInputStore: ObservableObject {
         guard !hasInitialLoad else { return }
         hasInitialLoad = true
         await refreshEntries()
+        hasFinishedInitialLoad = true
     }
 
     func addURL(_ rawValue: String) {
@@ -259,6 +262,7 @@ struct MainWindowView: View {
     private var assistantBubble: Color { isDarkMode ? Color(nsColor: .controlColor) : Color(hex: "#fdf2f8") }
     private var assistantTextColor: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
     private var chatHintBackground: Color { isDarkMode ? Color(nsColor: .textBackgroundColor) : Color(hex: "#fff1f8") }
+    private var tabBackground: Color { isDarkMode ? Color(nsColor: .windowBackgroundColor) : Color(hex: "#fdf2f8") }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -282,17 +286,18 @@ struct MainWindowView: View {
 
             Divider()
 
-            Picker("Panel", selection: $state.selectedPanel) {
-                ForEach(MainPanel.allCases) { panel in
-                    Text(panel.rawValue).tag(panel)
-                }
-            }
-            .pickerStyle(.segmented)
+            CutePanelTabs(selectedPanel: $state.selectedPanel, background: tabBackground)
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(sectionBackground)
 
-            if state.selectedPanel == .chat {
+            if state.selectedPanel == .home {
+                LandingHomeView(
+                    selectedPanel: $state.selectedPanel,
+                    panelTitleColor: panelTitleColor,
+                    showLoading: !manualInputStore.hasFinishedInitialLoad || manualInputStore.isLoading
+                )
+            } else if state.selectedPanel == .chat {
                 ChatScreenView(
                     messages: $messages,
                     assistantTextColor: assistantTextColor,
@@ -380,6 +385,109 @@ struct MainWindowView: View {
     }
 }
 
+private struct CutePanelTabs: View {
+    @Binding var selectedPanel: MainPanel
+    let background: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            tabButton(.home, icon: "sparkles")
+            tabButton(.chat, icon: "message.fill")
+            tabButton(.manual, icon: "tray.full")
+            tabButton(.graph, icon: "point.3.connected.trianglepath.dotted")
+        }
+        .padding(6)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(background)
+        )
+    }
+
+    private func tabButton(_ panel: MainPanel, icon: String) -> some View {
+        let isSelected = selectedPanel == panel
+        return Button {
+            selectedPanel = panel
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 10))
+                Text(panel.rawValue)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(isSelected ? Color(hex: "#ec4899").opacity(0.18) : Color.clear)
+            )
+            .foregroundColor(isSelected ? Color(hex: "#ec4899") : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct LandingHomeView: View {
+    @Binding var selectedPanel: MainPanel
+    let panelTitleColor: Color
+    let showLoading: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if showLoading {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.65)
+                    Text("Loading your workspace...")
+                        .font(.system(size: 12, design: .rounded))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.top, 10)
+            }
+        
+            Text("What would you like to do?")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .foregroundColor(panelTitleColor)
+                .padding(.top, 10)
+
+            HStack(spacing: 10) {
+                homeCard(title: "Chat", subtitle: "Talk with Text assistant", icon: "message.fill", panel: .chat)
+                homeCard(title: "Manual Inputs", subtitle: "Add files, URLs, and notes", icon: "tray.full", panel: .manual)
+                homeCard(title: "Graph", subtitle: "Explore dependencies visually", icon: "point.3.connected.trianglepath.dotted", panel: .graph)
+            }
+            .padding(.top, 20)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+    }
+
+    private func homeCard(title: String, subtitle: String, icon: String, panel: MainPanel) -> some View {
+        Button {
+            selectedPanel = panel
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(Color(hex: "#ec4899"))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                Text(subtitle)
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 11)
+                    .fill(Color(hex: "#ec4899").opacity(0.08))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct ManualInputsPanel: View {
     @ObservedObject var manualInputStore: ManualInputStore
     @Binding var manualURLInput: String
@@ -387,6 +495,7 @@ struct ManualInputsPanel: View {
     let panelTitleColor: Color
     let sectionBackground: Color
     var onOpenSeparateWindow: (() -> Void)? = nil
+    @State private var showLogsPanel = true
 
     var body: some View {
         VStack(spacing: 10) {
@@ -500,39 +609,55 @@ struct ManualInputsPanel: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundColor(panelTitleColor)
                 Spacer()
+                Button {
+                    showLogsPanel.toggle()
+                } label: {
+                    Label(showLogsPanel ? "Hide" : "Show", systemImage: "list.bullet.rectangle")
+                        .font(.system(size: 10, design: .rounded))
+                }
+                .buttonStyle(.bordered)
+                .help("Show or hide the log list")
             }
             .padding(.horizontal, 14)
             .padding(.top, 4)
 
-            List(manualInputStore.entries) { entry in
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .top, spacing: 8) {
-                        Text(kindBadgeLabel(for: entry))
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundColor(Color(hex: "#ec4899"))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color(hex: "#ec4899").opacity(0.12))
-                            .clipShape(Capsule())
+            if showLogsPanel {
+                List(manualInputStore.entries) { entry in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Text(kindBadgeLabel(for: entry))
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundColor(Color(hex: "#ec4899"))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color(hex: "#ec4899").opacity(0.12))
+                                .clipShape(Capsule())
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(manualEntryTitle(entry))
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .lineLimit(1)
-                            Text(manualEntryDetail(entry))
-                                .font(.system(size: 11, design: .rounded))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(manualEntryTitle(entry))
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .lineLimit(1)
+                                Text(manualEntryDetail(entry))
+                                    .font(.system(size: 11, design: .rounded))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 8)
+                            Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.system(size: 10, design: .rounded))
                                 .foregroundColor(.secondary)
-                                .lineLimit(2)
                         }
-                        Spacer(minLength: 8)
-                        Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundColor(.secondary)
                     }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
+                .listStyle(.plain)
+            } else {
+                // Keep layout height stable when logs are hidden.
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.clear)
+                    .frame(minHeight: 220)
+                    .padding(.horizontal, 14)
             }
-            .listStyle(.plain)
         }
         .background(sectionBackground)
     }
