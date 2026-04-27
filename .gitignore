@@ -16,7 +16,10 @@ __pycache__/
 venv/
 
 # Manual input runtime artifacts
-inputs/manual/files/
+inputs/manual/uploads/files/
+inputs/manual/uploads/text/
+inputs/manual/uploads/urls/
 inputs/manual/entries.jsonl
+inputs/screenshot/captures/
 DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata/ramya.xcuserdatad/UserInterfaceState.xcuserstate
 /DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata

@@ -6,8 +6,10 @@ import Combine
 // MARK: - Chat Window Controller
 class ChatWindowController: NSWindowController {
     static var shared: ChatWindowController?
+    static let state = ChatWindowState()
 
-    static func open(near petWindow: NSWindow) {
+    static func open(near petWindow: NSWindow, preferredPanel: ChatView.ChatPanel = .chat) {
+        state.selectedPanel = preferredPanel
         if let existing = shared {
             existing.window?.makeKeyAndOrderFront(nil)
             return
@@ -33,7 +35,7 @@ class ChatWindowController: NSWindowController {
         window.title = "Chat"
         window.isReleasedWhenClosed = false
         window.level = .floating
-        window.contentView = NSHostingView(rootView: ChatView(onClose: {
+        window.contentView = NSHostingView(rootView: ChatView(state: state, onClose: {
             shared?.window?.close()
             shared = nil
         }))
@@ -42,6 +44,16 @@ class ChatWindowController: NSWindowController {
         shared = controller
         window.makeKeyAndOrderFront(nil)
     }
+
+    static func closeWindow() {
+        shared?.window?.close()
+        shared = nil
+    }
+}
+
+@MainActor
+final class ChatWindowState: ObservableObject {
+    @Published var selectedPanel: ChatView.ChatPanel = .chat
 }
 
 // MARK: - Chat View
@@ -234,13 +246,13 @@ struct ChatView: View {
         var id: String { rawValue }
     }
 
+    @ObservedObject var state: ChatWindowState
     var onClose: () -> Void
     @StateObject private var manualInputStore = ManualInputStore()
     @State private var messages: [ChatMessage] = [
         ChatMessage(text: "hi, i'm text 👋 what's on your mind?", isUser: false)
     ]
     @State private var inputText: String = ""
-    @State private var selectedPanel: ChatPanel = .chat
     @State private var manualURLInput: String = ""
     @State private var manualTextInput: String = ""
 
@@ -267,7 +279,7 @@ struct ChatView: View {
 
             Divider()
 
-            Picker("Panel", selection: $selectedPanel) {
+            Picker("Panel", selection: $state.selectedPanel) {
                 ForEach(ChatPanel.allCases) { panel in
                     Text(panel.rawValue).tag(panel)
                 }
@@ -277,7 +289,7 @@ struct ChatView: View {
             .padding(.vertical, 10)
             .background(Color(hex: "#fff7fb"))
 
-            if selectedPanel == .chat {
+            if state.selectedPanel == .chat {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
@@ -308,7 +320,7 @@ struct ChatView: View {
                         }
                     }
                 }
-            } else if selectedPanel == .manual {
+            } else if state.selectedPanel == .manual {
                 VStack(spacing: 10) {
                     HStack {
                         Button("Upload Files") {
@@ -397,7 +409,7 @@ struct ChatView: View {
                 }
                 .background(Color(hex: "#fff7fb"))
             } else {
-                GraphWindowView(entries: manualInputStore.entries)
+                GraphWindowView()
             }
 
             Divider()
@@ -418,8 +430,8 @@ struct ChatView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(Color(hex: "#fdf2f8"))
-            .opacity(selectedPanel == .chat ? 1 : 0.35)
-            .disabled(selectedPanel != .chat)
+            .opacity(state.selectedPanel == .chat ? 1 : 0.35)
+            .disabled(state.selectedPanel != .chat)
         }
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
