@@ -6,6 +6,10 @@ struct GraphWindowView: View {
     @StateObject private var graphStore = MarkdownGraphStore()
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedNodeID: String?
+    @State private var dependencySourceID: String = ""
+    @State private var dependencyTargetID: String = ""
+    @State private var showControlsPanel = true
+    @State private var showLogsPanel = true
     @State private var showOnlyOrphans = false
     @State private var showOnlyUnlinked = false
     @State private var selectedFolder = "All"
@@ -14,14 +18,21 @@ struct GraphWindowView: View {
     private var canvasBackground: Color { isDarkMode ? Color(nsColor: .underPageBackgroundColor) : Color(hex: "#fff7fb") }
     private var titleColor: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
     private var selectedRowBackground: Color { isDarkMode ? Color.accentColor.opacity(0.25) : Color(hex: "#fce7f3") }
+    private var cardBackground: Color { isDarkMode ? Color(nsColor: .windowBackgroundColor) : Color.white.opacity(0.55) }
 
     var body: some View {
         HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Knowledge Graph")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundColor(titleColor)
+                    HStack(spacing: 6) {
+                        Image(systemName: "point.3.connected.trianglepath.dotted")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(hex: "#ec4899"))
+                            .help("Knowledge graph overview")
+                        Text("Knowledge Graph")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundColor(titleColor)
+                    }
                     Text("Browse markdown connections and filter by folder.")
                         .font(.system(size: 10, design: .rounded))
                         .foregroundColor(.secondary)
@@ -29,58 +40,130 @@ struct GraphWindowView: View {
                 .padding(.horizontal, 10)
                 .padding(.top, 8)
 
-                HStack {
-                    Text("Files")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundColor(titleColor)
-                    Spacer()
-                    Text("\(graphStore.graph.nodes.count)")
-                        .font(.system(size: 10, design: .rounded))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 10)
-                .padding(.top, 10)
-
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Button {
-                        Task { await refreshGraph() }
+                        showControlsPanel.toggle()
                     } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
+                        Label(showControlsPanel ? "Hide Controls" : "Show Controls", systemImage: "slider.horizontal.3")
                             .font(.system(size: 10, design: .rounded))
                     }
                     .buttonStyle(.bordered)
-                    .controlSize(.small)
+                    .help("Toggle graph controls")
 
-                    if graphStore.isLoading {
-                        ProgressView().scaleEffect(0.6)
+                    Button {
+                        showLogsPanel.toggle()
+                    } label: {
+                        Label(showLogsPanel ? "Hide Logs" : "Show Logs", systemImage: "list.bullet.rectangle")
+                            .font(.system(size: 10, design: .rounded))
                     }
+                    .buttonStyle(.bordered)
+                    .help("Toggle file log list")
                 }
                 .padding(.horizontal, 10)
 
-                Toggle("Orphans only", isOn: $showOnlyOrphans)
-                    .font(.system(size: 10, design: .rounded))
-                    .padding(.horizontal, 10)
-                    .onChange(of: showOnlyOrphans) {
-                        Task { await refreshGraph() }
+                if showControlsPanel {
+                    VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label("Controls", systemImage: "slider.horizontal.3")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(titleColor)
+                            .help("Use these controls to filter and refresh")
+                        Spacer()
+                        if graphStore.isLoading {
+                            ProgressView().scaleEffect(0.6)
+                        }
                     }
 
-                Toggle("No outgoing links", isOn: $showOnlyUnlinked)
+                    HStack(spacing: 6) {
+                        Button {
+                            Task { await refreshGraph() }
+                        } label: {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                                .font(.system(size: 10, design: .rounded))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Spacer()
+                        Text("\(graphStore.graph.nodes.count) files")
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundColor(.secondary)
+                    }
+                    }
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(cardBackground))
+                    .padding(.horizontal, 10)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Create Dependency", systemImage: "link.badge.plus")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(titleColor)
+                            .help("Connect one file to another manually")
+                        Picker("Source", selection: $dependencySourceID) {
+                            Text("From...").tag("")
+                            ForEach(graphStore.graph.nodes, id: \.id) { node in
+                                Text("\(node.label) • \(node.folder)").tag(node.id)
+                            }
+                        }
+                        .font(.system(size: 10, design: .rounded))
+                        Picker("Target", selection: $dependencyTargetID) {
+                            Text("To...").tag("")
+                            ForEach(graphStore.graph.nodes, id: \.id) { node in
+                                Text("\(node.label) • \(node.folder)").tag(node.id)
+                            }
+                        }
+                        .font(.system(size: 10, design: .rounded))
+                        Button {
+                            Task {
+                                await graphStore.addDependency(source: dependencySourceID, target: dependencyTargetID)
+                                await refreshGraph()
+                            }
+                        } label: {
+                            Label("Add Dependency", systemImage: "link.badge.plus")
+                                .font(.system(size: 10, design: .rounded))
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(
+                            dependencySourceID.isEmpty ||
+                            dependencyTargetID.isEmpty ||
+                            dependencySourceID == dependencyTargetID
+                        )
+                        Text("Tip: pick a source note and a target note, then add the edge.")
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 2)
+                    .padding(.bottom, 2)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(cardBackground))
+                    .padding(.horizontal, 10)
+
+                    Toggle("Orphans only", isOn: $showOnlyOrphans)
+                        .font(.system(size: 10, design: .rounded))
+                        .padding(.horizontal, 10)
+                        .onChange(of: showOnlyOrphans) {
+                            Task { await refreshGraph() }
+                        }
+
+                    Toggle("No outgoing links", isOn: $showOnlyUnlinked)
+                        .font(.system(size: 10, design: .rounded))
+                        .padding(.horizontal, 10)
+                        .onChange(of: showOnlyUnlinked) {
+                            Task { await refreshGraph() }
+                        }
+
+                    Picker("Folder", selection: $selectedFolder) {
+                        Text("All").tag("All")
+                        ForEach(graphStore.graph.folders, id: \.self) { folder in
+                            Text(folder).tag(folder)
+                        }
+                    }
                     .font(.system(size: 10, design: .rounded))
                     .padding(.horizontal, 10)
-                    .onChange(of: showOnlyUnlinked) {
+                    .onChange(of: selectedFolder) {
                         Task { await refreshGraph() }
                     }
-
-                Picker("Folder", selection: $selectedFolder) {
-                    Text("All").tag("All")
-                    ForEach(graphStore.graph.folders, id: \.self) { folder in
-                        Text(folder).tag(folder)
-                    }
-                }
-                .font(.system(size: 10, design: .rounded))
-                .padding(.horizontal, 10)
-                .onChange(of: selectedFolder) {
-                    Task { await refreshGraph() }
                 }
 
                 if let error = graphStore.errorMessage {
@@ -90,27 +173,30 @@ struct GraphWindowView: View {
                         .padding(.horizontal, 10)
                 }
 
-                List(graphStore.graph.nodes) { node in
-                    Button {
-                        selectedNodeID = node.id
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(node.label)
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .lineLimit(1)
-                            Text("in:\(node.incoming) out:\(node.outgoing)")
-                                .font(.system(size: 9, design: .rounded))
-                                .foregroundColor(.secondary)
+                if showLogsPanel {
+                    List(graphStore.graph.nodes) { node in
+                        Button {
+                            selectedNodeID = node.id
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(node.label)
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .lineLimit(1)
+                                Text("in:\(node.incoming) out:\(node.outgoing)")
+                                    .font(.system(size: 9, design: .rounded))
+                                    .foregroundColor(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 3)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 3)
+                        .help("Click to highlight this node in graph")
+                        .buttonStyle(.plain)
+                        .listRowBackground(selectedNodeID == node.id ? selectedRowBackground : Color.clear)
                     }
-                    .buttonStyle(.plain)
-                    .listRowBackground(selectedNodeID == node.id ? selectedRowBackground : Color.clear)
+                    .listStyle(.plain)
                 }
-                .listStyle(.plain)
             }
-            .frame(width: 220)
+            .frame(width: 270)
             .background(sidebarBackground)
 
             Divider()
@@ -118,6 +204,7 @@ struct GraphWindowView: View {
             GraphCanvasView(graph: graphStore.graph, highlightedID: selectedNodeID)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(canvasBackground)
+                .clipped()
         }
         .task { await refreshGraph() }
     }
@@ -139,6 +226,10 @@ private struct GraphCanvasView: View {
     @State private var baseZoom: CGFloat = 1.0
     @State private var pan: CGSize = .zero
     @State private var basePan: CGSize = .zero
+    @State private var nodeOffsets: [String: CGSize] = [:]
+    @State private var nodeDragStart: [String: CGSize] = [:]
+    @State private var nodeDragAllStart: [String: CGSize] = [:]
+    @State private var isDraggingNode = false
     private var isDarkMode: Bool { colorScheme == .dark }
     private var edgeColor: Color { isDarkMode ? Color.pink.opacity(0.45) : Color(hex: "#f9a8d4").opacity(0.45) }
     private var arrowColor: Color { isDarkMode ? Color.pink.opacity(0.85) : Color(hex: "#f472b6") }
@@ -153,17 +244,22 @@ private struct GraphCanvasView: View {
                     ForEach(graph.edges) { edge in
                         if let source = nodes.first(where: { $0.id == edge.source }),
                            let target = nodes.first(where: { $0.id == edge.target }) {
+                            let sourceOffset = nodeOffsets[source.id] ?? .zero
+                            let targetOffset = nodeOffsets[target.id] ?? .zero
+                            let sourcePoint = CGPoint(x: source.point.x + sourceOffset.width, y: source.point.y + sourceOffset.height)
+                            let targetPoint = CGPoint(x: target.point.x + targetOffset.width, y: target.point.y + targetOffset.height)
                             Path { p in
-                                p.move(to: source.point)
-                                p.addLine(to: target.point)
+                                p.move(to: sourcePoint)
+                                p.addLine(to: targetPoint)
                             }
                             .stroke(edgeColor, lineWidth: 1.0)
-                            drawArrowHead(from: source.point, to: target.point)
+                            drawArrowHead(from: sourcePoint, to: targetPoint)
                                 .fill(arrowColor)
                         }
                     }
 
                     ForEach(nodes, id: \.id) { node in
+                        let offset = nodeOffsets[node.id] ?? .zero
                         VStack(spacing: 3) {
                             Circle()
                                 .fill(node.id == highlightedID ? Color(hex: "#ec4899") : normalNodeColor)
@@ -174,7 +270,44 @@ private struct GraphCanvasView: View {
                                 .lineLimit(1)
                                 .frame(width: 130)
                         }
-                        .position(node.point)
+                        .position(CGPoint(x: node.point.x + offset.width, y: node.point.y + offset.height))
+                        .highPriorityGesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    isDraggingNode = true
+                                    if nodeDragStart[node.id] == nil {
+                                        nodeDragStart[node.id] = nodeOffsets[node.id] ?? .zero
+                                    }
+                                    if nodeDragAllStart.isEmpty {
+                                        nodeDragAllStart = nodeOffsets
+                                    }
+                                    let start = nodeDragStart[node.id] ?? .zero
+                                    let delta = CGSize(
+                                        width: value.translation.width,
+                                        height: value.translation.height
+                                    )
+                                    nodeOffsets[node.id] = CGSize(
+                                        width: start.width + value.translation.width,
+                                        height: start.height + value.translation.height
+                                    )
+
+                                    // Nudge directly connected nodes for a dynamic graph feel.
+                                    let neighbors = directlyConnectedNodeIDs(for: node.id)
+                                    for neighborID in neighbors {
+                                        let neighborStart = nodeDragAllStart[neighborID] ?? nodeOffsets[neighborID] ?? .zero
+                                        nodeOffsets[neighborID] = CGSize(
+                                            width: neighborStart.width + (delta.width * 0.28),
+                                            height: neighborStart.height + (delta.height * 0.28)
+                                        )
+                                    }
+                                }
+                                .onEnded { _ in
+                                    nodeDragStart[node.id] = nil
+                                    nodeDragAllStart.removeAll()
+                                    isDraggingNode = false
+                                }
+                        )
+                        .help("Drag node to reposition")
                     }
 
                     if nodes.isEmpty {
@@ -186,17 +319,20 @@ private struct GraphCanvasView: View {
                 }
                 .scaleEffect(zoom)
                 .offset(pan)
+                .contentShape(Rectangle())
                 .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.9), value: pan)
                 .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.9), value: zoom)
                 .simultaneousGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
+                            guard !isDraggingNode else { return }
                             pan = CGSize(
                                 width: basePan.width + value.translation.width,
                                 height: basePan.height + value.translation.height
                             )
                         }
                         .onEnded { value in
+                            guard !isDraggingNode else { return }
                             basePan = CGSize(
                                 width: basePan.width + value.translation.width,
                                 height: basePan.height + value.translation.height
@@ -207,21 +343,45 @@ private struct GraphCanvasView: View {
                 .simultaneousGesture(
                     MagnificationGesture()
                         .onChanged { value in
-                            zoom = max(0.45, min(3.0, baseZoom * value))
+                            zoom = max(0.35, min(4.0, baseZoom * value))
                         }
                         .onEnded { value in
-                            baseZoom = max(0.45, min(3.0, baseZoom * value))
+                            baseZoom = max(0.35, min(4.0, baseZoom * value))
                             zoom = baseZoom
                         }
                 )
 
-                Button("Reset View") {
-                    baseZoom = 1.0
-                    zoom = 1.0
-                    basePan = .zero
-                    pan = .zero
+                HStack(spacing: 8) {
+                    Button {
+                        baseZoom = max(0.35, baseZoom - 0.15)
+                        zoom = baseZoom
+                    } label: {
+                        Image(systemName: "minus.magnifyingglass")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Zoom out")
+
+                    Button {
+                        baseZoom = min(4.0, baseZoom + 0.15)
+                        zoom = baseZoom
+                    } label: {
+                        Image(systemName: "plus.magnifyingglass")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Zoom in")
+
+                    Button("Reset View") {
+                        baseZoom = 1.0
+                        zoom = 1.0
+                        basePan = .zero
+                        pan = .zero
+                        nodeOffsets.removeAll()
+                        nodeDragStart.removeAll()
+                    }
+                    .font(.system(size: 10, design: .rounded))
+                    .buttonStyle(.bordered)
+                    .help("Reset pan, zoom, and node positions")
                 }
-                .font(.system(size: 10, design: .rounded))
                 .padding(8)
             }
             .padding(10)
@@ -267,11 +427,24 @@ private struct GraphCanvasView: View {
         path.closeSubpath()
         return path
     }
+
+    private func directlyConnectedNodeIDs(for nodeID: String) -> Set<String> {
+        var neighbors: Set<String> = []
+        for edge in graph.edges {
+            if edge.source == nodeID {
+                neighbors.insert(edge.target)
+            } else if edge.target == nodeID {
+                neighbors.insert(edge.source)
+            }
+        }
+        return neighbors
+    }
 }
 
 private struct MarkdownGraph: Codable {
     var nodes: [GraphNodeDTO] = []
     var edges: [GraphEdgeDTO] = []
+    var manualDependencies: [GraphEdgeDTO] = []
     var folders: [String] = []
 }
 
@@ -300,6 +473,10 @@ private final class MarkdownGraphStore: ObservableObject {
     @Published var errorMessage: String?
 
     private let baseURL = URL(string: "http://127.0.0.1:8765")!
+    private struct AddDependencyRequest: Codable {
+        let source: String
+        let target: String
+    }
 
     func refresh(onlyOrphans: Bool = false, onlyUnlinked: Bool = false, folder: String? = nil) async {
         isLoading = true
@@ -324,6 +501,23 @@ private final class MarkdownGraphStore: ObservableObject {
             errorMessage = nil
         } catch {
             errorMessage = "Graph backend unavailable."
+        }
+    }
+
+    func addDependency(source: String, target: String) async {
+        guard !source.isEmpty, !target.isEmpty, source != target else { return }
+        do {
+            var request = URLRequest(url: baseURL.appendingPathComponent("graph/dependency"))
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(AddDependencyRequest(source: source, target: target))
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+            errorMessage = nil
+        } catch {
+            errorMessage = "Failed to add dependency."
         }
     }
 }

@@ -17,7 +17,7 @@ if str(REPO_ROOT) not in sys.path:
 if str(REPO_ROOT / "inputs") not in sys.path:
     sys.path.append(str(REPO_ROOT / "inputs"))
 
-from core.graph_service import build_markdown_graph
+from core.graph_service import add_manual_dependency, build_markdown_graph
 from core.llm_service import call_claude_chat
 from core.manual_input_service import MANUAL_ROOT, load_entries, now_iso, process_manual_input
 from screenshot.screenshot_service import capture_screenshot
@@ -38,7 +38,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:
-        if self.path not in {"/manual-input", "/chat", "/screenshot"}:
+        if self.path not in {"/manual-input", "/chat", "/screenshot", "/graph/dependency"}:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
 
@@ -48,6 +48,20 @@ class FrontendHandler(BaseHTTPRequestHandler):
             payload = json.loads(payload_raw.decode("utf-8"))
         except Exception:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON payload"})
+            return
+
+        if self.path == "/graph/dependency":
+            source = str(payload.get("source", "")).strip()
+            target = str(payload.get("target", "")).strip()
+            try:
+                dependency = add_manual_dependency(GRAPH_ROOT, source, target)
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"Failed to save dependency: {exc}"})
+                return
+            self._send_json(HTTPStatus.OK, {"ok": True, "dependency": dependency})
             return
 
         if self.path == "/manual-input":

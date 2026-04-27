@@ -78,6 +78,11 @@ KB_MANUAL_INPUT_ROOT="/absolute/path/to/inputs/manual" python3 inputs/manual/man
     - `orphans=1`
     - `unlinked=1`
     - `folder=<folder-prefix>`
+- `POST /graph/dependency`
+  - JSON body:
+    - `source`: source node id/path
+    - `target`: target node id/path
+  - Creates a manual dependency edge between two graph nodes
 - `POST /screenshot`
   - Captures current screen and saves to `inputs/screenshot/captures/`
 - `GET /health`

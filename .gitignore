@@ -24,3 +24,4 @@ inputs/manual/entries.jsonl
 inputs/screenshot/captures/
 DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata/ramya.xcuserdatad/UserInterfaceState.xcuserstate
 /DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata
+.graph-dependencies.json

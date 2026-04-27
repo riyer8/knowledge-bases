@@ -410,6 +410,15 @@ struct ManualInputsPanel: View {
             .padding(.horizontal, 14)
             .padding(.top, 4)
 
+            HStack {
+                Text("Add Context")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(panelTitleColor)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 2)
+
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Label("Files", systemImage: "doc.badge.plus")
@@ -417,7 +426,7 @@ struct ManualInputsPanel: View {
                         .foregroundColor(panelTitleColor)
                     Spacer()
                     Button("Add Files") { manualInputStore.importFilesFromPicker() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                 }
                 Text("Choose one or more files from your computer.")
                     .font(.system(size: 11, design: .rounded))
@@ -485,6 +494,15 @@ struct ManualInputsPanel: View {
                     .font(.system(size: 11, design: .rounded))
                     .padding(.horizontal, 14)
             }
+
+            HStack {
+                Text("Recent Log")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(panelTitleColor)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
 
             List(manualInputStore.entries) { entry in
                 VStack(alignment: .leading, spacing: 6) {

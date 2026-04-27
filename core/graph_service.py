@@ -1,8 +1,53 @@
 from __future__ import annotations
 
 import re
+import json
 from pathlib import Path
 from typing import Any
+
+
+def graph_dependencies_path(root: Path) -> Path:
+    return root / "inputs" / ".graph-dependencies.json"
+
+
+def load_manual_dependencies(root: Path) -> list[dict[str, str]]:
+    path = graph_dependencies_path(root)
+    if not path.exists():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(raw, list):
+        return []
+    rows: list[dict[str, str]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source", "")).strip()
+        target = str(item.get("target", "")).strip()
+        if source and target and source != target:
+            rows.append({"source": source, "target": target})
+    return rows
+
+
+def save_manual_dependencies(root: Path, dependencies: list[dict[str, str]]) -> None:
+    path = graph_dependencies_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dependencies, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+def add_manual_dependency(root: Path, source: str, target: str) -> dict[str, str]:
+    source = source.strip()
+    target = target.strip()
+    if not source or not target or source == target:
+        raise ValueError("Dependency requires different non-empty source and target.")
+    dependencies = load_manual_dependencies(root)
+    if not any(dep["source"] == source and dep["target"] == target for dep in dependencies):
+        dependencies.append({"source": source, "target": target})
+        dependencies.sort(key=lambda dep: (dep["source"], dep["target"]))
+        save_manual_dependencies(root, dependencies)
+    return {"source": source, "target": target}
 
 
 def build_markdown_graph(
@@ -69,6 +114,13 @@ def build_markdown_graph(
 
     incoming_count: dict[str, int] = {node["id"]: 0 for node in nodes}
     outgoing_count: dict[str, int] = {node["id"]: 0 for node in nodes}
+    manual_dependencies = load_manual_dependencies(root)
+    for dependency in manual_dependencies:
+        src = dependency["source"]
+        dst = dependency["target"]
+        if src in known_ids and dst in known_ids and src != dst:
+            edges.append({"source": src, "target": dst})
+
     for edge in edges:
         outgoing_count[edge["source"]] = outgoing_count.get(edge["source"], 0) + 1
         incoming_count[edge["target"]] = incoming_count.get(edge["target"], 0) + 1
@@ -104,6 +156,7 @@ def build_markdown_graph(
     return {
         "nodes": enriched_nodes,
         "edges": filtered_edges,
+        "manualDependencies": [d for d in manual_dependencies if d["source"] in known_ids and d["target"] in known_ids],
         "root": str(root),
         "folders": folders,
     }
