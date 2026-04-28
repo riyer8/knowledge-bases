@@ -2,6 +2,11 @@ import SwiftUI
 import AppKit
 import Foundation
 
+final class PetWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 @main
 struct DesktopPetApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -26,7 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             y: screen.minY + 80
         )
 
-        window = NSWindow(
+        window = PetWindow(
             contentRect: NSRect(origin: origin, size: size),
             styleMask: [.borderless],
             backing: .buffered,

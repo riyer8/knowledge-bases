@@ -4,10 +4,19 @@ struct SettingsPanel: View {
     @ObservedObject var settings: DesktopPetSettings
     let clearAction: () async throws -> Void
 
+    @State private var selectedTheme: AppThemeMode
+    @State private var selectedIcon: PetIconOption
     @State private var showConfirmDelete = false
     @State private var showFinalDeleteConfirm = false
     @State private var isDeleting = false
     @State private var feedbackMessage: String?
+
+    init(settings: DesktopPetSettings, clearAction: @escaping () async throws -> Void) {
+        self._settings = ObservedObject(wrappedValue: settings)
+        self.clearAction = clearAction
+        self._selectedTheme = State(initialValue: settings.themeMode)
+        self._selectedIcon = State(initialValue: settings.petIcon)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -17,7 +26,7 @@ struct SettingsPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Theme")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                Picker("Theme", selection: $settings.themeMode) {
+                Picker("Theme", selection: $selectedTheme) {
                     ForEach(AppThemeMode.allCases) { mode in
                         Text(mode.label).tag(mode)
                     }
@@ -28,7 +37,7 @@ struct SettingsPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Pet Icon")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                Picker("Pet Icon", selection: $settings.petIcon) {
+                Picker("Pet Icon", selection: $selectedIcon) {
                     ForEach(PetIconOption.allCases) { option in
                         Label(option.label, systemImage: option.symbolName).tag(option)
                     }
@@ -85,6 +94,28 @@ struct SettingsPanel: View {
             }
         } message: {
             Text("Please confirm one more time to permanently clear your data.")
+        }
+        .onChange(of: selectedTheme) {
+            guard settings.themeMode != selectedTheme else { return }
+            DispatchQueue.main.async {
+                settings.themeMode = selectedTheme
+            }
+        }
+        .onChange(of: selectedIcon) {
+            guard settings.petIcon != selectedIcon else { return }
+            DispatchQueue.main.async {
+                settings.petIcon = selectedIcon
+            }
+        }
+        .onReceive(settings.$themeMode) { current in
+            if selectedTheme != current {
+                selectedTheme = current
+            }
+        }
+        .onReceive(settings.$petIcon) { current in
+            if selectedIcon != current {
+                selectedIcon = current
+            }
         }
     }
 

@@ -34,7 +34,7 @@ enum PetIconOption: String, CaseIterable, Identifiable {
 
     var symbolName: String {
         switch self {
-        case .butterfly: return "butterfly.fill"
+        case .butterfly: return "sparkles"
         case .star: return "star.fill"
         case .paw: return "pawprint.fill"
         }
@@ -43,22 +43,19 @@ enum PetIconOption: String, CaseIterable, Identifiable {
 
 @MainActor
 final class DesktopPetSettings: ObservableObject {
-    @Published var themeMode: AppThemeMode {
-        didSet { UserDefaults.standard.set(themeMode.rawValue, forKey: Self.themeKey) }
-    }
-
-    @Published var petIcon: PetIconOption {
-        didSet { UserDefaults.standard.set(petIcon.rawValue, forKey: Self.iconKey) }
-    }
+    @Published var themeMode: AppThemeMode
+    @Published var petIcon: PetIconOption
 
     private static let themeKey = "desktopPet.themeMode"
     private static let iconKey = "desktopPet.iconOption"
+    private var cancellables: Set<AnyCancellable> = []
 
     init() {
         let storedTheme = UserDefaults.standard.string(forKey: Self.themeKey) ?? AppThemeMode.system.rawValue
         let storedIcon = UserDefaults.standard.string(forKey: Self.iconKey) ?? PetIconOption.butterfly.rawValue
         self.themeMode = AppThemeMode(rawValue: storedTheme) ?? .system
         self.petIcon = PetIconOption(rawValue: storedIcon) ?? .butterfly
+        bindPersistence()
     }
 
     var preferredColorScheme: ColorScheme? {
@@ -70,5 +67,21 @@ final class DesktopPetSettings: ObservableObject {
         case .dark:
             return .dark
         }
+    }
+
+    private func bindPersistence() {
+        $themeMode
+            .dropFirst()
+            .sink { value in
+                UserDefaults.standard.set(value.rawValue, forKey: Self.themeKey)
+            }
+            .store(in: &cancellables)
+
+        $petIcon
+            .dropFirst()
+            .sink { value in
+                UserDefaults.standard.set(value.rawValue, forKey: Self.iconKey)
+            }
+            .store(in: &cancellables)
     }
 }
