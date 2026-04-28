@@ -8,6 +8,7 @@ enum MainPanel: String, CaseIterable, Identifiable {
     case chat = "Chat"
     case manual = "Manual Inputs"
     case graph = "Graph View"
+    case settings = "Settings"
 
     var id: String { rawValue }
 }
@@ -15,9 +16,12 @@ enum MainPanel: String, CaseIterable, Identifiable {
 class MainWindowController: NSWindowController, NSWindowDelegate {
     static var shared: MainWindowController?
     static let state = MainWindowState()
+    static var settings = DesktopPetSettings()
 
-    static func open(near petWindow: NSWindow, preferredPanel: MainPanel = .chat) {
-        state.selectedPanel = preferredPanel
+    static func open(near petWindow: NSWindow, preferredPanel: MainPanel? = nil) {
+        if let preferredPanel {
+            state.selectedPanel = preferredPanel
+        }
         if let existing = shared {
             if existing.window?.isVisible == true {
                 existing.window?.makeKeyAndOrderFront(nil)
@@ -46,8 +50,8 @@ class MainWindowController: NSWindowController, NSWindowDelegate {
         window.title = "Desktop Pet"
         window.minSize = CGSize(width: 460, height: 600)
         window.isReleasedWhenClosed = false
-        window.level = .floating
-        window.contentView = NSHostingView(rootView: MainWindowView(state: state))
+        window.level = .normal
+        window.contentView = NSHostingView(rootView: MainWindowView(state: state, settings: settings))
 
         let controller = MainWindowController(window: window)
         window.delegate = controller
@@ -245,6 +249,7 @@ final class ManualInputStore: ObservableObject {
 
 struct MainWindowView: View {
     @ObservedObject var state: MainWindowState
+    @ObservedObject var settings: DesktopPetSettings
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var manualInputStore = ManualInputStore()
     @State private var messages: [ChatMessage] = [
@@ -268,17 +273,31 @@ struct MainWindowView: View {
         VStack(spacing: 0) {
             HStack {
                 HStack(spacing: 8) {
-                    Circle().fill(Color(hex: "#ec4899")).frame(width: 10, height: 10)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Desktop Pet Assistant")
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(panelTitleColor)
-                        Text("Chat, manual inputs, and graph insights")
-                            .font(.system(size: 11, design: .rounded))
-                            .foregroundColor(.secondary)
+                    Button {
+                        state.selectedPanel = .home
+                    } label: {
+                        HStack(spacing: 8) {
+                            Circle().fill(Color(hex: "#ec4899")).frame(width: 10, height: 10)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Desktop Pet Assistant")
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(panelTitleColor)
+                                Text("Chat, manual inputs, and graph insights")
+                                    .font(.system(size: 11, design: .rounded))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
                 Spacer()
+                Button {
+                    state.selectedPanel = .settings
+                } label: {
+                    Label("Settings", systemImage: "gearshape.fill")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
+                .buttonStyle(.bordered)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -319,6 +338,8 @@ struct MainWindowView: View {
                         }
                     }
                 )
+            } else if state.selectedPanel == .settings {
+                SettingsPanel(settings: settings, clearAction: clearAllData)
             } else {
                 GraphWindowView()
             }
@@ -345,6 +366,7 @@ struct MainWindowView: View {
         }
         .background(windowBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14))
+        .preferredColorScheme(settings.preferredColorScheme)
         .task { await manualInputStore.ensureInitialLoad() }
     }
 
@@ -383,6 +405,19 @@ struct MainWindowView: View {
         }
         return try JSONDecoder().decode(ChatResponse.self, from: data).reply
     }
+
+    private func clearAllData() async throws {
+        let baseURL = URL(string: "http://127.0.0.1:8765")!
+        var request = URLRequest(url: baseURL.appendingPathComponent("delete-all"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        await manualInputStore.refreshEntries()
+    }
 }
 
 private struct CutePanelTabs: View {
@@ -391,7 +426,6 @@ private struct CutePanelTabs: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            tabButton(.home, icon: "sparkles")
             tabButton(.chat, icon: "message.fill")
             tabButton(.manual, icon: "tray.full")
             tabButton(.graph, icon: "point.3.connected.trianglepath.dotted")
@@ -496,6 +530,10 @@ struct ManualInputsPanel: View {
     let sectionBackground: Color
     var onOpenSeparateWindow: (() -> Void)? = nil
     @State private var showLogsPanel = true
+    private let logsBottomID = "manual-logs-bottom"
+    private var logEntries: [ManualInputEntry] {
+        manualInputStore.entries.reversed()
+    }
 
     var body: some View {
         VStack(spacing: 10) {
@@ -622,35 +660,50 @@ struct ManualInputsPanel: View {
             .padding(.top, 4)
 
             if showLogsPanel {
-                List(manualInputStore.entries) { entry in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Text(kindBadgeLabel(for: entry))
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundColor(Color(hex: "#ec4899"))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color(hex: "#ec4899").opacity(0.12))
-                                .clipShape(Capsule())
+                ScrollViewReader { proxy in
+                    List {
+                        ForEach(logEntries) { entry in
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    Text(kindBadgeLabel(for: entry))
+                                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                                        .foregroundColor(Color(hex: "#ec4899"))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(Color(hex: "#ec4899").opacity(0.12))
+                                        .clipShape(Capsule())
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(manualEntryTitle(entry))
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .lineLimit(1)
-                                Text(manualEntryDetail(entry))
-                                    .font(.system(size: 11, design: .rounded))
-                                    .foregroundColor(.secondary)
-                                    .lineLimit(2)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(manualEntryTitle(entry))
+                                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                            .lineLimit(1)
+                                        Text(manualEntryDetail(entry))
+                                            .font(.system(size: 11, design: .rounded))
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(2)
+                                    }
+                                    Spacer(minLength: 8)
+                                    Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                        .font(.system(size: 10, design: .rounded))
+                                        .foregroundColor(.secondary)
+                                }
                             }
-                            Spacer(minLength: 8)
-                            Text(entry.createdAt.formatted(date: .abbreviated, time: .shortened))
-                                .font(.system(size: 10, design: .rounded))
-                                .foregroundColor(.secondary)
+                            .padding(.vertical, 4)
+                        }
+                        Color.clear
+                            .frame(height: 1)
+                            .id(logsBottomID)
+                    }
+                    .listStyle(.plain)
+                    .onAppear {
+                        proxy.scrollTo(logsBottomID, anchor: .bottom)
+                    }
+                    .onChange(of: manualInputStore.entries.count) {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            proxy.scrollTo(logsBottomID, anchor: .bottom)
                         }
                     }
-                    .padding(.vertical, 4)
                 }
-                .listStyle(.plain)
             } else {
                 // Keep layout height stable when logs are hidden.
                 RoundedRectangle(cornerRadius: 8)

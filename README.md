@@ -1,23 +1,45 @@
 # Knowledge Bases
 
-Desktop pet prototype with a SwiftUI macOS frontend and a lightweight Python backend.
+Personal knowledge bases
 
-## Structure
+## Project Tree
 
-- `DesktopApp/DesktopApp/PetView.swift`: pet icon and interaction surface.
-- `DesktopApp/DesktopApp/ChatWindow.swift`: chat window UI and manual input frontend.
-- `main.py`: root launcher for the frontend backend service.
-- `core/frontend_backend.py`: unified backend used by `ChatWindow.swift` and graph/manual tabs.
-- `core/llm_service.py`: Claude call + fallback behavior.
-- `core/graph_service.py`: markdown graph builder logic.
-- `core/manual_input_service.py`: manual input storage and entry processing.
-- `inputs/manual/manual_input_server.py`: manual-input-only backend (no chat/graph/LLM logic).
-- `core/chat_prompt.txt`: base system prompt used by Python chat backend.
-- `inputs/screenshot/screenshot_service.py`: Python screenshot capture service used by backend endpoint.
-- `inputs/manual/uploads/files/`: uploaded file copies written by backend at runtime.
-- `inputs/manual/uploads/text/`: raw text inputs saved as `.md` files.
-- `inputs/manual/uploads/urls/`: URL inputs saved as `.md` files.
-- `inputs/manual/entries.jsonl`: runtime manual-input event log.
+```text
+knowledge-bases/
+├── DesktopApp/
+│   └── DesktopApp/
+│       ├── App/
+│       │   └── DesktopAppApp.swift      # app delegate, pet window, hotkeys
+│       ├── Windows/
+│       │   ├── MainWindow.swift         # main window controller + core panels
+│       │   └── ManualInputsWindow.swift # detached manual-inputs window
+│       ├── Views/
+│       │   ├── SettingsPanel.swift      # settings UI (theme, icon, delete-all)
+│       │   ├── PetView.swift            # desktop pet icon/avatar surface
+│       │   ├── ChatWindow.swift         # chat panel UI
+│       │   └── GraphWindow.swift        # graph panel UI
+│       └── Models/
+│           └── DesktopPetSettings.swift # persisted app settings model
+├── core/
+│   ├── frontend_backend.py              # unified backend HTTP router
+│   ├── data_reset_service.py            # delete-all runtime data cleanup
+│   ├── llm_service.py                   # Claude call + fallback behavior
+│   ├── graph_service.py                 # markdown graph builder logic
+│   ├── manual_input_service.py          # manual input storage + processing
+│   └── chat_prompt.txt                  # base system prompt
+├── inputs/
+│   ├── manual/
+│   │   ├── manual_input_server.py       # manual-input-only backend
+│   │   ├── entries.jsonl                # runtime manual-input event log
+│   │   └── uploads/
+│   │       ├── files/                   # copied uploaded files
+│   │       ├── text/                    # text inputs as markdown
+│   │       └── urls/                    # URL inputs as markdown
+│   ├── screenshot/
+│   │   └── screenshot_service.py        # screenshot capture service
+│   └── .graph-dependencies.json         # manual graph edges (created at runtime)
+└── main.py                              # root launcher for frontend backend
+```
 
 ## Run Backend For Frontend
 
@@ -68,7 +90,7 @@ KB_MANUAL_INPUT_ROOT="/absolute/path/to/inputs/manual" python3 inputs/manual/man
     - `value`: file path (for `file`) or raw content string
     - `createdAt`: ISO timestamp
 - `GET /manual-inputs`
-  - Returns saved entries (newest first)
+  - Returns saved entries (newest first; frontend manual log view renders oldest -> newest and auto-scrolls to latest)
 - `POST /chat`
   - JSON body:
     - `prompt`: user prompt string
@@ -85,10 +107,15 @@ KB_MANUAL_INPUT_ROOT="/absolute/path/to/inputs/manual" python3 inputs/manual/man
   - Creates a manual dependency edge between two graph nodes
 - `POST /screenshot`
   - Captures current screen and saves to `inputs/screenshot/captures/`
+- `POST /delete-all`
+  - Deletes local runtime data:
+    - `inputs/manual/` (manual uploads + log)
+    - `inputs/.graph-dependencies.json`
+    - `inputs/screenshot/captures/`
 - `GET /health`
   - Returns service status and write path
 
-The Swift frontend in `DesktopApp/DesktopApp/ChatWindow.swift` is already wired to this backend at `http://127.0.0.1:8765`.
+The Swift frontend in `DesktopApp/DesktopApp/Views/ChatWindow.swift` is already wired to this backend at `http://127.0.0.1:8765`.
 
 ## Hotkeys (Cmd + Shift)
 

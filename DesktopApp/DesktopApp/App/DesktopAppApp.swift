@@ -13,6 +13,7 @@ struct DesktopPetApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
+    private let settings = DesktopPetSettings()
     private var keyMonitor: Any?
     private var globalKeyMonitor: Any?
     private var toastWindow: NSWindow?
@@ -35,14 +36,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = false
-        window.level = .floating
+        window.level = .normal
         window.ignoresMouseEvents = false
         window.isReleasedWhenClosed = false
         window.isMovableByWindowBackground = true   // ← enables click-and-drag anywhere
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        window.collectionBehavior = []
 
-        window.contentView = NSHostingView(rootView: PetView())
+        window.contentView = NSHostingView(rootView: PetView(settings: settings))
         window.makeKeyAndOrderFront(nil)
+        MainWindowController.settings = settings
 
         NSApp.setActivationPolicy(.accessory)
         registerHotkeys()

@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
 if str(REPO_ROOT / "inputs") not in sys.path:
     sys.path.append(str(REPO_ROOT / "inputs"))
 
+from core.data_reset_service import delete_all_runtime_data
 from core.graph_service import add_manual_dependency, build_markdown_graph
 from core.llm_service import call_claude_chat
 from core.manual_input_service import MANUAL_ROOT, load_entries, now_iso, process_manual_input
@@ -38,14 +39,16 @@ class FrontendHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:
-        if self.path not in {"/manual-input", "/chat", "/screenshot", "/graph/dependency"}:
+        if self.path not in {"/manual-input", "/chat", "/screenshot", "/graph/dependency", "/delete-all"}:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
             return
 
+        payload: dict[str, Any] = {}
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
-            payload_raw = self.rfile.read(content_length)
-            payload = json.loads(payload_raw.decode("utf-8"))
+            payload_raw = self.rfile.read(content_length) if content_length > 0 else b""
+            if payload_raw:
+                payload = json.loads(payload_raw.decode("utf-8"))
         except Exception:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON payload"})
             return
@@ -87,6 +90,18 @@ class FrontendHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Payload must include prompt"})
                 return
             self._send_json(HTTPStatus.OK, {"reply": call_claude_chat(prompt, load_entries())})
+            return
+
+        if self.path == "/delete-all":
+            try:
+                delete_all_runtime_data(
+                    manual_root=MANUAL_ROOT,
+                    graph_root=GRAPH_ROOT,
+                    screenshot_root=SCREENSHOT_ROOT,
+                )
+                self._send_json(HTTPStatus.OK, {"ok": True})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"Failed to delete data: {exc}"})
             return
 
         try:

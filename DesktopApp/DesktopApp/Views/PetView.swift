@@ -132,6 +132,7 @@ struct PixelButterfly: View {
 
 // MARK: - Main Pet View
 struct PetView: View {
+    @ObservedObject var settings: DesktopPetSettings
     @State private var bobOffset: CGFloat = 0
     @State private var flapUp: Bool = false
     @State private var isHovered: Bool = false
@@ -145,12 +146,10 @@ struct PetView: View {
                     .zIndex(1)
             }
 
-            PixelButterfly(flapUp: flapUp)
+            PetAvatarView(icon: settings.petIcon, flapUp: flapUp, isHovered: isHovered)
                 .padding(.top, 38)
                 .offset(y: bobOffset)
-                .scaleEffect(isHovered ? 1.08 : 1.0)
                 .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: bobOffset)
-                .animation(.spring(response: 0.2), value: isHovered)
                 .onHover { isHovered = $0 }
                 .onTapGesture { openChat() }
                 .help("Click to chat")
@@ -174,7 +173,7 @@ struct PetView: View {
 
     func openChat() {
         guard let w = NSApp.windows.first(where: { $0.styleMask == .borderless }) else { return }
-        MainWindowController.open(near: w, preferredPanel: .home)
+        MainWindowController.open(near: w)
     }
 }
 
@@ -192,7 +191,48 @@ extension Color {
 }
 
 #Preview {
-    PetView()
+    PetView(settings: DesktopPetSettings())
         .frame(width: 130, height: 150)
         .background(Color.gray.opacity(0.2))
+}
+
+private struct PetAvatarView: View {
+    let icon: PetIconOption
+    let flapUp: Bool
+    let isHovered: Bool
+
+    var body: some View {
+        Group {
+            switch icon {
+            case .butterfly:
+                PixelButterfly(flapUp: flapUp)
+            case .star:
+                Image(systemName: "star.fill")
+                    .font(.system(size: 42))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(hex: "#f472b6"), Color(hex: "#ec4899"), Color(hex: "#c084fc")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: .black.opacity(0.16), radius: 6, y: 2)
+                    .frame(width: 84, height: 60)
+            case .paw:
+                Image(systemName: "pawprint.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color(hex: "#22c55e"), Color(hex: "#16a34a")],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: .black.opacity(0.16), radius: 6, y: 2)
+                    .frame(width: 84, height: 60)
+            }
+        }
+        .scaleEffect(isHovered ? 1.08 : 1.0)
+        .animation(.spring(response: 0.2), value: isHovered)
+    }
 }
