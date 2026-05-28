@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from pathlib import Path
 
 from core.config import config
@@ -13,7 +12,7 @@ def _graph_path() -> Path:
     return config.graph_dir / "edges.json"
 
 
-def _load_graph() -> dict:
+def load_graph() -> dict:
     path = _graph_path()
     if path.exists():
         return json.loads(path.read_text())
@@ -27,7 +26,7 @@ def _save_graph(graph: dict) -> None:
 
 def add_edge(from_node: str, to_node: str, edge_type: str, weight: float = 1.0) -> None:
     """Add or strengthen an edge between two nodes."""
-    graph = _load_graph()
+    graph = load_graph()
     graph.setdefault(from_node, {})
     existing = graph[from_node].get(to_node, {})
     graph[from_node][to_node] = {
@@ -39,7 +38,7 @@ def add_edge(from_node: str, to_node: str, edge_type: str, weight: float = 1.0) 
 
 def get_neighbors(node_id: str, min_weight: float = 0.0) -> list[dict]:
     """Return all neighbors of a node with their edge metadata."""
-    graph = _load_graph()
+    graph = load_graph()
     neighbors = graph.get(node_id, {})
     return [
         {"node": neighbor, **meta}
@@ -75,7 +74,7 @@ def index_event(event: dict) -> None:
 def get_person_events(person_hash: str) -> list[str]:
     """Return event IDs that mention a given person hash."""
     node_id = f"person:{person_hash}"
-    graph = _load_graph()
+    graph = load_graph()
     event_ids: list[str] = []
     for node, neighbors in graph.items():
         if node_id in neighbors and not node.startswith("person:") and not node.startswith("bucket:"):

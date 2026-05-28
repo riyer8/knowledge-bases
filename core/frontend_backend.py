@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -19,7 +20,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from core.config import config
 from core.ingestion.pipeline import ingest_screenshot, ingest_text
-from core.memory.graph import _load_graph, add_edge
+from core.memory.graph import load_graph, add_edge
 from core.retrieval.chat import answer as chat_answer
 from core.integrations import (
     gcal_sync, gcal_auth_url, gcal_callback,
@@ -43,7 +44,7 @@ def _build_graph_response(
     only_unlinked: bool = False,
     folder_filter: str | None = None,
 ) -> dict:
-    adjacency = _load_graph()
+    adjacency = load_graph()
 
     # Collect all node IDs
     all_node_ids: set[str] = set(adjacency.keys())
@@ -304,7 +305,6 @@ class FrontendHandler(BaseHTTPRequestHandler):
                 ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
                 image_path = _SCREENSHOT_TEMP / f"screenshot-{ts}.png"
 
-                import subprocess  # noqa: PLC0415
                 result = subprocess.run(
                     ["/usr/sbin/screencapture", "-x", str(image_path)],
                     capture_output=True, timeout=10,

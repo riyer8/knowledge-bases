@@ -53,7 +53,7 @@ struct SettingsPanel: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Danger Zone")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                Text("Delete manual inputs, graph dependencies, and screenshots from local storage.")
+                Text("Wipes all captured events, embeddings, graph edges, and bucket classifications from ~/.kb/")
                     .font(.system(size: 11, design: .rounded))
                     .foregroundColor(.secondary)
                 Button(role: .destructive) {
@@ -85,7 +85,7 @@ struct SettingsPanel: View {
                 showFinalDeleteConfirm = true
             }
         } message: {
-            Text("This removes local data for manual inputs and graph links.")
+            Text("This permanently removes all captured knowledge from your local store.")
         }
         .alert("This cannot be undone", isPresented: $showFinalDeleteConfirm) {
             Button("Cancel", role: .cancel) {}

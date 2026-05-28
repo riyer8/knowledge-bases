@@ -33,7 +33,7 @@ struct ChatScreenView: View {
                             HStack {
                                 if msg.isUser { Spacer(minLength: 64) }
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(msg.isUser ? "You" : "Text")
+                                    Text(msg.isUser ? "You" : "Sift")
                                         .font(.system(size: 10, weight: .medium, design: .rounded))
                                         .foregroundColor(.secondary)
                                     Text(msg.text)
