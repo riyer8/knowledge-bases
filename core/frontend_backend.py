@@ -481,7 +481,7 @@ def main() -> None:
     server = HTTPServer(("127.0.0.1", port), FrontendHandler)
     print(f"KB backend listening on http://127.0.0.1:{port}")
     print(f"Storage: {config.kb_root}")
-    print("Requires: ollama serve (with llama3.2:8b and nomic-embed-text pulled)")
+    print("Requires: ollama serve (with qwen2.5:3b and nomic-embed-text pulled)")
     server.serve_forever()
 
 

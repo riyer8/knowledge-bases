@@ -9,7 +9,7 @@ from pathlib import Path
 class Config:
     kb_root: Path = field(default_factory=lambda: Path(os.environ.get("KB_ROOT", "~/.kb")).expanduser())
     # Chat + classification — local Ollama LLM
-    chat_model: str = field(default_factory=lambda: os.environ.get("KB_CHAT_MODEL", "llama3.2:8b"))
+    chat_model: str = field(default_factory=lambda: os.environ.get("KB_CHAT_MODEL", "qwen2.5:3b"))
     # Embeddings — dedicated embedding model
     embed_model: str = field(default_factory=lambda: os.environ.get("KB_EMBED_MODEL", "nomic-embed-text"))
     backend_port: int = field(default_factory=lambda: int(os.environ.get("KB_PORT", "8765")))

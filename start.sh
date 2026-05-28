@@ -60,9 +60,9 @@ if ! echo "$OLLAMA_MODELS" | grep -q "nomic-embed-text"; then
     warn "Pulling nomic-embed-text (~274MB, one-time)..."
     ollama pull nomic-embed-text
 fi
-if ! echo "$OLLAMA_MODELS" | grep -q "llama3.2:8b"; then
-    warn "Pulling llama3.2:8b (~5GB, one-time — grab a coffee)..."
-    ollama pull llama3.2:8b
+if ! echo "$OLLAMA_MODELS" | grep -q "qwen2.5:3b"; then
+    warn "Pulling qwen2.5:3b (~1.9GB, one-time)..."
+    ollama pull qwen2.5:3b
 fi
 
 # ── 5. .env ───────────────────────────────────────────────────────────────────
