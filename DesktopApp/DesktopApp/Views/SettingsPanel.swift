@@ -6,7 +6,6 @@ struct SettingsPanel: View {
 
     @State private var selectedTheme: AppThemeMode
     @State private var selectedIcon: PetIconOption
-    @State private var showConfirmDelete = false
     @State private var showFinalDeleteConfirm = false
     @State private var isDeleting = false
     @State private var feedbackMessage: String?
@@ -57,7 +56,7 @@ struct SettingsPanel: View {
                     .font(.system(size: 11, design: .rounded))
                     .foregroundColor(.secondary)
                 Button(role: .destructive) {
-                    showConfirmDelete = true
+                    showFinalDeleteConfirm = true
                 } label: {
                     if isDeleting {
                         ProgressView()
@@ -79,21 +78,13 @@ struct SettingsPanel: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .alert("Delete all information?", isPresented: $showConfirmDelete) {
-            Button("Cancel", role: .cancel) {}
-            Button("Continue", role: .destructive) {
-                showFinalDeleteConfirm = true
-            }
-        } message: {
-            Text("This permanently removes all captured knowledge from your local store.")
-        }
-        .alert("This cannot be undone", isPresented: $showFinalDeleteConfirm) {
+        .alert("Delete everything?", isPresented: $showFinalDeleteConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Delete Everything", role: .destructive) {
                 Task { await runDeleteAll() }
             }
         } message: {
-            Text("Please confirm one more time to permanently clear your data.")
+            Text("This permanently removes all captured knowledge from your local store. Cannot be undone.")
         }
         .onChange(of: selectedTheme) {
             guard settings.themeMode != selectedTheme else { return }

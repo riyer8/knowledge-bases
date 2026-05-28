@@ -200,7 +200,7 @@ final class ManualInputStore: ObservableObject {
             entries = backendEntries.compactMap { mapBackendEntry($0) }
             errorMessage = nil
         } catch {
-            errorMessage = "Python backend unavailable. Start python3 main.py."
+            errorMessage = "Sift isn't responding. Make sure start.sh is still running."
         }
     }
 
@@ -253,7 +253,7 @@ struct MainWindowView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var manualInputStore = ManualInputStore()
     @State private var messages: [ChatMessage] = [
-        ChatMessage(text: "hi, i'm text 👋 what's on your mind?", isUser: false)
+        ChatMessage(text: "hi, i'm sift 👋 what's on your mind?\n\nTry: \"What did I work on this week?\"", isUser: false)
     ]
     @State private var inputText: String = ""
     @State private var manualURLInput: String = ""
@@ -382,7 +382,7 @@ struct MainWindowView: View {
             } catch {
                 messages.append(
                     ChatMessage(
-                        text: "Chat backend unavailable. Start python3 main.py from repo root.",
+                        text: "Sift isn't responding. Make sure start.sh is still running in your terminal.",
                         isUser: false
                     )
                 )
@@ -485,7 +485,7 @@ private struct LandingHomeView: View {
                 .padding(.top, 10)
 
             HStack(spacing: 10) {
-                homeCard(title: "Chat", subtitle: "Talk with Text assistant", icon: "message.fill", panel: .chat)
+                homeCard(title: "Chat", subtitle: "Talk with Sift", icon: "message.fill", panel: .chat)
                 homeCard(title: "Manual Inputs", subtitle: "Add files, URLs, and notes", icon: "tray.full", panel: .manual)
                 homeCard(title: "Graph", subtitle: "Explore dependencies visually", icon: "point.3.connected.trianglepath.dotted", panel: .graph)
             }

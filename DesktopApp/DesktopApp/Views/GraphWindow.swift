@@ -33,7 +33,7 @@ struct GraphWindowView: View {
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundColor(titleColor)
                     }
-                    Text("Browse markdown connections and filter by folder.")
+                    Text("How events, people, and topics connect. Hover a node to trace its links.")
                         .font(.system(size: 10, design: .rounded))
                         .foregroundColor(.secondary)
                 }
@@ -139,24 +139,26 @@ struct GraphWindowView: View {
                     .background(RoundedRectangle(cornerRadius: 10).fill(cardBackground))
                     .padding(.horizontal, 10)
 
-                    Toggle("Orphans only", isOn: $showOnlyOrphans)
+                    Toggle("Isolated nodes only", isOn: $showOnlyOrphans)
                         .font(.system(size: 10, design: .rounded))
+                        .help("Show nodes with no connections at all")
                         .padding(.horizontal, 10)
                         .onChange(of: showOnlyOrphans) {
                             Task { await refreshGraph() }
                         }
 
-                    Toggle("No outgoing links", isOn: $showOnlyUnlinked)
+                    Toggle("Dead-end nodes only", isOn: $showOnlyUnlinked)
                         .font(.system(size: 10, design: .rounded))
+                        .help("Show nodes that don't link to anything else")
                         .padding(.horizontal, 10)
                         .onChange(of: showOnlyUnlinked) {
                             Task { await refreshGraph() }
                         }
 
-                    Picker("Folder", selection: $selectedFolder) {
-                        Text("All").tag("All")
+                    Picker("Filter by type", selection: $selectedFolder) {
+                        Text("All types").tag("All")
                         ForEach(graphStore.graph.folders, id: \.self) { folder in
-                            Text(folder).tag(folder)
+                            Text(folderDisplayName(folder)).tag(folder)
                         }
                     }
                     .font(.system(size: 10, design: .rounded))
@@ -216,6 +218,15 @@ struct GraphWindowView: View {
             folder: selectedFolder == "All" ? nil : selectedFolder
         )
     }
+
+    private func folderDisplayName(_ folder: String) -> String {
+        switch folder {
+        case "people": return "People"
+        case "buckets": return "Topics"
+        case "events": return "Events"
+        default: return folder.capitalized
+        }
+    }
 }
 
 private struct GraphCanvasView: View {
@@ -232,15 +243,41 @@ private struct GraphCanvasView: View {
     @State private var isDraggingNode = false
     @State private var hoveredNodeID: String?
     private var isDarkMode: Bool { colorScheme == .dark }
-    private var edgeColor: Color { isDarkMode ? Color.pink.opacity(0.45) : Color(hex: "#f9a8d4").opacity(0.45) }
+    private var edgeColor: Color { isDarkMode ? Color.pink.opacity(0.35) : Color(hex: "#f9a8d4").opacity(0.45) }
     private var arrowColor: Color { isDarkMode ? Color.pink.opacity(0.85) : Color(hex: "#f472b6") }
     private var nodeTextColor: Color { isDarkMode ? .primary : Color(hex: "#3d2b1f") }
     private var normalNodeColor: Color { isDarkMode ? Color.pink.opacity(0.8) : Color(hex: "#f472b6") }
+
+    private func folderColor(_ folder: String) -> Color {
+        switch folder {
+        case "people":  return Color(hex: "#3b82f6")
+        case "buckets": return Color(hex: "#22c55e")
+        default:        return normalNodeColor
+        }
+    }
 
     var body: some View {
         GeometryReader { geo in
             let nodes = makeNodes(in: geo.size)
             ZStack(alignment: .topTrailing) {
+                // Legend — bottom left
+                VStack(alignment: .leading, spacing: 5) {
+                    legendRow(color: Color(hex: "#ec4899"), label: "Events")
+                    legendRow(color: Color(hex: "#3b82f6"), label: "People")
+                    legendRow(color: Color(hex: "#22c55e"), label: "Topics")
+                }
+                .padding(8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isDarkMode
+                              ? Color(nsColor: .underPageBackgroundColor).opacity(0.9)
+                              : Color(hex: "#fff7fb").opacity(0.92))
+                        .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(14)
+                .allowsHitTesting(false)
+
                 ZStack {
                     ForEach(graph.edges) { edge in
                         if let source = nodes.first(where: { $0.id == edge.source }),
@@ -263,10 +300,14 @@ private struct GraphCanvasView: View {
 
                     ForEach(nodes, id: \.id) { node in
                         let offset = nodeOffsets[node.id] ?? .zero
+                        let degree = graph.nodes.first(where: { $0.id == node.id })?.degree ?? 0
+                        let baseSize: CGFloat = max(10, min(20, 10 + CGFloat(degree) * 1.5))
+                        let size = node.id == highlightedID ? baseSize + 5 : baseSize
                         VStack(spacing: 3) {
                             Circle()
-                                .fill(colorForNode(nodeID: node.id))
-                                .frame(width: node.id == highlightedID ? 16 : 11, height: node.id == highlightedID ? 16 : 11)
+                                .fill(colorForNode(node: node))
+                                .frame(width: size, height: size)
+                                .shadow(color: colorForNode(node: node).opacity(0.4), radius: 3, y: 1)
                             Text(node.label)
                                 .font(.system(size: 9, weight: .medium, design: .rounded))
                                 .foregroundColor(nodeTextColor)
@@ -317,10 +358,18 @@ private struct GraphCanvasView: View {
                     }
 
                     if nodes.isEmpty {
-                        Text("No markdown files found.\nAdd .md files to build your graph.")
-                            .multilineTextAlignment(.center)
-                            .font(.system(size: 12, design: .rounded))
-                            .foregroundColor(.secondary)
+                        VStack(spacing: 8) {
+                            Image(systemName: "point.3.connected.trianglepath.dotted")
+                                .font(.system(size: 28))
+                                .foregroundColor(Color(hex: "#ec4899").opacity(0.4))
+                            Text("No connections yet")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundColor(.secondary)
+                            Text("Capture events or add manual inputs\nto see your knowledge graph grow.")
+                                .font(.system(size: 11, design: .rounded))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
                     }
                 }
                 .scaleEffect(zoom, anchor: .topLeading)
@@ -415,7 +464,7 @@ private struct GraphCanvasView: View {
                 y: center.y + CGFloat(sin(angle)) * radius
             )
             let label = String(node.label.prefix(16))
-            return GraphNode(id: node.id, point: point, label: label)
+            return GraphNode(id: node.id, point: point, label: label, folder: node.folder)
         }
     }
 
@@ -508,20 +557,24 @@ private struct GraphCanvasView: View {
         return .other
     }
 
-    private func colorForNode(nodeID: String) -> Color {
-        switch relation(for: nodeID) {
-        case .focus:
-            return Color(hex: "#ec4899")
-        case .forward:
-            return Color(hex: "#22c55e")
-        case .backward:
-            return Color(hex: "#3b82f6")
-        case .circular:
-            return nodeID == highlightedID ? Color(hex: "#ec4899") : normalNodeColor
-        case .other:
-            return normalNodeColor
-        case .none:
-            return nodeID == highlightedID ? Color(hex: "#ec4899") : normalNodeColor
+    private func legendRow(color: Color, label: String) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label)
+                .font(.system(size: 10, design: .rounded))
+                .foregroundColor(nodeTextColor)
+        }
+    }
+
+    private func colorForNode(node: GraphNode) -> Color {
+        let base = node.id == highlightedID ? Color(hex: "#ec4899") : folderColor(node.folder)
+        switch relation(for: node.id) {
+        case .focus:    return Color(hex: "#ec4899")
+        case .forward:  return Color(hex: "#22c55e")
+        case .backward: return Color(hex: "#3b82f6")
+        case .circular: return base
+        case .other:    return folderColor(node.folder)
+        case .none:     return base
         }
     }
 
@@ -656,4 +709,5 @@ private struct GraphNode {
     let id: String
     let point: CGPoint
     let label: String
+    let folder: String
 }

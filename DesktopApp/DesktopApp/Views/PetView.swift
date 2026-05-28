@@ -138,6 +138,7 @@ struct PetView: View {
     @State private var isHovered: Bool = false
     @State private var showIntroBubble: Bool = true
     @State private var proactiveTimer: Timer?
+    @State private var isCapturing: Bool = false
 
     private var hoverHint: String {
         isHovered ? "tap · chat\nlong press · what's up" : ""
@@ -151,22 +152,40 @@ struct PetView: View {
                     .zIndex(1)
             }
 
-            PetAvatarView(icon: settings.petIcon, flapUp: flapUp, isHovered: isHovered)
-                .padding(.top, 38)
-                .offset(y: bobOffset)
-                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: bobOffset)
-                .onHover { isHovered = $0 }
-                .gesture(
-                    LongPressGesture(minimumDuration: 0.5)
-                        .onEnded { _ in openProactive() }
-                        .simultaneously(with:
-                            TapGesture().onEnded { openChat() }
-                        )
-                )
-                .help("Tap to chat · Long press for what's up (⌘⇧P)")
+            ZStack(alignment: .topTrailing) {
+                PetAvatarView(icon: settings.petIcon, flapUp: flapUp, isHovered: isHovered)
+                    .onHover { isHovered = $0 }
+                    .gesture(
+                        LongPressGesture(minimumDuration: 0.5)
+                            .onEnded { _ in openProactive() }
+                            .simultaneously(with:
+                                TapGesture().onEnded { openChat() }
+                            )
+                    )
+                    .help("Tap to chat · Long press for what's up (⌘⇧P)")
+
+                if isCapturing {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                        .shadow(color: .red.opacity(0.6), radius: 4)
+                        .transition(.scale.combined(with: .opacity))
+                        .offset(x: 4, y: -4)
+                }
+            }
+            .padding(.top, 38)
+            .offset(y: bobOffset)
+            .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: bobOffset)
         }
         .frame(width: 112, height: 112, alignment: .top)
         .padding(8)
+        .onReceive(NotificationCenter.default.publisher(for: .siftCapturing)) { _ in
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) { isCapturing = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                withAnimation { isCapturing = false }
+            }
+        }
         .onAppear {
             bobOffset = -3
             showIntroBubble = true

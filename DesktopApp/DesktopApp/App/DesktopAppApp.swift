@@ -127,6 +127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = Data("{}".utf8)
 
+        NotificationCenter.default.post(name: .siftCapturing, object: nil)
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error {
                 self?.showToast("Screenshot failed: \(error.localizedDescription)")
@@ -145,11 +146,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             if let data,
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let shot = json["screenshot"] as? [String: Any],
-               let filename = shot["filename"] as? String {
-                self?.showToast("Screenshot saved: \(filename)")
+               let _ = json["screenshot"] {
+                self?.showToast("Captured and added to your knowledge base.")
             } else {
-                self?.showToast("Screenshot captured.")
+                self?.showToast("Captured and added to your knowledge base.")
             }
         }.resume()
     }
@@ -188,6 +188,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+}
+
+extension Notification.Name {
+    static let siftCapturing = Notification.Name("sift.capturing")
 }
 
 private struct ToastView: View {
