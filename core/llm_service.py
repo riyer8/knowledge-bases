@@ -1,109 +1,105 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from urllib import error, request
 
-CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
-REPO_ROOT = Path(__file__).resolve().parents[1]
-ENV_PATH = REPO_ROOT / ".env"
-PROMPT_PATH = REPO_ROOT / "core" / "chat_prompt.txt"
+from core.config import config
+
+OLLAMA_BASE_URL = "http://localhost:11434"
+PROMPT_PATH = Path(__file__).resolve().parent / "chat_prompt.txt"
 
 
-def load_dotenv(path: Path = ENV_PATH) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text(encoding="utf-8").splitlines():
-        entry = line.strip()
-        if not entry or entry.startswith("#") or "=" not in entry:
-            continue
-        key, value = entry.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip("'").strip('"')
-        if key and key not in os.environ:
-            os.environ[key] = value
-
-
-def load_system_prompt() -> str:
+def _load_system_prompt() -> str:
     if PROMPT_PATH.exists():
         text = PROMPT_PATH.read_text(encoding="utf-8").strip()
         if text:
             return text
     return (
-        "You are a concise assistant for a desktop pet app. "
-        "Use recent manual inputs as context when useful."
+        "You are a personal knowledge assistant. You have access to the user's "
+        "notes, events, and captured context. Answer concisely and helpfully."
     )
 
 
-def build_context_block(entries: list[dict]) -> str:
+def _build_context_block(entries: list[dict]) -> str:
     recent = entries[:5]
     if not recent:
-        return "No manual inputs are saved yet."
-    lines: list[str] = []
-    for idx, item in enumerate(recent, start=1):
-        kind = item.get("kind", "unknown")
-        value = str(item.get("value", ""))
-        lines.append(f"{idx}. [{kind}] {value}")
+        return "No context available."
+    lines = [f"{i}. [{e.get('kind', 'note')}] {e.get('value', '')}" for i, e in enumerate(recent, 1)]
     return "\n".join(lines)
 
 
-def fallback_chat_reply(prompt: str, entries: list[dict]) -> str:
-    context = build_context_block(entries)
-    return (
-        "Claude API key is not configured yet.\n\n"
-        f"Prompt received: {prompt}\n\n"
-        "To enable live responses, set `CLAUDE_CODE_API_KEY` in `.env` and restart the backend.\n\n"
-        f"Recent manual inputs:\n{context}"
-    )
+def chat(prompt: str, context_entries: list[dict] | None = None) -> str:
+    """Send a chat message to the local Ollama model and return the response."""
+    entries = context_entries or []
+    context = _build_context_block(entries)
+    system = _load_system_prompt()
 
-
-def call_claude_chat(prompt: str, entries: list[dict]) -> str:
-    load_dotenv()
-    api_key = os.getenv("CLAUDE_CODE_API_KEY", "").strip()
-    if not api_key or api_key.lower().startswith("replace"):
-        return fallback_chat_reply(prompt, entries)
-
-    model = os.getenv("CLAUDE_CODE_MODEL", "claude-3-5-sonnet-latest").strip()
-    context = build_context_block(entries)
     payload = {
-        "model": model,
-        "max_tokens": 600,
-        "system": load_system_prompt(),
+        "model": config.chat_model,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": f"{prompt}\n\nContext:\n{context}",
+            },
+        ],
+    }
+
+    return _post_ollama("/api/chat", payload, response_key="message.content")
+
+
+def embed(text: str) -> list[float]:
+    """Generate an embedding vector for the given text."""
+    payload = {"model": config.embed_model, "input": text}
+    result = _post_ollama("/api/embed", payload, response_key="embeddings")
+    # Ollama returns a list of embeddings; we always send one input
+    if isinstance(result, list) and result:
+        return result[0]
+    return []
+
+
+def classify(text: str, categories: list[str]) -> str:
+    """Ask the local LLM to classify text into one of the provided categories."""
+    cats = ", ".join(categories)
+    payload = {
+        "model": config.chat_model,
+        "stream": False,
         "messages": [
             {
                 "role": "user",
                 "content": (
-                    f"User prompt:\n{prompt}\n\n"
-                    f"Recent manual input context:\n{context}\n\n"
-                    "Respond helpfully for the desktop app chat UI."
+                    f"Classify the following text into exactly one of these categories: {cats}.\n"
+                    f"Reply with only the category name, nothing else.\n\nText: {text}"
                 ),
             }
         ],
     }
+    return _post_ollama("/api/chat", payload, response_key="message.content").strip()
+
+
+def _post_ollama(path: str, payload: dict, response_key: str) -> any:
+    url = OLLAMA_BASE_URL + path
     req = request.Request(
-        CLAUDE_API_URL,
+        url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "content-type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        },
+        headers={"content-type": "application/json"},
         method="POST",
     )
     try:
-        with request.urlopen(req, timeout=45) as response:
-            body = response.read().decode("utf-8")
-        parsed = json.loads(body)
-    except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="ignore")
-        return f"Claude API request failed ({exc.code}). {details[:260]}"
-    except Exception as exc:
-        return f"Claude API call error: {exc}"
+        with request.urlopen(req, timeout=120) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except error.URLError as exc:
+        raise RuntimeError(
+            f"Ollama not reachable at {OLLAMA_BASE_URL}. Is it running? (`ollama serve`)\n{exc}"
+        ) from exc
 
-    for block in parsed.get("content", []):
-        if isinstance(block, dict) and block.get("type") == "text":
-            text = str(block.get("text", "")).strip()
-            if text:
-                return text
-    return "Claude returned an empty response."
+    # Traverse dot-separated key path
+    result = body
+    for key in response_key.split("."):
+        if isinstance(result, dict):
+            result = result.get(key)
+        else:
+            return result
+    return result

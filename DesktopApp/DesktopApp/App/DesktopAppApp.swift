@@ -98,6 +98,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case "s":
             requestBackendScreenshot()
             return true
+        case "p":
+            openProactiveBot()
+            return true
         default:
             return false
         }
@@ -106,6 +109,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func openChat(panel: MainPanel) {
         guard let petWindow = window else { return }
         MainWindowController.open(near: petWindow, preferredPanel: panel)
+    }
+
+    private func openProactiveBot() {
+        // Toggle: if already open, close it
+        if ProactiveWindowController.shared?.window?.isVisible == true {
+            ProactiveWindowController.shared?.window?.close()
+            return
+        }
+        ProactiveWindowController.show(near: window)
     }
 
     private func requestBackendScreenshot() {

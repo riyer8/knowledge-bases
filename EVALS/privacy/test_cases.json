@@ -1,0 +1,398 @@
+[
+  {
+    "id": "tc-001",
+    "description": "Banking URL triggers auto-pause",
+    "input": {
+      "text": "My account balance is $1,234",
+      "source": "screen_capture",
+      "url": "https://chase.com/accounts",
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-002",
+    "description": "Password in window title triggers auto-pause",
+    "input": {
+      "text": "hunter2",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": "Enter your Password",
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-003",
+    "description": "1Password app triggers auto-pause",
+    "input": {
+      "text": "my github token is abc123",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": null,
+      "app_name": "1Password",
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-004",
+    "description": "Normal article content — no pause, low score",
+    "input": {
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "source": "screen_capture",
+      "url": "https://news.ycombinator.com",
+      "window_title": "Hacker News",
+      "app_name": "Safari",
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.0,
+      "sensitivity_score_max": 0.3
+    }
+  },
+  {
+    "id": "tc-005",
+    "description": "Person name in text is hashed",
+    "input": {
+      "text": "Had coffee with Alice Johnson this morning.",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": true,
+      "sensitivity_score_min": 0.1,
+      "sensitivity_score_max": 0.5
+    }
+  },
+  {
+    "id": "tc-006",
+    "description": "Email address is redacted",
+    "input": {
+      "text": "Please reply to jane.doe@example.com by Friday.",
+      "source": "gmail",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.2,
+      "sensitivity_score_max": 0.8
+    }
+  },
+  {
+    "id": "tc-007",
+    "description": "Phone number is redacted",
+    "input": {
+      "text": "Call me at 415-555-1234 after 5pm.",
+      "source": "imessage",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.2,
+      "sensitivity_score_max": 0.8
+    }
+  },
+  {
+    "id": "tc-008",
+    "description": "Multiple PII types in one message increases score",
+    "input": {
+      "text": "Alice Smith called from 555-123-4567. Her email is alice@example.com.",
+      "source": "imessage",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": true,
+      "sensitivity_score_min": 0.5,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-009",
+    "description": "Bank keyword boosts sensitivity",
+    "input": {
+      "text": "I need to transfer money from my bank account.",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.2,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-010",
+    "description": "Health keyword boosts sensitivity",
+    "input": {
+      "text": "My doctor said my health results look good.",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.2,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-011",
+    "description": "Gmail source adds baseline sensitivity bonus",
+    "input": {
+      "text": "This is a routine work update.",
+      "source": "gmail",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.2,
+      "sensitivity_score_max": 0.5
+    }
+  },
+  {
+    "id": "tc-012",
+    "description": "iMessage source adds baseline sensitivity bonus",
+    "input": {
+      "text": "Hey what are you up to later?",
+      "source": "imessage",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.2,
+      "sensitivity_score_max": 0.5
+    }
+  },
+  {
+    "id": "tc-013",
+    "description": "Sign-in window title triggers pause",
+    "input": {
+      "text": "username: admin",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": "Sign In — Google",
+      "app_name": "Chrome",
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-014",
+    "description": "Keychain Access app triggers pause",
+    "input": {
+      "text": "some credentials here",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": null,
+      "app_name": "Keychain Access",
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-015",
+    "description": "PayPal URL triggers pause",
+    "input": {
+      "text": "Sending $50",
+      "source": "screen_capture",
+      "url": "https://paypal.com/send",
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-016",
+    "description": "Code snippet with no PII — low score",
+    "input": {
+      "text": "def fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)",
+      "source": "screen_capture",
+      "url": "https://github.com",
+      "window_title": "fibonacci.py — VSCode",
+      "app_name": "Code",
+      "flagged_important": true
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.0,
+      "sensitivity_score_max": 0.2
+    }
+  },
+  {
+    "id": "tc-017",
+    "description": "Multiple people named in text",
+    "input": {
+      "text": "Meeting with Sarah Chen and David Park about the Q3 roadmap.",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": "Zoom",
+      "app_name": "Zoom",
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": true,
+      "sensitivity_score_min": 0.1,
+      "sensitivity_score_max": 0.6
+    }
+  },
+  {
+    "id": "tc-018",
+    "description": "Empty text — no crash, minimal score",
+    "input": {
+      "text": "",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.0,
+      "sensitivity_score_max": 0.2
+    }
+  },
+  {
+    "id": "tc-019",
+    "description": "IRS URL triggers pause",
+    "input": {
+      "text": "Filing 2025 taxes",
+      "source": "screen_capture",
+      "url": "https://irs.gov/filing",
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-020",
+    "description": "2FA / authenticator window title triggers pause",
+    "input": {
+      "text": "123456",
+      "source": "screen_capture",
+      "url": null,
+      "window_title": "Authy — 2FA Code",
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": true,
+      "has_person_hash": false,
+      "sensitivity_score_min": 1.0,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-021",
+    "description": "Password keyword in body text boosts score but does not pause (no context trigger)",
+    "input": {
+      "text": "I need to reset my password for Slack.",
+      "source": "screen_capture",
+      "url": "https://slack.com/help",
+      "window_title": "Help Center — Slack",
+      "app_name": "Chrome",
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.2,
+      "sensitivity_score_max": 1.0
+    }
+  },
+  {
+    "id": "tc-022",
+    "description": "Slack source adds moderate sensitivity bonus",
+    "input": {
+      "text": "Can we sync tomorrow?",
+      "source": "slack",
+      "url": null,
+      "window_title": null,
+      "app_name": null,
+      "flagged_important": false
+    },
+    "expected": {
+      "should_pause": false,
+      "has_person_hash": false,
+      "sensitivity_score_min": 0.1,
+      "sensitivity_score_max": 0.4
+    }
+  }
+]

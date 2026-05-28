@@ -25,3 +25,7 @@ inputs/screenshot/captures/
 DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata/ramya.xcuserdatad/UserInterfaceState.xcuserstate
 /DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata
 .graph-dependencies.json
+
+# Launcher runtime files
+.kb_backend.pid
+.kb_backend.log

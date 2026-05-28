@@ -137,11 +137,16 @@ struct PetView: View {
     @State private var flapUp: Bool = false
     @State private var isHovered: Bool = false
     @State private var showIntroBubble: Bool = true
+    @State private var proactiveTimer: Timer?
+
+    private var hoverHint: String {
+        isHovered ? "tap · chat\nlong press · what's up" : ""
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
             if showIntroBubble || isHovered {
-                SpeechBubble(text: "hi, i'm text 🦋")
+                SpeechBubble(text: isHovered ? "tap · chat  ⌘⇧C\nlong press · what's up  ⌘⇧P" : "hi, i'm here 🦋")
                     .transition(.opacity)
                     .zIndex(1)
             }
@@ -151,8 +156,14 @@ struct PetView: View {
                 .offset(y: bobOffset)
                 .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: bobOffset)
                 .onHover { isHovered = $0 }
-                .onTapGesture { openChat() }
-                .help("Click to chat")
+                .gesture(
+                    LongPressGesture(minimumDuration: 0.5)
+                        .onEnded { _ in openProactive() }
+                        .simultaneously(with:
+                            TapGesture().onEnded { openChat() }
+                        )
+                )
+                .help("Tap to chat · Long press for what's up (⌘⇧P)")
         }
         .frame(width: 112, height: 112, alignment: .top)
         .padding(8)
@@ -162,11 +173,12 @@ struct PetView: View {
             Timer.scheduledTimer(withTimeInterval: 0.35, repeats: true) { _ in
                 withAnimation(.easeInOut(duration: 0.3)) { flapUp.toggle() }
             }
-            // keep the intro bubble for three seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    showIntroBubble = false
-                }
+                withAnimation(.easeOut(duration: 0.2)) { showIntroBubble = false }
+            }
+            // Auto-check for insights every 20 minutes
+            proactiveTimer = Timer.scheduledTimer(withTimeInterval: 20 * 60, repeats: true) { _ in
+                autoCheckInsights()
             }
         }
     }
@@ -174,6 +186,28 @@ struct PetView: View {
     func openChat() {
         guard let w = NSApp.windows.first(where: { $0.styleMask == .borderless }) else { return }
         MainWindowController.open(near: w)
+    }
+
+    func openProactive() {
+        guard let w = NSApp.windows.first(where: { $0.styleMask == .borderless }) else { return }
+        ProactiveWindowController.show(near: w)
+    }
+
+    private func autoCheckInsights() {
+        Task {
+            guard let url = URL(string: "http://127.0.0.1:8765/proactive") else { return }
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let json = try? JSONDecoder().decode([String: [ProactiveInsight]].self, from: data),
+                  let insights = json["insights"],
+                  !insights.isEmpty else { return }
+            await MainActor.run {
+                // Butterfly bounces to signal there's something to see
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.4).repeatCount(3)) {
+                    bobOffset = -10
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { bobOffset = -3 }
+            }
+        }
     }
 }
 
