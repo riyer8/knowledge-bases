@@ -8,18 +8,21 @@ _SYSTEM_PROMPT = """\
 You are a personal knowledge assistant with access to the user's captured notes, \
 events, messages, and calendar. Answer based on the provided context. \
 If the context doesn't contain enough information, say so directly. \
-Be concise. Never reveal internal hash tokens — use them as-is in your response \
+Be concise and conversational. Never reveal internal hash tokens — use them as-is in your response \
 and they will be resolved automatically."""
 
 
-def answer(user_query: str, top_k: int = 8) -> str:
-    """
-    Full RAG pipeline: retrieve relevant chunks, assemble context, call LLM, render response.
-    """
+def answer(user_query: str, top_k: int = 8, extra_context: str | None = None) -> str:
+    """Full RAG pipeline: retrieve relevant chunks, assemble context, call LLM, render response."""
     chunks = query(user_query, top_k=top_k)
     context = assemble(chunks)
 
-    prompt = f"{_SYSTEM_PROMPT}\n\nContext from your knowledge base:\n{context}\n\nQuestion: {user_query}"
+    hint_block = f"\n\n[Guidance for this response: {extra_context}]" if extra_context else ""
+    prompt = (
+        f"{_SYSTEM_PROMPT}{hint_block}"
+        f"\n\nContext from your knowledge base:\n{context}"
+        f"\n\nQuestion: {user_query}"
+    )
     raw_response = llm_chat(prompt, context_entries=[])
 
     return render_response(raw_response)

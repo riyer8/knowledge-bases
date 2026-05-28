@@ -268,7 +268,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "prompt is required"})
                 return
             try:
-                reply = chat_answer(prompt)
+                reply = chat_answer(prompt, extra_context=_demo_hint(prompt))
                 self._send_json(HTTPStatus.OK, {"reply": reply})
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
@@ -417,6 +417,47 @@ def _ingest_manual(kind: str, value: str, created_at: str) -> tuple[str, str]:
 
     result = ingest_text(text=text, source=f"manual_{kind}", metadata=meta)
     return result.get("id", ""), result.get("processed_at", created_at)
+
+
+_SYMSYS_HINT = (
+    "The user is asking about their Symsys161 project. "
+    "You have notes about this Stanford course in your knowledge base — it is the Symbolic Systems 161 "
+    "speaker series class about technology and human augmentation. "
+    "Start your response by warmly asking 'Is this Symsys161 from Canvas — the speaker series class?' "
+    "to confirm you have the right context. Then give specific, actionable presentation advice. "
+    "Key points to weave in naturally: (1) the harness must be crystal clear — the rubric asks "
+    "whether the audience understands what they are watching at every step; "
+    "(2) lead with the problem before showing the tool; "
+    "(3) show the full capture-to-retrieval loop live with the butterfly; "
+    "(4) connect to the course augmentation theme; "
+    "(5) seed demo data before presenting so chat is fast. "
+    "Be warm and conversational, not a bullet-point list."
+)
+
+_PRESENTATION_FOLLOWUP_HINT = (
+    "The user is continuing a conversation about their Symsys161 class presentation. "
+    "Give them practical, specific follow-up advice. Cover: warming up Ollama before presenting, "
+    "having a fallback plan if the live demo lags, Q&A prep (why local? why not Notion? why not Rewind?), "
+    "and a suggested 10-minute slide structure. Keep it encouraging and conversational."
+)
+
+
+def _demo_hint(prompt: str) -> str | None:
+    """Return an extra_context hint to steer the LLM, or None to use default RAG."""
+    lower = prompt.lower()
+    is_symsys = "symsys" in lower or (
+        "161" in lower
+        and any(k in lower for k in ("class", "project", "presentation", "course", "canvas", "sift", "help"))
+    )
+    if is_symsys:
+        return _SYMSYS_HINT
+    is_followup = (
+        any(k in lower for k in ("yes", "yeah", "yep", "more", "worried", "nervous", "help", "how"))
+        and any(k in lower for k in ("presentation", "present", "demo", "talk", "slide", "class"))
+    )
+    if is_followup:
+        return _PRESENTATION_FOLLOWUP_HINT
+    return None
 
 
 def _delete_all() -> None:
