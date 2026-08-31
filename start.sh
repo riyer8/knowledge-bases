@@ -5,7 +5,7 @@
 set -e
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
-PYTHON="/Users/rebeccajoseph/miniconda3/bin/python3"
+PYTHON="$(command -v python3)"
 LOG="$REPO/.kb_backend.log"
 PID_FILE="$REPO/.kb_backend.pid"
 
@@ -20,7 +20,7 @@ warn()  { echo -e "${YELLOW}⚠${NC}  $1"; }
 abort() { echo -e "${RED}✗${NC}  $1"; exit 1; }
 
 echo ""
-echo "  Knowledge Base — starting up"
+echo "  Context — starting up"
 echo "  ─────────────────────────────"
 echo ""
 
@@ -111,10 +111,12 @@ step "Opening the app..."
 # Look for a built .app — check common Xcode output locations
 APP_PATH=""
 for candidate in \
-    "$REPO/DesktopApp/build/Debug/DesktopApp.app" \
-    "$REPO/DesktopApp/build/Release/DesktopApp.app" \
-    "$HOME/Library/Developer/Xcode/DerivedData/DesktopApp-"*/Build/Products/Debug/DesktopApp.app \
-    "$HOME/Library/Developer/Xcode/DerivedData/DesktopApp-"*/Build/Products/Release/DesktopApp.app
+    "$REPO/DesktopApp/build/DerivedData/Build/Products/Debug/Context.app" \
+    "$REPO/DesktopApp/build/DerivedData/Build/Products/Release/Context.app" \
+    "$REPO/DesktopApp/build/Debug/Context.app" \
+    "$REPO/DesktopApp/build/Release/Context.app" \
+    "$HOME/Library/Developer/Xcode/DerivedData/DesktopApp-"*/Build/Products/Debug/Context.app \
+    "$HOME/Library/Developer/Xcode/DerivedData/DesktopApp-"*/Build/Products/Release/Context.app
 do
     if [ -d "$candidate" ]; then
         APP_PATH="$candidate"
@@ -131,9 +133,9 @@ else
     echo "  ┌─────────────────────────────────────────────────────┐"
     echo "  │  One-time step: build the app in Xcode              │"
     echo "  │                                                       │"
-    echo "  │  1. open DesktopApp/DesktopApp.xcodeproj            │"
-    echo "  │  2. Press ⌘B to build                               │"
-    echo "  │  3. After that, start.sh will open it automatically  │"
+    echo "  │  1. bash scripts/build_app.sh                        │"
+    echo "  │     or open DesktopApp/DesktopApp.xcodeproj         │"
+    echo "  │     and press ⌘B to build                           │"
     echo "  └─────────────────────────────────────────────────────┘"
     echo ""
     echo "  Opening Xcode now..."

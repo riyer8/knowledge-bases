@@ -10,82 +10,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-let rememberButton = null;
-let hideTimer = null;
-
+// Track selection for the side panel only — no on-page save UI.
 document.addEventListener("mouseup", () => {
-  window.setTimeout(updateSelectionUi, 10);
+  window.setTimeout(notifySelection, 10);
 });
 
 document.addEventListener("keyup", () => {
-  window.setTimeout(updateSelectionUi, 10);
+  window.setTimeout(notifySelection, 10);
 });
 
-function updateSelectionUi() {
+function notifySelection() {
   const selected = window.getSelection()?.toString()?.trim() || "";
   chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected });
-
-  if (!selected || selected.length < 8) {
-    hideRememberButton();
-    return;
-  }
-  showRememberButton(selected);
-}
-
-function showRememberButton(selected) {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) {
-    hideRememberButton();
-    return;
-  }
-  const range = selection.getRangeAt(0);
-  const rect = range.getBoundingClientRect();
-  if (!rect.width && !rect.height) {
-    hideRememberButton();
-    return;
-  }
-
-  if (!rememberButton) {
-    rememberButton = document.createElement("button");
-    rememberButton.id = "context-remember-btn";
-    rememberButton.textContent = "Save quote";
-    rememberButton.addEventListener("mousedown", (event) => event.preventDefault());
-    rememberButton.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      const text = window.getSelection()?.toString()?.trim() || selected;
-      chrome.runtime.sendMessage({
-        type: "REMEMBER_SELECTION",
-        selected_text: text,
-        page: buildPageContext(),
-      });
-      hideRememberButton();
-      flashRememberButton("Quote saved ✓");
-    });
-    document.body.appendChild(rememberButton);
-  }
-
-  const top = window.scrollY + rect.top - 42;
-  const left = window.scrollX + rect.left + rect.width / 2;
-  rememberButton.style.top = `${Math.max(8, top)}px`;
-  rememberButton.style.left = `${Math.max(8, left)}px`;
-  rememberButton.style.display = "block";
-  rememberButton.dataset.selected = selected;
-
-  clearTimeout(hideTimer);
-  hideTimer = setTimeout(hideRememberButton, 8000);
-}
-
-function hideRememberButton() {
-  if (rememberButton) {
-    rememberButton.style.display = "none";
-  }
-}
-
-function flashRememberButton(label) {
-  if (!rememberButton) return;
-  rememberButton.textContent = label;
-  rememberButton.style.display = "block";
-  setTimeout(hideRememberButton, 1200);
 }
 
 function buildPageContext() {

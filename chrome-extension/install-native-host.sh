@@ -23,6 +23,14 @@ if [ -z "$EXT_ID" ]; then
   exit 1
 fi
 
+if [ "$EXT_ID" = "YOUR_EXTENSION_ID" ] || [ "${#EXT_ID}" -ne 32 ]; then
+  echo "✗  Invalid extension ID: $EXT_ID"
+  echo ""
+  echo "Use the real 32-character ID from chrome://extensions (not the placeholder)."
+  echo "Open the Context side panel — it shows your ID and the exact command to run."
+  exit 1
+fi
+
 chmod +x "$HOST_SCRIPT"
 chmod +x "$REPO/scripts/start_backend.sh"
 
@@ -41,10 +49,14 @@ EOF
 
 TARGET_DIRS=(
   "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+  "$HOME/Library/Application Support/Google/Chrome Canary/NativeMessagingHosts"
   "$HOME/Library/Application Support/Chromium/NativeMessagingHosts"
   "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
   "$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
+  "$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts"
 )
+
+echo "$EXT_ID" > "$REPO/chrome-extension/.extension-id"
 
 for dir in "${TARGET_DIRS[@]}"; do
   mkdir -p "$dir"
@@ -53,4 +65,5 @@ for dir in "${TARGET_DIRS[@]}"; do
 done
 
 echo ""
-echo "Done. Reload the Context extension, then click it to auto-start the backend."
+echo "Extension ID: $EXT_ID"
+echo "Done. Reload the Context extension in chrome://extensions, then open it again."

@@ -8,7 +8,7 @@ final class PetWindow: NSWindow {
 }
 
 @main
-struct DesktopPetApp: App {
+struct ContextApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -24,6 +24,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var toastWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        setupMainMenu()
+
         let size = CGSize(width: 130, height: 150)
         let screen = NSScreen.main!.frame
         let origin = CGPoint(
@@ -44,15 +47,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.level = .normal
         window.ignoresMouseEvents = false
         window.isReleasedWhenClosed = false
-        window.isMovableByWindowBackground = true   // ← enables click-and-drag anywhere
+        window.isMovableByWindowBackground = true
         window.collectionBehavior = []
 
         window.contentView = NSHostingView(rootView: PetView(settings: settings))
         window.makeKeyAndOrderFront(nil)
         MainWindowController.settings = settings
 
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.activate(ignoringOtherApps: true)
         registerHotkeys()
+        startBackend()
+    }
+
+    private func startBackend() {
+        BackendService.ensureRunning { [weak self] ok, message in
+            if ok {
+                return
+            }
+            self?.showToast(message)
+        }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 
     deinit {
@@ -62,6 +79,70 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let globalKeyMonitor {
             NSEvent.removeMonitor(globalKeyMonitor)
         }
+    }
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu(title: "Context")
+        appMenuItem.submenu = appMenu
+
+        let aboutItem = appMenu.addItem(withTitle: "About Context", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        appMenu.addItem(NSMenuItem.separator())
+        let settingsItem = appMenu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Hide Context", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Quit Context", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        let windowMenuItem = NSMenuItem()
+        mainMenu.addItem(windowMenuItem)
+        let windowMenu = NSMenu(title: "Window")
+        windowMenuItem.submenu = windowMenu
+        let chatItem = windowMenu.addItem(withTitle: "Open Chat", action: #selector(openChatFromMenu), keyEquivalent: "")
+        chatItem.target = self
+        let graphItem = windowMenu.addItem(withTitle: "Open Graph", action: #selector(openGraphFromMenu), keyEquivalent: "")
+        graphItem.target = self
+        let companionItem = windowMenu.addItem(withTitle: "Show Companion", action: #selector(showCompanion), keyEquivalent: "")
+        companionItem.target = self
+        windowMenu.addItem(NSMenuItem.separator())
+        let closeItem = windowMenu.addItem(withTitle: "Close Window", action: #selector(closeMainWindow), keyEquivalent: "")
+        closeItem.target = self
+
+        NSApp.mainMenu = mainMenu
+        NSApp.windowsMenu = windowMenu
+    }
+
+    @objc private func showAbout() {
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "Context",
+            .applicationVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
+            .copyright: "An AI that remembers what you've read.",
+        ])
+    }
+
+    @objc private func openSettings() {
+        openChat(panel: .settings)
+    }
+
+    @objc private func openChatFromMenu() {
+        openChat(panel: .chat)
+    }
+
+    @objc private func openGraphFromMenu() {
+        openChat(panel: .graph)
+    }
+
+    @objc private func showCompanion() {
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @objc private func closeMainWindow() {
+        MainWindowController.closeWindow()
     }
 
     private func registerHotkeys() {
@@ -109,10 +190,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func openChat(panel: MainPanel) {
         guard let petWindow = window else { return }
         MainWindowController.open(near: petWindow, preferredPanel: panel)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func openProactiveBot() {
-        // Toggle: if already open, close it
         if ProactiveWindowController.shared?.window?.isVisible == true {
             ProactiveWindowController.shared?.window?.close()
             return

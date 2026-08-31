@@ -140,12 +140,38 @@ python3 inputs/manual/manual_input_server.py
 
 ## macOS App
 
-Build in Xcode:
+**Context** is a real macOS application (`Context.app`) — the same kind of thing you see in
+your Applications folder. The `DesktopApp/` folder in this repo is just the source code.
+
+### Install to Applications (recommended)
 
 ```bash
-open DesktopApp/DesktopApp.xcodeproj
+bash scripts/install_app.sh
 ```
 
-Press ⌘B to build. After the first build, `start.sh` opens the app automatically.
+This builds the app and copies it to `/Applications/Context.app`. After that, open it from
+Applications, Spotlight, or:
 
-The Swift frontend connects to the backend at `http://127.0.0.1:8765`.
+```bash
+open -a Context
+```
+
+On launch, the app auto-starts the Python backend. Your knowledge data stays in `~/.kb/`.
+
+### Build without installing
+
+```bash
+bash scripts/build_app.sh
+open DesktopApp/build/DerivedData/Build/Products/Debug/Context.app
+```
+
+Or build in Xcode: open `DesktopApp/DesktopApp.xcodeproj` and press **⌘B**.
+
+After the first build, `start.sh` can also launch the app automatically.
+
+The app appears in the Dock with its own icon and menu bar. Use **⌘⇧C** for chat, **⌘⇧G** for graph.
+
+The Swift frontend connects to the backend at `http://127.0.0.1:8765`. Both the Chrome extension
+and macOS app share the same backend and storage root (`~/.kb/`). See [architecture.md](architecture.md).
+
+To regenerate the app icon: `python3 scripts/generate_app_icon.py`

@@ -17,6 +17,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "GET_EXTENSION_ID") {
+    sendResponse({ id: chrome.runtime.id });
+    return false;
+  }
+
   if (message?.type === "GET_PAGE_CONTEXT") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       const tab = tabs[0];
@@ -42,12 +47,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
-  if (message?.type === "REMEMBER_SELECTION") {
-    saveQuoteFromPage(message.page, message.selected_text, message.note || "")
-      .then(sendResponse)
-      .catch((err) => sendResponse({ ok: false, error: String(err) }));
-    return true;
-  }
   return false;
 });
 
@@ -57,27 +56,48 @@ async function ensureBackend() {
   }
 
   const nativeResult = await startViaNativeHost();
-  if (!nativeResult.ok) {
-    return nativeResult;
+  if (nativeResult.ok) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (await isBackendHealthy()) {
+        return { ok: true, status: nativeResult.status || "started" };
+      }
+      await sleep(500);
+    }
+    return {
+      ok: false,
+      error: "Backend started but did not respond. Check .kb_backend.log in the repo.",
+    };
   }
 
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    if (await isBackendHealthy()) {
-      return { ok: true, status: nativeResult.status || "started" };
-    }
-    await sleep(500);
+  if (await isBackendHealthy()) {
+    return { ok: true, status: "already_running" };
+  }
+
+  const extId = chrome.runtime.id;
+  if (String(nativeResult.error || "").toLowerCase().includes("forbidden")) {
+    return {
+      ok: false,
+      error: "native_host_forbidden",
+      extensionId: extId,
+      hint: `Run: bash chrome-extension/install-native-host.sh ${extId}`,
+      manual: "Or start the backend manually: python3 main.py",
+    };
   }
 
   return {
-    ok: false,
-    error: "Backend did not become ready. Check .kb_backend.log in the repo.",
+    ...nativeResult,
+    extensionId: extId,
+    hint: `Run: bash chrome-extension/install-native-host.sh ${extId}`,
+    manual: "Or start the backend manually: python3 main.py",
   };
 }
 
 async function isBackendHealthy() {
   try {
     const res = await fetch(`${BACKEND}/health`, { cache: "no-store" });
-    return res.ok;
+    if (!res.ok) return false;
+    const health = await res.json();
+    return health.ok === true || health.api_version >= 1;
   } catch {
     return false;
   }
@@ -101,52 +121,17 @@ function startViaNativeHost() {
       port.onDisconnect.addListener(() => {
         if (settled) return;
         const message = chrome.runtime.lastError?.message || "Native host disconnected";
-        finish({
-          ok: false,
-          error: `${message}. Run: bash chrome-extension/install-native-host.sh <extension-id>`,
-        });
+        finish({ ok: false, error: message });
       });
       port.postMessage({ action: "start" });
     } catch (err) {
-      finish({
-        ok: false,
-        error: `${err}. Run: bash chrome-extension/install-native-host.sh <extension-id>`,
-      });
+      finish({ ok: false, error: String(err) });
     }
   });
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function saveQuoteFromPage(page, selectedText, note = "") {
-  const ready = await ensureBackend();
-  if (!ready.ok) return ready;
-
-  let pageId = "";
-  if (page?.url) {
-    const lookup = await fetch(`${BACKEND}/library/by-url?url=${encodeURIComponent(page.url)}`);
-    const lookupData = await lookup.json();
-    pageId = lookupData.page?.id || "";
-  }
-
-  const quoteRes = await fetch(`${BACKEND}/library/quotes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      text: selectedText,
-      page_id: pageId,
-      page_url: page?.url || "",
-      page_title: page?.title || "",
-      note,
-    }),
-  });
-  const quoteData = await quoteRes.json();
-  if (!quoteRes.ok) throw new Error(quoteData.error || "Save quote failed");
-  chrome.storage.session.set({ quoteSavedAt: Date.now() });
-  chrome.runtime.sendMessage({ type: "QUOTE_SAVED" }).catch(() => {});
-  return { ok: true, quote: quoteData.quote };
 }
 
 function extractPageContext() {

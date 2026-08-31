@@ -7,6 +7,7 @@ The browser becomes the place where knowledge is automatically understood, conne
 - [goal.md](goal.md) — living project goal and status
 - [docs/](docs/) — product vision, architecture, getting started, API reference
 - [chrome-extension/](chrome-extension/) — Chrome side panel extension
+- [DesktopApp/](DesktopApp/) — macOS **Context** app source (`bash scripts/install_app.sh` to install)
 
 ---
 

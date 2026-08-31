@@ -25,50 +25,58 @@
     </div>
   </header>
 
-  <!-- Page view: quotes + chat -->
+  <!-- Page view: quotes + chat tabs -->
   <section class="view active" id="view-chat">
     <section class="explore-panel" id="explore-panel" hidden>
       <h2>Explore next</h2>
       <div id="explore-suggestions" class="suggestion-list"></div>
     </section>
 
-    <div class="split-layout">
-      <aside class="quotes-panel">
-        <div class="panel-head">
-          <h2>Saved quotes</h2>
-          <button type="button" id="save-page-btn-side" class="text-btn">Save page</button>
-        </div>
-        <div id="page-quotes" class="page-quotes">
-          <p class="muted empty-hint">Quotes you save from this page appear here.</p>
-        </div>
+    <nav class="page-subnav" id="page-subnav" aria-label="Page panels">
+      <button type="button" class="page-tab active" data-page-tab="quotes">Quotes</button>
+      <button type="button" class="page-tab" data-page-tab="chat">Chat</button>
+    </nav>
 
-        <div class="quote-compose" id="quote-compose" hidden>
-          <p class="compose-label">Save selection</p>
-          <blockquote id="quote-preview" class="quote-preview"></blockquote>
-          <input type="text" id="quote-note" class="quote-note" placeholder="Optional note…" />
-          <div class="quote-actions">
-            <button type="button" id="save-quote-confirm" class="toolbar-btn primary">Save quote</button>
-            <button type="button" id="save-quote-cancel" class="text-btn">Cancel</button>
-          </div>
-        </div>
+    <div class="page-panel active" id="page-panel-quotes">
+      <section class="selection-bar" id="selection-bar" hidden>
+        <div class="selection-label" id="selection-label">Selected on page</div>
+        <p id="selection-preview" class="selection-preview"></p>
+      </section>
 
-        <button type="button" id="save-quote-btn" class="toolbar-btn full-width">Save selection as quote</button>
-      </aside>
-
-      <main class="chat-panel">
-        <div class="panel-head">
-          <h2>Chat</h2>
+      <div class="quote-compose" id="quote-compose" hidden>
+        <p class="compose-label">Save selection</p>
+        <blockquote id="quote-preview" class="quote-preview"></blockquote>
+        <input type="text" id="quote-note" class="quote-note" placeholder="Optional note…" />
+        <div class="quote-actions">
+          <button type="button" id="save-quote-confirm" class="toolbar-btn primary">Save quote</button>
+          <button type="button" id="save-quote-cancel" class="text-btn">Cancel</button>
         </div>
-        <section class="selection-bar" id="selection-bar" hidden>
-          <div class="selection-label">Selected on page</div>
-          <p id="selection-preview" class="selection-preview"></p>
-        </section>
-        <div id="messages" class="messages"></div>
-        <form id="ask-form" class="ask-form">
-          <textarea id="question" rows="3" placeholder="Ask anything — quiz me, summarize, connect ideas…"></textarea>
-          <button type="submit" id="ask-btn" class="toolbar-btn primary full-width">Send</button>
-        </form>
-      </main>
+      </div>
+
+      <button type="button" id="save-quote-btn" class="toolbar-btn full-width" hidden>
+        Save selection as quote
+      </button>
+
+      <div id="page-quotes" class="page-quotes">
+        <p class="muted empty-hint">Highlight text on the page to save a quote here.</p>
+      </div>
+    </div>
+
+    <div class="page-panel" id="page-panel-chat">
+      <div id="messages" class="messages">
+        <p class="muted empty-hint" id="chat-empty-hint">Ask a question about this page.</p>
+      </div>
+      <form id="ask-form" class="ask-form">
+        <textarea
+          id="question"
+          rows="3"
+          placeholder="Ask anything — summarize, explain, connect ideas…"
+        ></textarea>
+        <div class="ask-form-footer">
+          <span class="ask-hint muted">Enter to send · Shift+Enter for new line</span>
+          <button type="submit" id="ask-btn" class="toolbar-btn primary">Send</button>
+        </div>
+      </form>
     </div>
   </section>
 
@@ -107,8 +115,20 @@
     </div>
   </section>
 
+  <section class="setup-panel" id="setup-panel" hidden>
+    <h2>Backend not connected</h2>
+    <p class="muted">Quotes and chat need the local Python backend. Auto-start failed because the native host is not registered for this extension ID.</p>
+    <p class="setup-label">Your extension ID</p>
+    <code id="extension-id" class="setup-code"></code>
+    <p class="setup-label">Run once in Terminal (from the repo)</p>
+    <code id="install-command" class="setup-code"></code>
+    <p class="muted setup-alt">Or start manually: <code>python3 main.py</code> then click Retry below.</p>
+    <button type="button" id="retry-backend-btn" class="toolbar-btn primary full-width">Retry connection</button>
+  </section>
+
   <footer class="footer">
     <span id="status" class="muted">Connecting to backend…</span>
+    <button type="button" id="retry-status-btn" class="text-btn" hidden>Retry</button>
     <button type="button" id="clear-all-btn" class="text-btn danger-text">Clear all data</button>
   </footer>
 

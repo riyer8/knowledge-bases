@@ -1,34 +1,49 @@
 # Architecture State
 
-_Updated: 2026-05-27_
+_Updated: 2026-08-30_
 
 ## Modules That Exist
 
 | Module | Status | Notes |
 |---|---|---|
-| `core/config.py` | done | centralized path+env config, `from core.config import config` |
-| `core/privacy/` | done | detector, hasher, scorer, pipeline, sensitive_sites — full pipeline |
-| `core/ingestion/` | done | pipeline, ocr, event_writer — screenshot + text ingest wired to privacy + memory |
-| `core/memory/` | done | chunker, vector_store, bucket_classifier, graph, store |
-| `core/retrieval/` | done | chat (RAG), context_assembler (hash→name rendering) ||
-| `core/integrations/` | done | oauth.py, gcal.py, gmail.py — read-only, feeds ingestion pipeline |
-| `core/proactive/` | done | detector.py (emails, calendar, drift), engine.py (ranked insights) |
-| `core/llm_service.py` | exists | basic implementation, needs review against new architecture |
-| `core/frontend_backend.py` | done | rewired to ingestion/retrieval/memory pipeline |
-| `core/graph_service.py` | exists | basic graph, will be absorbed into memory-agent |
-| `core/manual_input_service.py` | exists | basic manual input, will be absorbed into ingestion-agent |
-| `core/data_reset_service.py` | exists | data reset logic |
-| `inputs/screenshot/screenshot_service.py` | exists | precursor to ingestion-agent |
-| `DesktopApp/` | exists | Swift/SwiftUI app with Chat, Graph, Settings, PetView |
+| `core/config.py` | done | centralized path+env config |
+| `core/privacy/` | done | detector, hasher, scorer, pipeline, sensitive_sites |
+| `core/ingestion/` | done | pipeline, ocr, event_writer — screenshot + text ingest |
+| `core/memory/` | done | chunker, vector_store, bucket_classifier, graph, concept_graph |
+| `core/retrieval/` | done | chat (RAG), page_chat, context_assembler |
+| `core/integrations/` | done | oauth, gcal, gmail — read-only |
+| `core/proactive/` | done | detector, engine — ranked insights |
+| `core/llm_providers.py` | done | OpenAI / Anthropic / Ollama abstraction |
+| `core/llm_service.py` | done | legacy wrapper used by desktop `/chat` |
+| `core/library_service.py` | done | saved pages, quotes, explore, library graph |
+| `core/page_context_service.py` | done | page ingest, search, connections, remember |
+| `core/frontend_backend.py` | done | unified HTTP router for all clients |
+| `chrome-extension/` | done | side panel, page extract, native host auto-start |
+| `DesktopApp/` | partial | chat, graph, pet, screenshots — not yet wired to `/library/*` |
 
 ## Storage Layout
 
-No storage initialized yet. Will be created at `~/.kb/` on first run.
+Initialized at `~/.kb/` on first backend run. Key directories:
+
+- `library/` — saved pages, quotes, per-page chats (extension)
+- `pages/` — ephemeral page context
+- `index/` — vector embeddings
+- `graph/` — knowledge graph + concepts
+- `events/` — raw and clean event logs
 
 ## Active Contracts
 
-None yet. First contracts will be defined in `SPECS/event-schema.md` during Phase 1.
+- `SPECS/event-schema.md` — event format
+- `SPECS/privacy-pipeline.md` — privacy gate (mandatory)
+- `SPECS/name-anonymization.md` — hash→display mapping
 
 ## Known Technical Debt
 
-None yet (greenfield).
+- Desktop app still uses legacy `/chat` and `/graph` — needs `/library/*` integration
+- `core/` not yet extracted into planned `backend/` package
+- Root `ARCHITECTURE.md` is a pointer; canonical doc is `docs/architecture.md`
+- `STATE/current.md` was stale until this cleanup pass
+
+## Documentation
+
+Canonical docs live in `docs/`. See `docs/README.md` for the index.

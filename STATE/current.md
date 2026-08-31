@@ -1,31 +1,35 @@
 # Current State
 
-_Updated: 2026-05-19_
+_Updated: 2026-08-30_
 
 ## What Just Happened
-Built the repo harness from scratch:
-- CLAUDE.md (engineering constitution)
-- ARCHITECTURE.md (full system design)
-- ROADMAP.md (5-phase build plan)
-- AGENTS/ (8 agent specs)
-- STATE/, TASKS/, SPECS/, DECISIONS/, EVALS/ scaffolding
+
+- Chrome extension MVP complete: unified chat, saved library, quotes, concept graph
+- Docs consolidated into `docs/` (architecture, API, roadmap, project structure)
+- Python backend serves both Chrome extension and macOS desktop app on `localhost:8765`
 
 ## Current Phase
-**Phase 1 — Harden the Foundation**
 
-The repo was empty before this session. No production code exists yet.
-The harness is now in place. Next session should begin building `core/`.
+**Extension MVP shipped. Desktop app integration next.**
+
+The shared backend and `~/.kb/` storage are in place. The macOS app exists but does not yet
+surface the extension's saved library (`/library/*`) or page-context chat (`/ask`).
 
 ## Next Action
-Start Phase 1 implementation:
-1. Create `core/config.py` — centralized config (infra-agent)
-2. Create `core/privacy/` module (privacy-agent) — this is the most critical first module
-3. Create `core/ingestion/` (ingestion-agent) — wired to privacy
 
-Do not start integrations or the proactive bot until privacy + indexing are solid.
+1. Wire `DesktopApp/` to `/library/*` endpoints (saved pages, quotes, graph)
+2. Unify desktop chat on `POST /ask`
+3. Proactive "you've read this before" using `/connections`
 
 ## Active Decisions
-- LLM strategy: Ollama for heavy processing, Claude API for chat
-- Storage: local-only at `~/.kb/`
-- Name anonymization: SHA-256 + per-install salt
-- No raw screenshots stored after text extraction
+
+- Local-first storage at `~/.kb/`
+- LLM: `KB_LLM_PROVIDER=auto` (OpenAI when key set, else Ollama)
+- Chrome extension is a client, not the database — backend owns memory
+- Single repo for all clients (no separate backend repo)
+
+## Quick Links
+
+- [goal.md](../goal.md) — project status
+- [docs/architecture.md](../docs/architecture.md) — system design
+- [docs/getting-started.md](../docs/getting-started.md) — run everything

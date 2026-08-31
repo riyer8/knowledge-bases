@@ -4,10 +4,12 @@ const state = {
   page: null,
   savedPageId: null,
   selection: "",
+  lastSavedSelection: "",
   history: [],
   quotes: [],
   busy: false,
   view: "chat",
+  pageTab: "quotes",
   savedPages: [],
   selectedSavedId: null,
   pendingQuoteText: "",
@@ -23,7 +25,6 @@ const els = {
   question: document.getElementById("question"),
   askBtn: document.getElementById("ask-btn"),
   savePageBtn: document.getElementById("save-page-btn"),
-  savePageBtnSide: document.getElementById("save-page-btn-side"),
   saveQuoteBtn: document.getElementById("save-quote-btn"),
   quoteCompose: document.getElementById("quote-compose"),
   quotePreview: document.getElementById("quote-preview"),
@@ -50,6 +51,13 @@ const els = {
   graphEmpty: document.getElementById("graph-empty"),
   refreshGraphBtn: document.getElementById("refresh-graph-btn"),
   clearAllBtn: document.getElementById("clear-all-btn"),
+  setupPanel: document.getElementById("setup-panel"),
+  extensionId: document.getElementById("extension-id"),
+  installCommand: document.getElementById("install-command"),
+  retryBackendBtn: document.getElementById("retry-backend-btn"),
+  retryStatusBtn: document.getElementById("retry-status-btn"),
+  pageSubnav: document.getElementById("page-subnav"),
+  chatEmptyHint: document.getElementById("chat-empty-hint"),
 };
 
 init();
@@ -73,9 +81,38 @@ async function init() {
     }
   });
 
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      refreshSelectionFromPage();
+    }
+  });
+
   const backendReady = await ensureBackendReady();
-  if (backendReady) {
+  await refreshPage();
+  if (!backendReady) {
+    showSetupHelp();
+  }
+}
+
+function showSetupHelp(result = {}) {
+  const extId = result.extensionId || chrome.runtime.id;
+  els.extensionId.textContent = extId;
+  els.installCommand.textContent = `bash chrome-extension/install-native-host.sh ${extId}`;
+  els.setupPanel.hidden = false;
+  els.retryStatusBtn.hidden = false;
+}
+
+function hideSetupHelp() {
+  els.setupPanel.hidden = true;
+  els.retryStatusBtn.hidden = true;
+}
+
+async function retryBackendConnection() {
+  const ok = await ensureBackendReady();
+  if (ok) {
+    hideSetupHelp();
     await refreshPage();
+    await loadPageQuotes();
   }
 }
 
@@ -85,16 +122,26 @@ function bindEvents() {
     await askQuestion();
   });
 
+  els.question.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (!els.askBtn.disabled && els.question.value.trim()) {
+        els.form.requestSubmit();
+      }
+    }
+  });
+
   els.savePageBtn.addEventListener("click", saveCurrentPage);
-  els.savePageBtnSide.addEventListener("click", saveCurrentPage);
   els.saveQuoteBtn.addEventListener("click", openQuoteCompose);
   els.saveQuoteConfirm.addEventListener("click", confirmSaveQuote);
-  els.saveQuoteCancel.addEventListener("click", closeQuoteCompose);
+  els.saveQuoteCancel.addEventListener("click", () => closeQuoteCompose({ keepSelection: true }));
   els.exploreBtn.addEventListener("click", loadExploreSuggestions);
   els.savedBack.addEventListener("click", showSavedList);
   els.deletePageBtn.addEventListener("click", deleteCurrentSavedPage);
   els.refreshGraphBtn.addEventListener("click", renderGraph);
   els.clearAllBtn.addEventListener("click", clearAllData);
+  els.retryBackendBtn.addEventListener("click", retryBackendConnection);
+  els.retryStatusBtn.addEventListener("click", retryBackendConnection);
 
   els.nav.addEventListener("click", (event) => {
     const button = event.target.closest(".nav-btn");
@@ -102,13 +149,37 @@ function bindEvents() {
     switchView(button.dataset.view);
   });
 
+  els.pageSubnav.addEventListener("click", (event) => {
+    const button = event.target.closest(".page-tab");
+    if (!button) return;
+    switchPageTab(button.dataset.pageTab);
+  });
+
   els.exploreSuggestions.addEventListener("click", (event) => {
     const chip = event.target.closest(".suggestion");
     if (!chip) return;
+    switchPageTab("chat");
     els.question.value = chip.dataset.question || "";
     els.question.focus();
     els.explorePanel.hidden = true;
   });
+}
+
+function switchPageTab(tab) {
+  if (!tab) return;
+  const changed = tab !== state.pageTab;
+  state.pageTab = tab;
+  if (changed) {
+    document.querySelectorAll(".page-tab").forEach((el) => {
+      el.classList.toggle("active", el.dataset.pageTab === tab);
+    });
+    document.querySelectorAll(".page-panel").forEach((el) => {
+      el.classList.toggle("active", el.id === `page-panel-${tab}`);
+    });
+  }
+  if (tab === "chat") {
+    els.question.focus();
+  }
 }
 
 function switchView(view) {
@@ -121,50 +192,130 @@ function switchView(view) {
   });
   if (view === "saved") loadSavedPages();
   if (view === "graph") renderGraph();
-  if (view === "chat") loadPageQuotes();
+  if (view === "chat") {
+    loadPageQuotes();
+    refreshSelectionFromPage();
+  }
+}
+
+function normalizeSelection(text) {
+  return (text || "").replace(/\s+/g, " ").trim();
+}
+
+function isSaveableSelection(text) {
+  return normalizeSelection(text).length >= 8;
 }
 
 function updateSelection(selected) {
-  state.selection = selected || "";
-  if (state.page) state.page.selected_text = state.selection;
-  if (state.selection.length >= 8) {
-    els.selectionBar.hidden = false;
-    els.selectionPreview.textContent =
-      state.selection.slice(0, 180) + (state.selection.length > 180 ? "…" : "");
-  } else {
+  const normalized = normalizeSelection(selected);
+  const previous = state.selection;
+  state.selection = normalized;
+  if (state.page) state.page.selected_text = normalized;
+
+  const selectionChanged = normalized !== normalizeSelection(previous);
+
+  if (!isSaveableSelection(normalized)) {
     els.selectionBar.hidden = true;
     els.selectionPreview.textContent = "";
+    els.saveQuoteBtn.hidden = true;
+    closeQuoteCompose({ keepSelection: true });
+    return;
+  }
+
+  els.selectionBar.hidden = false;
+  els.selectionPreview.textContent =
+    normalized.slice(0, 180) + (normalized.length > 180 ? "…" : "");
+
+  const alreadySaved = normalized === state.lastSavedSelection;
+  els.selectionBar.classList.toggle("saved", alreadySaved);
+
+  if (alreadySaved) {
+    els.saveQuoteBtn.hidden = true;
+    closeQuoteCompose({ keepSelection: true });
+    return;
+  }
+
+  if (selectionChanged) {
+    closeQuoteCompose({ keepSelection: true });
+    switchPageTab("quotes");
+    openQuoteCompose({ auto: true });
+  } else if (els.quoteCompose.hidden) {
+    els.saveQuoteBtn.hidden = false;
   }
 }
 
-function openQuoteCompose() {
-  const text = state.selection || state.page?.selected_text || "";
-  if (!text) {
+async function refreshSelectionFromPage() {
+  const page = await getActivePageContext();
+  if (page?.selected_text !== undefined) {
+    updateSelection(page.selected_text);
+  }
+}
+
+function openQuoteCompose({ auto = false } = {}) {
+  const text = normalizeSelection(state.selection);
+  if (!isSaveableSelection(text)) {
     setStatus("Highlight text on the page first", true);
     return;
   }
+  if (text === state.lastSavedSelection) {
+    return;
+  }
+
   state.pendingQuoteText = text;
   els.quotePreview.textContent = text;
   els.quoteNote.value = "";
   els.quoteCompose.hidden = false;
   els.saveQuoteBtn.hidden = true;
-  els.quoteNote.focus();
+  if (!auto) {
+    els.quoteNote.focus();
+  }
 }
 
-function closeQuoteCompose() {
+function closeQuoteCompose({ keepSelection = false } = {}) {
   state.pendingQuoteText = "";
   els.quoteCompose.hidden = true;
-  els.saveQuoteBtn.hidden = false;
+  if (!keepSelection) {
+    state.selection = "";
+    state.lastSavedSelection = "";
+    els.selectionBar.hidden = true;
+    els.selectionPreview.textContent = "";
+  }
+  const canPromptAgain =
+    isSaveableSelection(state.selection) &&
+    normalizeSelection(state.selection) !== state.lastSavedSelection;
+  els.saveQuoteBtn.hidden = !canPromptAgain;
 }
 
 async function confirmSaveQuote() {
-  const text = state.pendingQuoteText || state.selection || "";
+  const text = normalizeSelection(state.pendingQuoteText || state.selection);
   if (!text) {
-    closeQuoteCompose();
+    closeQuoteCompose({ keepSelection: true });
     return;
   }
-  await saveQuote(text, els.quoteNote.value.trim());
-  closeQuoteCompose();
+  els.saveQuoteConfirm.disabled = true;
+  els.saveQuoteConfirm.textContent = "Saving…";
+  try {
+    const ready = await ensureBackendReady();
+    if (!ready) {
+      setStatus("Backend not connected — fix setup below, then retry", true);
+      showSetupHelp();
+      return;
+    }
+    const saved = await saveQuote(text, els.quoteNote.value.trim());
+    if (saved) {
+      state.lastSavedSelection = text;
+      closeQuoteCompose({ keepSelection: true });
+      els.saveQuoteBtn.hidden = true;
+      els.selectionBar.classList.add("saved");
+      setStatus("Quote saved");
+      hideSetupHelp();
+      switchPageTab("quotes");
+      await loadPageQuotes();
+    }
+  } finally {
+    els.saveQuoteConfirm.disabled = false;
+    els.saveQuoteConfirm.textContent = "Save quote";
+  }
 }
 
 async function saveQuote(text, note = "") {
@@ -182,10 +333,11 @@ async function saveQuote(text, note = "") {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Save quote failed");
-    setStatus("Quote saved");
     await loadPageQuotes();
+    return true;
   } catch (err) {
     setStatus(err.message, true);
+    return false;
   }
 }
 
@@ -202,31 +354,54 @@ function sendRuntimeMessage(message) {
 }
 
 async function ensureBackendReady() {
+  if (await checkBackendHealth()) {
+    setStatus("Ready");
+    hideSetupHelp();
+    return true;
+  }
+
   setStatus("Starting backend…");
   const result = await sendRuntimeMessage({ type: "ENSURE_BACKEND" });
+  if (await checkBackendHealth()) {
+    const provider = await getBackendProvider();
+    setStatus(provider ? `Ready (${provider})` : "Ready");
+    hideSetupHelp();
+    return true;
+  }
+
   if (!result?.ok) {
-    setStatus(result?.error || "Could not start backend", true);
+    if (result?.error === "native_host_forbidden" || String(result?.error || "").includes("forbidden")) {
+      setStatus("Native host not registered — see setup steps below", true);
+    } else {
+      setStatus(result?.hint || result?.error || result?.manual || "Could not start backend", true);
+    }
+    showSetupHelp(result);
     return false;
   }
 
+  setStatus("Backend health check failed", true);
+  showSetupHelp(result);
+  return false;
+}
+
+async function checkBackendHealth() {
   try {
-    const res = await fetch(`${BACKEND}/health`);
+    const res = await fetch(`${BACKEND}/health`, { cache: "no-store" });
+    if (!res.ok) return false;
     const health = await res.json();
-    if (!res.ok) throw new Error("Backend health check failed");
-    if (health.api_version !== 2) {
-      setStatus("Restarting backend for latest features…");
-      await sendRuntimeMessage({ type: "ENSURE_BACKEND" });
-    }
-    const provider = health.llm_provider || "unknown";
-    if (provider === "ollama" && !health.openai_configured) {
-      setStatus("Ready (using Ollama — set OPENAI_API_KEY in .env for OpenAI)");
-    } else {
-      setStatus(`Ready (${provider})`);
-    }
-    return true;
-  } catch (err) {
-    setStatus(err.message, true);
+    return health.ok === true;
+  } catch {
     return false;
+  }
+}
+
+async function getBackendProvider() {
+  try {
+    const res = await fetch(`${BACKEND}/health`, { cache: "no-store" });
+    const health = await res.json();
+    return health.llm_provider || "";
+  } catch {
+    return "";
   }
 }
 
@@ -239,6 +414,7 @@ async function refreshPage() {
   }
 
   state.page = page;
+  state.lastSavedSelection = "";
   updateSelection(page.selected_text || state.selection);
   els.title.textContent = page.title || "Untitled page";
   els.site.textContent = page.site || page.url || "";
@@ -254,7 +430,7 @@ async function refreshPage() {
     } else {
       state.savedPageId = null;
       state.history = [];
-      els.messages.innerHTML = "";
+      renderChatHistory([]);
       markPageSaved(false);
     }
     await loadPageQuotes();
@@ -270,46 +446,73 @@ async function loadPageQuotes() {
     return;
   }
   try {
-    const params = new URLSearchParams({ page_url: state.page.url });
+    const params = new URLSearchParams();
     if (state.savedPageId) params.set("page_id", state.savedPageId);
+    if (state.page.url) params.set("page_url", state.page.url);
     const res = await fetch(`${BACKEND}/library/quotes?${params}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to load quotes");
-    state.quotes = data.quotes || [];
+    state.quotes = (data.quotes || []).sort(
+      (a, b) => String(b.saved_at || "").localeCompare(String(a.saved_at || ""))
+    );
     renderPageQuotes();
   } catch (err) {
     els.pageQuotes.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
   }
 }
 
+function formatQuoteTime(savedAt) {
+  if (!savedAt) return "";
+  const date = new Date(savedAt);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function renderPageQuotes() {
   els.pageQuotes.innerHTML = "";
   if (!state.quotes.length) {
-    els.pageQuotes.innerHTML = '<p class="muted empty-hint">No quotes yet — highlight text and click Save selection as quote.</p>';
+    els.pageQuotes.innerHTML =
+      '<p class="muted empty-hint">Highlight text on the page, then save it as a quote here.</p>';
     return;
   }
-  for (const quote of state.quotes) {
-    const card = document.createElement("div");
+  state.quotes.forEach((quote, index) => {
+    const card = document.createElement("article");
     card.className = "quote-card";
+    const when = formatQuoteTime(quote.saved_at);
     card.innerHTML = `
+      <div class="quote-card-head">
+        <span class="quote-index">Quote ${state.quotes.length - index}</span>
+        ${when ? `<time class="quote-time muted">${escapeHtml(when)}</time>` : ""}
+      </div>
       <blockquote>${escapeHtml(quote.text)}</blockquote>
       ${quote.note ? `<div class="quote-note-text">${escapeHtml(quote.note)}</div>` : ""}
     `;
     els.pageQuotes.appendChild(card);
-  }
+  });
 }
 
 function markPageSaved(saved) {
   els.saveBadge.hidden = !saved;
   const label = saved ? "Update saved page" : "Save page";
   els.savePageBtn.textContent = label;
-  els.savePageBtnSide.textContent = label;
   els.savePageBtn.classList.toggle("saved", saved);
-  els.savePageBtnSide.classList.toggle("saved", saved);
 }
 
 function renderChatHistory(history) {
   els.messages.innerHTML = "";
+  if (!history.length) {
+    const hint = document.createElement("p");
+    hint.className = "muted empty-hint";
+    hint.id = "chat-empty-hint";
+    hint.textContent = "Ask a question about this page.";
+    els.messages.appendChild(hint);
+    return;
+  }
   for (const turn of history) {
     appendMessage(turn.role, turn.content);
   }
@@ -384,8 +587,10 @@ async function askQuestion() {
   const question = els.question.value.trim();
   if (!question || state.busy || !state.page) return;
 
+  switchPageTab("chat");
   state.busy = true;
   els.askBtn.disabled = true;
+  removeChatEmptyHint();
   appendMessage("user", question);
   els.question.value = "";
 
@@ -499,12 +704,21 @@ async function openSavedPage(pageId) {
     els.savedSummary.textContent = page.summary || "";
 
     els.savedQuotes.innerHTML = "";
-    for (const quote of page.quotes || []) {
-      const li = document.createElement("li");
-      li.textContent = `"${quote.text}"${quote.note ? ` — ${quote.note}` : ""}`;
-      els.savedQuotes.appendChild(li);
+    const quotes = (page.quotes || []).slice().sort(
+      (a, b) => String(b.saved_at || "").localeCompare(String(a.saved_at || ""))
+    );
+    for (const quote of quotes) {
+      const item = document.createElement("li");
+      item.className = "quote-list-item";
+      const when = formatQuoteTime(quote.saved_at);
+      item.innerHTML = `
+        <blockquote>${escapeHtml(quote.text)}</blockquote>
+        ${quote.note ? `<div class="quote-note-text">${escapeHtml(quote.note)}</div>` : ""}
+        ${when ? `<time class="quote-time muted">${escapeHtml(when)}</time>` : ""}
+      `;
+      els.savedQuotes.appendChild(item);
     }
-    if (!page.quotes?.length) {
+    if (!quotes.length) {
       els.savedQuotes.innerHTML = '<li class="muted">No quotes saved for this page.</li>';
     }
 
@@ -624,7 +838,7 @@ async function clearAllData() {
     state.history = [];
     state.quotes = [];
     state.savedPages = [];
-    els.messages.innerHTML = "";
+    renderChatHistory([]);
     markPageSaved(false);
     renderPageQuotes();
     setStatus("All data cleared");
@@ -636,12 +850,18 @@ async function clearAllData() {
 }
 
 function appendMessage(role, text) {
+  removeChatEmptyHint();
   const node = document.createElement("div");
   node.className = `message ${role}`;
   node.textContent = text;
   els.messages.appendChild(node);
   els.messages.scrollTop = els.messages.scrollHeight;
   return node;
+}
+
+function removeChatEmptyHint() {
+  const hint = document.getElementById("chat-empty-hint");
+  if (hint) hint.remove();
 }
 
 function setStatus(text, isError = false) {

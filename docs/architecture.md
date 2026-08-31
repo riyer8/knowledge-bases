@@ -1,52 +1,78 @@
 # Architecture
 
-## Target System
+A local-first personal knowledge system. All data stays on device. Multiple clients — Chrome
+extension and macOS app — share one Python backend and one storage root (`~/.kb/`).
+
+## System Overview
 
 ```text
-                    CHROME
-                       │
-              ┌────────▼────────┐
-              │   Side Panel    │
-              │                 │
-              │  Ask anything   │
-              │  about page     │
-              └────────┬────────┘
-                       │
-              Current page context
-                       │
-                       ▼
-              ┌─────────────────┐
-              │ Context Engine  │
-              │                 │
-              │ DOM             │
-              │ URL             │
-              │ title           │
-              │ selection       │
-              │ metadata        │
-              │ page structure  │
-              └────────┬────────┘
-                       │
-                       ▼
-              ┌─────────────────┐
-              │ Knowledge       │
-              │ Engine          │
-              │                 │
-              │ embeddings      │
-              │ chunks          │
-              │ entities        │
-              │ relationships   │
-              │ history         │
-              └────────┬────────┘
-                       │
-              ┌────────▼────────┐
-              │      LLM        │
-              │  OpenAI / etc.  │
-              └─────────────────┘
+┌──────────────────────┐     ┌──────────────────────┐
+│  Chrome Extension    │     │   macOS Desktop App   │
+│  (page context,      │     │   (chat, graph, pet,  │
+│   saved library)     │     │    screenshots, etc.) │
+└──────────┬───────────┘     └──────────┬───────────┘
+           │                            │
+           └────────────┬───────────────┘
+                        │ HTTP (localhost:8765)
+           ┌────────────▼───────────────┐
+           │      Python Backend          │
+           │   core/frontend_backend.py   │
+           │                              │
+           │  ┌──────────┐  ┌──────────┐  │
+           │  │ Ingestion│→ │ Privacy  │  │
+           │  └────┬─────┘  └────┬─────┘  │
+           │       │             │        │
+           │  ┌────▼─────────────▼─────┐  │
+           │  │ Memory + Library       │  │
+           │  │ (index, graph, pages)  │  │
+           │  └───────────┬────────────┘  │
+           │              │               │
+           │  ┌───────────▼────────────┐  │
+           │  │ Retrieval + LLM        │  │
+           │  └────────────────────────┘  │
+           └────────────┬─────────────────┘
+                        │
+           ┌────────────▼────────────┐
+           │   Local Storage         │
+           │   ~/.kb/                │
+           └─────────────────────────┘
 ```
+
+**Separation of concerns:** clients capture context and render UI. The backend owns memory,
+search, the concept graph, and all LLM calls. Never call external LLM APIs outside
+`core/llm_service.py` / `core/llm_providers.py`.
+
+## Clients
+
+### Chrome Extension (`chrome-extension/`)
+
+The browser is the primary reading surface. The extension:
+
+- Extracts structured page context (title, URL, headings, selection, visible text)
+- Provides unified chat about the current page (`POST /ask`)
+- Saves pages and quotes explicitly (`/library/*`)
+- Visualizes the concept graph in the side panel
+
+The extension does **not** contain the knowledge brain — it sends context to the backend.
+
+### macOS Desktop App (`DesktopApp/`)
+
+Swift/SwiftUI app with hotkeys, desktop pet, chat, graph view, manual inputs, screenshots,
+and proactive insights. Connects to the same backend at `http://127.0.0.1:8765`.
+
+**Current gap:** the desktop app uses legacy endpoints (`/chat`, `/graph`, `/screenshot`,
+`/proactive`). The extension's saved library (`/library/*`) and page-context chat (`/ask`)
+are not yet surfaced in the macOS UI. Both clients already share the same `~/.kb/` storage —
+wiring the desktop app to `/library/*` is the next integration step.
+
+### Future clients
+
+Safari extension, PDF reader, terminal, phone — all feed the same backend. Do not start a
+separate repo; add interfaces here.
 
 ## Structured Page Representation
 
-Don't just send the webpage to the LLM. The extension creates a structured representation:
+The extension sends structured context, not raw HTML:
 
 ```json
 {
@@ -57,160 +83,168 @@ Don't just send the webpage to the LLM. The extension creates a structured repre
   "paragraphs": [],
   "code_blocks": [],
   "links": [],
-  "images": [],
-  "tables": [],
   "selected_text": "...",
-  "page_type": "research_paper"
+  "page_type": "research_paper",
+  "visible_text": "..."
 }
 ```
 
 When the user asks "How does this compare to what I read yesterday?":
 
 ```text
-Current page
-        +
-Recent reading history
-        +
-Semantic search over knowledge base
-        +
-User's question
+Current page + recent reading history + semantic search + user question → LLM
+```
+
+## Module Descriptions
+
+### `core/ingestion/`
+
+Handles data capture: screenshots (with OCR), manual text/file/URL input, and page context.
+Output flows through the privacy pipeline before storage.
+
+### `core/privacy/`
+
+Mandatory gate between raw data and storage:
+
+- Credential/password field detection → pause signal
+- PII detection (names, emails, phone numbers)
+- Name hashing (SHA-256 + salt, stored in `~/.kb/hashes/map.json`)
+- Sensitivity scoring and banking/sensitive site detection
+
+Output: sanitized events in `~/.kb/events/clean/`
+
+### `core/memory/`
+
+Chunking, embeddings, vector store, bucket classification, and graph edges.
+Includes `concept_graph.py` for the extension's knowledge graph.
+
+### `core/library_service.py` + `core/page_context_service.py`
+
+Extension-facing services:
+
+- **Page context** — ingest, search, connections, remember passages
+- **Saved library** — explicit page saves, quotes, per-page chat history, explore suggestions
+
+### `core/retrieval/`
+
+Semantic search, context assembly (hash→name rendering), RAG chat (`chat.py`), and
+page-aware chat (`page_chat.py`).
+
+### `core/integrations/`
+
+Read-only connectors (Google Calendar, Gmail). Each emits events into the ingestion pipeline.
+
+### `core/proactive/`
+
+Pattern detection and ranked insights surfaced to the desktop app.
+
+### `core/llm_providers.py`
+
+Provider abstraction: OpenAI, Anthropic, Ollama. `KB_LLM_PROVIDER=auto` uses OpenAI when
+`OPENAI_API_KEY` is set, otherwise Ollama.
+
+## Data Flow
+
+```text
+Raw signal (screen, page, manual input, integration)
         ↓
-      LLM
+Ingestion
+        ↓
+Privacy pipeline (hash, redact, score)  ← mandatory, cannot be bypassed
+        ↓
+Clean event log + library + page context
+        ↓
+Memory (embed, graph, bucket)
+        ↓
+Index + graph
+        ↓
+Retrieval ← chat queries here
+        ↓
+LLM (OpenAI / Anthropic / Ollama)
+        ↓
+Response
 ```
 
-## Repo Evolution
+## Storage Layout
 
-Build on the existing repo — don't start a separate one. The Python backend already has the most valuable part: the memory/knowledge engine. The Chrome extension becomes a new interface into that brain.
-
-### Before
+All runtime data lives under `~/.kb/` (configured via `KB_ROOT`):
 
 ```text
-Knowledge Bases
-│
-├── macOS App
-│   ├── Desktop Pet
-│   ├── Assistant UI
-│   ├── Chat
-│   └── Graph
-│
-└── Python Backend
-    ├── Chat
-    ├── Knowledge
-    ├── Graph
-    ├── Screenshots
-    └── Storage
+~/.kb/
+├── library/              # saved pages, quotes, per-page chat (extension)
+│   ├── saved_pages.json
+│   ├── pages/
+│   ├── chats/
+│   └── quotes.json
+├── pages/                # ephemeral page context from extension capture
+├── events/
+│   ├── raw/              # pre-privacy (short TTL)
+│   └── clean/            # post-privacy (append-only)
+├── index/                # vector embeddings
+├── graph/                # knowledge graph + concepts.json
+├── hashes/
+│   └── map.json          # hash → display name (never synced)
+└── buckets/
+    └── classifications.json
 ```
 
-### After
+Use `POST /library/clear` or `POST /delete-all` to reset runtime data.
 
-```text
-Personal Knowledge Engine
-│
-├── Interfaces
-│   │
-│   ├── Chrome Extension      ← NEW
-│   │   ├── Side Panel
-│   │   ├── Page Context
-│   │   └── "Remember this"
-│   │
-│   └── macOS App             ← EXISTING
-│       ├── Desktop Pet
-│       ├── Assistant
-│       └── Graph
-│
-└── Core / Backend
-    ├── Memory
-    ├── Knowledge Graph
-    ├── Semantic Search
-    ├── LLM
-    ├── Page Ingestion
-    └── Storage
-```
+## API Surface
 
-### Target Directory Layout
+Base URL: `http://127.0.0.1:8765`. Full reference: [api.md](api.md).
+
+| Area | Key endpoints |
+|---|---|
+| Health | `GET /health` |
+| Extension chat | `POST /ask`, `POST /page-context`, `POST /remember` |
+| Saved library | `GET/POST /library/pages`, `/library/quotes`, `/library/graph`, `/library/explore` |
+| Search & memory | `GET /search`, `GET /connections`, `GET /history`, `GET /concepts` |
+| Desktop (legacy) | `POST /chat`, `GET /graph`, `POST /screenshot`, `GET /proactive` |
+| Manual input | `POST /manual-input`, `GET /manual-inputs` |
+| Integrations | `GET /integrations/status`, sync + OAuth callbacks |
+| Reset | `POST /delete-all`, `POST /library/clear` |
+
+## LLM Strategy
+
+- **Chat + page Q&A:** configured provider via `KB_LLM_PROVIDER` (auto-detects OpenAI)
+- **Embeddings:** `KB_EMBED_PROVIDER` (auto uses OpenAI when key is set)
+- All calls go through `core/llm_providers.py` — never call APIs directly
+- Model names live in `.env`, never hardcoded
+
+## Repo Layout
 
 ```text
 knowledge-bases/
-│
-├── backend/              # extracted over time from core/
-│   ├── api/
-│   ├── memory/
-│   ├── knowledge/
-│   ├── llm/
-│   ├── storage/
-│   └── ingestion/
-│
-├── chrome-extension/     # NEW — add first, don't refactor yet
-│   ├── manifest.json
-│   ├── sidepanel/
-│   ├── content/
-│   ├── background/
-│   └── components/
-│
-├── desktop/
-│   └── DesktopApp/
-│
-├── data/
-│
-└── README.md
+├── core/                 # Python backend (memory, retrieval, privacy, ingestion)
+├── chrome-extension/     # Chrome side panel + native host
+├── DesktopApp/           # macOS SwiftUI app
+├── docs/                 # product + developer documentation
+├── tests/
+├── scripts/start_backend.sh
+├── main.py               # backend launcher
+└── goal.md               # living project status
 ```
 
-## Separation of Concerns
+### Future extraction (not started)
 
-The Chrome extension should not contain the knowledge brain. It captures context and says: "Hey backend, here's what I'm looking at."
+Over time, shared logic may move from `core/` into a `backend/` package. Do not refactor
+until both clients are stable on the current API.
 
-```text
-             ┌── Chrome
-             │
-             ├── macOS
-             │
-             └── future clients
-                    │
-                    ▼
-             Personal Memory
-                    │
-             ┌──────┼──────┐
-             ▼      ▼      ▼
-           Search  Graph   LLM
-```
+## Dependency Graph
 
-## Feature Mapping (Old → New)
+Before changing a module, check:
 
-| Current feature | Future |
-|---|---|
-| Chat | Shared LLM/chat engine |
-| Manual URLs | Automatic webpage ingestion |
-| Manual text | Highlight → Remember |
-| Markdown graph | Personal knowledge graph |
-| Screenshots | Future browser screenshot/context |
-| Graph View | Mac app + eventually web UI |
-| Desktop pet | Still exists |
-| Local storage | Still exists |
-| Claude | LLM provider (one of many) |
-| OpenAI | Add as another provider |
-| ProactivePopup | "You've read something related to this before" |
+- What does it depend on?
+- What depends on it?
+- What is the blast radius if the interface changes?
 
-## LLM Provider Abstraction
+Cross-module interface changes require a new entry in `DECISIONS/`.
 
-Replace Claude-specific chat with a provider abstraction:
+## Related Docs
 
-```text
-LLMProvider
-    ├── OpenAI
-    ├── Anthropic
-    └── Local (Ollama)
-```
-
-## Phase 1 Strategy
-
-Don't rewrite the old code yet. Add `chrome-extension/` and make it talk to the existing `localhost:8765` backend:
-
-```text
-Open webpage → Click extension → Side panel opens
-      → Extract page → POST /page-context
-      → Ask question → POST /chat → Answer
-```
-
-Once the extension works, extract shared logic into `backend/knowledge/`, `backend/memory/`, `backend/search/`, `backend/llm/`, and `backend/ingestion/` — then both clients use it.
-
-See [MVP Roadmap](mvp-roadmap.md) for the day-by-day plan.
+- [API Reference](api.md)
+- [Getting Started](getting-started.md)
+- [MVP Roadmap](mvp-roadmap.md)
+- [Project Structure](project-structure.md)
+- [Vision](vision.md)

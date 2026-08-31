@@ -40,7 +40,7 @@ _Every postmortem must produce at least one harness change. A postmortem with no
 - [ ] Updated AGENT spec: AGENTS/__.md
 - [ ] Added rule to CLAUDE.md
 - [ ] New DECISION: DECISIONS/DECISION-NNN.md
-- [ ] Updated dependency graph in ARCHITECTURE.md
+- [ ] Updated dependency graph in docs/architecture.md
 
 ---
 

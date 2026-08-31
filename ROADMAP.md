@@ -87,5 +87,5 @@ Status key: `[ ]` not started · `[~]` in progress · `[x]` done · `[!]` blocke
 
 - Keep `STATE/` updated after every session
 - Add evals before shipping each module
-- Keep `ARCHITECTURE.md` current with actual state
+- Keep `docs/architecture.md` current with actual state
 - Log decisions to `DECISIONS/` when making non-obvious choices

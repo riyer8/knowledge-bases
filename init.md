@@ -64,7 +64,7 @@ are the way they are — violating them without a new DECISION file is not allow
 
 ### Step 9 — Dependency Graph Check
 ```
-Read: ARCHITECTURE.md (Dependency Graph section)
+Read: docs/architecture.md (Dependency Graph section)
 ```
 Before touching any module, answer:
 - What does this module depend on? (its dependencies)

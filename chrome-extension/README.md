@@ -50,5 +50,5 @@ With `auto`, OpenAI is used automatically when the key is set.
 - Extracts structured page context (title, headings, selection, visible text)
 - Four modes: Understand, Connect, Learn, Explore
 - Streams answers from `POST /ask`
-- Saves highlights with **+ Remember selection**
+- Saves quotes from the side panel when you highlight text (sidebar only — no on-page popup)
 - Shows related prior reading from `GET /connections`

@@ -1,39 +1,43 @@
 # MVP Roadmap
 
-## Day 1 — Core Loop ✅
+## Completed — Chrome Extension MVP
 
-Chrome extension can:
+### Day 1 — Core Loop
 
-- Open side panel
-- Read current webpage
-- Extract: title, URL, visible text, headings, current selection
-- Send it to Python backend
-- Ask configured LLM (Ollama/OpenAI/Anthropic)
-- Stream answer back
+- Open side panel, read current webpage
+- Extract title, URL, visible text, headings, selection
+- Send to Python backend, stream LLM answer back
+- Endpoints: `POST /page-context`, `POST /ask`
 
-Implemented in `chrome-extension/` with backend endpoints `POST /page-context` and `POST /ask`.
-
-## Day 2 — Conversation Context ✅
+### Day 2 — Conversation Context
 
 Follow-up questions keep page + thread context in the side panel (`history` in `POST /ask`).
 
-## Day 3 — Auto-Save ✅
+### Day 3 — Auto-Save
 
-Pages are persisted on context capture; interactions increment via `/ask` and `/remember`.
+Pages persisted on context capture; interactions increment via `/ask` and `/remember`.
 
-## Day 4 — Semantic Search ✅
+### Day 4 — Semantic Search
 
 `GET /search?q=` searches indexed reading history.
 
-## Day 5 — Connections ✅
+### Day 5 — Connections
 
 `GET /connections` surfaces related prior reading for the current page.
 
-## Day 6+ — Knowledge Graph
+### Day 6+ — Knowledge Graph
 
-Build the actual concept graph with sources, relationships, and understanding scores.
+Concept nodes with sources, relationships, and understanding scores.
+See `core/memory/concept_graph.py` and `GET /concepts`.
 
-Side panel mockup:
+### UX Polish
+
+- Floating "+ Remember" on text selection
+- Live selection in side panel
+- Unified chat (no mode tabs)
+- Saved library with quotes, explore suggestions, and graph visualization
+
+## Side Panel Target UX
 
 ```text
 ┌─────────────────────────────┐
@@ -57,38 +61,7 @@ Side panel mockup:
 └─────────────────────────────┘
 ```
 
-## Day 2 — Conversation Context
-
-```text
-Page → Question → Answer → Follow-up
-```
-
-## Day 3 — Auto-Save
-
-Automatically save pages you've meaningfully interacted with.
-
-## Day 4 — Semantic Search
-
-Search over previous pages. "Have I seen this before?" works.
-
-## Day 5 — Connections
-
-```text
-Current page → Relevant things you've read → LLM explains relationship
-```
-
-## Day 6+ — Knowledge Graph ✅
-
-Concept nodes with sources, relationships, and understanding scores. See `core/memory/concept_graph.py` and `GET /concepts`.
-
-## UX Polish ✅
-
-- Floating "+ Remember" on text selection
-- Live selection in side panel
-- Suggested questions per mode
-- Concept + reading badges in connections
-
-## API Endpoints (all implemented)
+## API Endpoints (implemented)
 
 | Method | Endpoint | Purpose |
 |---|---|---|
@@ -99,9 +72,24 @@ Concept nodes with sources, relationships, and understanding scores. See `core/m
 | `GET` | `/search` | Semantic search over reading history |
 | `GET` | `/connections` | Related concepts + prior reading |
 | `GET` | `/history` | Recent reading history |
+| `POST` | `/library/save-page` | Explicitly save a page + summary |
+| `GET` | `/library/pages` | List saved pages |
+| `GET` | `/library/pages/{id}` | Saved page detail + chat + quotes |
+| `DELETE` | `/library/pages/{id}` | Clear memory for one page |
+| `POST` | `/library/quotes` | Save an individual quote |
+| `GET` | `/library/quotes` | List quotes |
+| `POST` | `/library/explore` | Sparkles suggestions |
+| `GET` | `/library/graph` | Graph nodes + edges for visualization |
+| `POST` | `/library/clear` | Wipe all stored data |
+
+## Next — macOS App Integration
+
+- Surface saved library in `DesktopApp/` (`/library/*`)
+- Unify desktop chat on `POST /ask` (same as extension)
+- Proactive "you've read this before" popups using `/connections`
 
 ## Future (not started)
 
-- Repo-wide refactor into `backend/`
-- Major changes to the macOS app
-- Proactive "you've read this before" popups in desktop app
+- Repo-wide refactor into `backend/` package
+- Safari extension
+- Proactive insights in browser (not just desktop)

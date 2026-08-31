@@ -8,10 +8,10 @@ DerivedData/
 *.xcworkspace/
 *.xcodeproj/xcuserdata/
 
-
 # Python cache/env
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 venv/
 .env
@@ -22,8 +22,6 @@ inputs/manual/uploads/text/
 inputs/manual/uploads/urls/
 inputs/manual/entries.jsonl
 inputs/screenshot/captures/
-DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata/ramya.xcuserdatad/UserInterfaceState.xcuserstate
-/DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata
 .graph-dependencies.json
 
 # Launcher runtime files

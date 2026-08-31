@@ -47,7 +47,7 @@ class MainWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Desktop Pet"
+        window.title = "Context"
         window.minSize = CGSize(width: 460, height: 600)
         window.isReleasedWhenClosed = false
         window.level = .normal
@@ -279,10 +279,10 @@ struct MainWindowView: View {
                         HStack(spacing: 8) {
                             Circle().fill(Color(hex: "#ec4899")).frame(width: 10, height: 10)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Desktop Pet Assistant")
+                                Text("Context")
                                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                                     .foregroundColor(panelTitleColor)
-                                Text("Chat, manual inputs, and graph insights")
+                                Text("Your personal knowledge assistant")
                                     .font(.system(size: 11, design: .rounded))
                                     .foregroundColor(.secondary)
                             }

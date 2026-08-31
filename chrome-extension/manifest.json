@@ -22,7 +22,6 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content/extract.js"],
-      "css": ["content/remember.css"],
       "run_at": "document_idle"
     }
   ]

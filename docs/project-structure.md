@@ -18,37 +18,32 @@ knowledge-bases/
 │       └── Models/
 │           └── DesktopPetSettings.swift # persisted app settings model
 ├── core/
-│   ├── frontend_backend.py              # unified backend HTTP router
-│   ├── data_reset_service.py            # delete-all runtime data cleanup
-│   ├── llm_service.py                   # LLM calls + fallback behavior
-│   ├── graph_service.py                 # markdown graph builder logic
-│   ├── manual_input_service.py          # manual input storage + processing
-│   ├── chat_prompt.txt                  # base system prompt
+│   ├── frontend_backend.py              # unified HTTP router (all clients)
 │   ├── config.py                        # centralized path + env config
-│   ├── ingestion/                       # data capture pipeline
+│   ├── llm_providers.py                 # OpenAI / Anthropic / Ollama abstraction
+│   ├── llm_service.py                   # legacy LLM wrapper
+│   ├── library_service.py               # saved pages, quotes, explore
+│   ├── page_context_service.py          # page ingest, search, connections
+│   ├── chat_prompt.txt                  # base system prompt
+│   ├── ingestion/                       # screenshot OCR, text ingest, event writer
 │   ├── privacy/                         # PII detection, hashing, sensitive sites
-│   ├── memory/                          # chunking, embeddings, graph, vector store
-│   ├── retrieval/                       # semantic search, context assembly, chat
+│   ├── memory/                          # chunking, embeddings, graph, concept graph
+│   ├── retrieval/                       # semantic search, chat, page chat
 │   ├── integrations/                    # GCal, Gmail, OAuth
 │   └── proactive/                       # pattern detection, insight surfacing
-├── inputs/
-│   ├── manual/
-│   │   ├── manual_input_server.py       # manual-input-only backend
-│   │   ├── entries.jsonl                # runtime manual-input event log
-│   │   └── uploads/
-│   │       ├── files/
-│   │       ├── text/
-│   │       └── urls/
-│   ├── screenshot/
-│   │   └── screenshot_service.py        # screenshot capture service
-│   └── .graph-dependencies.json         # manual graph edges (created at runtime)
-├── chrome-extension/                    # Chrome side panel extension
+├── chrome-extension/
 │   ├── manifest.json
 │   ├── background.js
 │   ├── install-native-host.sh           # one-time auto-start setup
 │   ├── native-host/context_host.py
 │   ├── content/extract.js
-│   └── sidepanel/
+│   └── sidepanel/                       # chat, saved library, graph UI
+├── inputs/
+│   ├── manual/
+│   │   ├── manual_input_server.py       # optional isolated manual-input server
+│   │   └── uploads/                     # runtime uploads (gitignored)
+│   └── screenshot/
+│       └── screenshot_service.py        # screenshot capture service
 ├── scripts/
 │   └── start_backend.sh                 # backend launcher for extension
 ├── docs/                                # product + developer documentation
@@ -58,10 +53,14 @@ knowledge-bases/
 ├── TASKS/
 ├── DECISIONS/
 ├── EVALS/
-└── main.py                              # root launcher for frontend backend
+├── main.py                              # root launcher for frontend backend
+├── start.sh                             # one-click backend + app launcher
+└── goal.md                              # living project status
 ```
 
-## Hotkeys (Cmd + Shift)
+Runtime data is stored under `~/.kb/` (not in the repo). See [architecture.md](architecture.md).
+
+## Hotkeys (macOS app — Cmd + Shift)
 
 | Key | Action |
 |---|---|
