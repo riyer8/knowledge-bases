@@ -26,6 +26,29 @@ from core.integrations import (
     gcal_sync, gcal_auth_url, gcal_callback,
     gmail_sync, gmail_auth_url, gmail_callback,
 )
+from core.library_service import (
+    clear_library,
+    delete_saved_page,
+    explore_suggestions,
+    find_saved_page_by_url,
+    get_saved_page,
+    graph_visual,
+    list_quotes,
+    list_saved_pages,
+    save_page as library_save_page,
+    save_quote,
+)
+from core.memory.concept_graph import list_concepts, related_for_page
+from core.page_context_service import (
+    get_connections,
+    get_page,
+    list_history,
+    remember_passage,
+    save_page_context,
+    search_pages,
+)
+from core.retrieval.page_chat import ask_about_page
+from core.llm_providers import resolve_llm_provider
 
 # Temporary landing dir for raw screenshots before OCR
 _SCREENSHOT_TEMP = config.events_raw_dir / "screenshots"
@@ -160,11 +183,17 @@ def _load_manual_entries() -> list[dict]:
 class FrontendHandler(BaseHTTPRequestHandler):
     server_version = "KBBackend/2.0"
 
+    def _send_cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
     def _send_json(self, status: HTTPStatus, payload: Any) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status.value)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -172,6 +201,11 @@ class FrontendHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         raw = self.rfile.read(length) if length > 0 else b""
         return json.loads(raw.decode("utf-8")) if raw else {}
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT.value)
+        self._send_cors_headers()
+        self.end_headers()
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -182,6 +216,9 @@ class FrontendHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, {
                 "ok": True,
                 "service": "kb-backend",
+                "api_version": 2,
+                "llm_provider": resolve_llm_provider(),
+                "openai_configured": bool(config.openai_api_key),
                 "time": _now_iso(),
                 "kb_root": str(config.kb_root),
             })
@@ -252,6 +289,39 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
+        elif path == "/history":
+            limit = int(query.get("limit", ["20"])[0])
+            self._send_json(HTTPStatus.OK, {"history": list_history(limit=limit)})
+
+        elif path == "/search":
+            q = query.get("q", [""])[0].strip()
+            top_k = int(query.get("top_k", ["8"])[0])
+            if not q:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "q is required"})
+                return
+            self._send_json(HTTPStatus.OK, {"results": search_pages(q, top_k=top_k)})
+
+        elif path == "/connections":
+            url = query.get("url", [""])[0].strip()
+            q = query.get("q", [""])[0].strip()
+            top_k = int(query.get("top_k", ["5"])[0])
+            self._send_json(HTTPStatus.OK, {
+                "connections": get_connections(url=url, query=q, top_k=top_k),
+            })
+
+        elif path == "/concepts":
+            q = query.get("q", [""])[0].strip()
+            limit = int(query.get("limit", ["50"])[0])
+            url = query.get("url", [""])[0].strip()
+            if url or q:
+                concepts = related_for_page(page_url=url, query=q, limit=limit)
+            else:
+                concepts = list_concepts(limit=limit)
+            self._send_json(HTTPStatus.OK, {"concepts": concepts})
+
+        elif path.startswith("/library/"):
+            self._handle_library_get(path, query)
+
         else:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
@@ -262,7 +332,9 @@ class FrontendHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON"})
             return
 
-        if self.path == "/chat":
+        path = urlparse(self.path).path
+
+        if path == "/chat":
             prompt = str(payload.get("prompt", "")).strip()
             if not prompt:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "prompt is required"})
@@ -273,7 +345,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
-        elif self.path == "/manual-input":
+        elif path == "/manual-input":
             kind = str(payload.get("kind", "")).strip().lower()
             value = str(payload.get("value", "")).strip()
             created_at = str(payload.get("createdAt", "")).strip() or _now_iso()
@@ -299,7 +371,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
-        elif self.path == "/screenshot":
+        elif path == "/screenshot":
             try:
                 _SCREENSHOT_TEMP.mkdir(parents=True, exist_ok=True)
                 ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -331,7 +403,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
-        elif self.path == "/graph/dependency":
+        elif path == "/graph/dependency":
             source = str(payload.get("source", "")).strip()
             target = str(payload.get("target", "")).strip()
             if not source or not target or source == target:
@@ -340,7 +412,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
             add_edge(source, target, edge_type="manual", weight=1.0)
             self._send_json(HTTPStatus.OK, {"ok": True, "dependency": {"source": source, "target": target}})
 
-        elif self.path == "/ingest":
+        elif path == "/ingest":
             text = str(payload.get("text", "")).strip()
             source = str(payload.get("source", "manual_text")).strip()
             if not text:
@@ -352,7 +424,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
-        elif self.path == "/integrations/gcal/sync":
+        elif path == "/integrations/gcal/sync":
             try:
                 days_back = int(payload.get("days_back", 7))
                 days_forward = int(payload.get("days_forward", 14))
@@ -363,7 +435,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
-        elif self.path == "/integrations/gmail/sync":
+        elif path == "/integrations/gmail/sync":
             try:
                 days_back = int(payload.get("days_back", 7))
                 count = gmail_sync(days_back=days_back)
@@ -373,18 +445,200 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
-        elif self.path == "/delete-all":
+        elif path == "/delete-all":
             try:
                 _delete_all()
                 self._send_json(HTTPStatus.OK, {"ok": True})
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
+        elif path == "/page-context":
+            try:
+                record = save_page_context(payload)
+                self._send_json(HTTPStatus.OK, {"ok": True, "page": record})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+
+        elif path == "/ask":
+            question = str(payload.get("question", "")).strip()
+            saved_page_id = str(payload.get("saved_page_id", "")).strip()
+            page_payload = payload.get("page")
+            history = payload.get("history") or []
+            stream = bool(payload.get("stream", False))
+
+            if not question:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "question is required"})
+                return
+
+            page = None
+            if saved_page_id:
+                page = get_saved_page(saved_page_id)
+            elif isinstance(page_payload, dict):
+                page = page_payload
+            if not page:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page or saved_page_id is required"})
+                return
+
+            try:
+                if stream:
+                    self._stream_ask(question, page, history, saved_page_id)
+                else:
+                    reply = ask_about_page(
+                        question,
+                        page,
+                        history=history,
+                        stream=False,
+                        saved_page_id=saved_page_id,
+                    )
+                    self._send_json(HTTPStatus.OK, {"reply": reply})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+
+        elif path.startswith("/library/"):
+            self._handle_library_post(path, payload)
+
+        elif path == "/remember":
+            page_id = str(payload.get("page_id", "")).strip()
+            selected_text = str(payload.get("selected_text", "")).strip()
+            note = str(payload.get("note", "")).strip()
+            if not page_id or not selected_text:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page_id and selected_text are required"})
+                return
+            try:
+                result = remember_passage(page_id, selected_text, note=note)
+                self._send_json(HTTPStatus.OK, result)
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+
         else:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.startswith("/library/pages/"):
+            page_id = path.split("/library/pages/", 1)[1].strip("/")
+            if not page_id:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page id required"})
+                return
+            deleted = delete_saved_page(page_id)
+            if not deleted:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "page not found"})
+                return
+            self._send_json(HTTPStatus.OK, {"ok": True})
+            return
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+
+    def _handle_library_get(self, path: str, query: dict) -> None:
+        if path == "/library/pages":
+            limit = int(query.get("limit", ["100"])[0])
+            self._send_json(HTTPStatus.OK, {"pages": list_saved_pages(limit=limit)})
+            return
+        if path == "/library/graph":
+            self._send_json(HTTPStatus.OK, graph_visual())
+            return
+        if path == "/library/quotes":
+            page_id = query.get("page_id", [""])[0].strip()
+            page_url = query.get("page_url", [""])[0].strip()
+            self._send_json(HTTPStatus.OK, {
+                "quotes": list_quotes(page_id=page_id, page_url=page_url),
+            })
+            return
+        if path.startswith("/library/pages/"):
+            page_id = path.split("/library/pages/", 1)[1].strip("/")
+            page = get_saved_page(page_id)
+            if not page:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "page not found"})
+                return
+            self._send_json(HTTPStatus.OK, {"page": page})
+            return
+        if path == "/library/by-url":
+            url = query.get("url", [""])[0].strip()
+            page = find_saved_page_by_url(url) if url else None
+            self._send_json(HTTPStatus.OK, {"page": page})
+            return
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+
+    def _handle_library_post(self, path: str, payload: dict) -> None:
+        try:
+            if path == "/library/save-page":
+                page_data = payload.get("page")
+                if not isinstance(page_data, dict):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page is required"})
+                    return
+                history = payload.get("history") or []
+                record = library_save_page(page_data, chat_history=history)
+                self._send_json(HTTPStatus.OK, {"ok": True, "page": record})
+                return
+            if path == "/library/quotes":
+                text = str(payload.get("text", "")).strip()
+                if not text:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "text is required"})
+                    return
+                quote = save_quote(
+                    text=text,
+                    page_id=str(payload.get("page_id", "")).strip(),
+                    page_url=str(payload.get("page_url", "")).strip(),
+                    page_title=str(payload.get("page_title", "")).strip(),
+                    note=str(payload.get("note", "")).strip(),
+                )
+                self._send_json(HTTPStatus.OK, {"ok": True, "quote": quote})
+                return
+            if path == "/library/explore":
+                page = payload.get("page")
+                if not isinstance(page, dict):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page is required"})
+                    return
+                suggestions = explore_suggestions(page)
+                self._send_json(HTTPStatus.OK, {"suggestions": suggestions})
+                return
+            if path == "/library/clear":
+                _delete_all()
+                self._send_json(HTTPStatus.OK, {"ok": True})
+                return
+            self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+        except ValueError as exc:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+        except Exception as exc:
+            self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+
     def log_message(self, format: str, *args: Any) -> None:
         return  # silence default access log
+
+    def _stream_ask(
+        self,
+        question: str,
+        page: dict,
+        history: list[dict[str, str]],
+        saved_page_id: str = "",
+    ) -> None:
+        self.send_response(HTTPStatus.OK.value)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self._send_cors_headers()
+        self.end_headers()
+
+        try:
+            stream = ask_about_page(
+                question,
+                page,
+                history=history,
+                stream=True,
+                saved_page_id=saved_page_id,
+            )
+            for token in stream:  # type: ignore[union-attr]
+                data = json.dumps({"token": token})
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                self.wfile.flush()
+            self.wfile.write(b"data: {\"done\": true}\n\n")
+            self.wfile.flush()
+        except Exception as exc:
+            data = json.dumps({"error": str(exc)})
+            self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+            self.wfile.flush()
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +716,7 @@ def _demo_hint(prompt: str) -> str | None:
 
 def _delete_all() -> None:
     """Wipe all runtime data under ~/.kb/."""
+    clear_library()
     for subdir in [
         config.events_raw_dir,
         config.events_clean_dir,
@@ -469,6 +724,7 @@ def _delete_all() -> None:
         config.graph_dir,
         config.hashes_dir,
         config.buckets_dir,
+        config.pages_dir,
     ]:
         if subdir.exists():
             shutil.rmtree(subdir)

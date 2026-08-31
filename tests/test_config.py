@@ -37,6 +37,7 @@ def test_derived_paths(tmp_path):
     assert c.hashes_dir == tmp_path / "hashes"
     assert c.buckets_dir == tmp_path / "buckets"
     assert c.auth_dir == tmp_path / "auth"
+    assert c.pages_dir == tmp_path / "pages"
     assert c.paused_log == tmp_path / "events" / "paused.log"
     assert c.hash_map_path == tmp_path / "hashes" / "map.json"
     assert c.hash_salt_path == tmp_path / "hashes" / "salt"
@@ -49,7 +50,7 @@ def test_model_defaults():
     from importlib import reload
     import core.config as cfg_mod
     reload(cfg_mod)
-    assert cfg_mod.config.chat_model == "llama3.2:8b"
+    assert cfg_mod.config.chat_model == "qwen2.5:3b"
     assert cfg_mod.config.embed_model == "nomic-embed-text"
 
 
@@ -95,4 +96,5 @@ def test_ensure_dirs_creates_paths(tmp_path):
     assert (tmp_path / "hashes").is_dir()
     assert (tmp_path / "buckets").is_dir()
     assert (tmp_path / "auth").is_dir()
+    assert (tmp_path / "pages").is_dir()
     os.environ.pop("KB_ROOT")

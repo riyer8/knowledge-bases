@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Context</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-row">
+      <div class="eyebrow">Context</div>
+      <nav class="nav" id="nav">
+        <button class="nav-btn active" data-view="chat">Page</button>
+        <button class="nav-btn" data-view="saved">Saved</button>
+        <button class="nav-btn" data-view="graph">Graph</button>
+      </nav>
+    </div>
+    <h1 id="page-title">Loading page…</h1>
+    <p id="page-site" class="muted"></p>
+    <div class="header-actions">
+      <button type="button" id="save-page-btn" class="toolbar-btn primary">Save page</button>
+      <button type="button" id="explore-btn" class="toolbar-btn sparkles" title="Things to explore">✨ Explore</button>
+      <span id="save-badge" class="save-badge" hidden>Saved</span>
+    </div>
+  </header>
+
+  <!-- Page view: quotes + chat -->
+  <section class="view active" id="view-chat">
+    <section class="explore-panel" id="explore-panel" hidden>
+      <h2>Explore next</h2>
+      <div id="explore-suggestions" class="suggestion-list"></div>
+    </section>
+
+    <div class="split-layout">
+      <aside class="quotes-panel">
+        <div class="panel-head">
+          <h2>Saved quotes</h2>
+          <button type="button" id="save-page-btn-side" class="text-btn">Save page</button>
+        </div>
+        <div id="page-quotes" class="page-quotes">
+          <p class="muted empty-hint">Quotes you save from this page appear here.</p>
+        </div>
+
+        <div class="quote-compose" id="quote-compose" hidden>
+          <p class="compose-label">Save selection</p>
+          <blockquote id="quote-preview" class="quote-preview"></blockquote>
+          <input type="text" id="quote-note" class="quote-note" placeholder="Optional note…" />
+          <div class="quote-actions">
+            <button type="button" id="save-quote-confirm" class="toolbar-btn primary">Save quote</button>
+            <button type="button" id="save-quote-cancel" class="text-btn">Cancel</button>
+          </div>
+        </div>
+
+        <button type="button" id="save-quote-btn" class="toolbar-btn full-width">Save selection as quote</button>
+      </aside>
+
+      <main class="chat-panel">
+        <div class="panel-head">
+          <h2>Chat</h2>
+        </div>
+        <section class="selection-bar" id="selection-bar" hidden>
+          <div class="selection-label">Selected on page</div>
+          <p id="selection-preview" class="selection-preview"></p>
+        </section>
+        <div id="messages" class="messages"></div>
+        <form id="ask-form" class="ask-form">
+          <textarea id="question" rows="3" placeholder="Ask anything — quiz me, summarize, connect ideas…"></textarea>
+          <button type="submit" id="ask-btn" class="toolbar-btn primary full-width">Send</button>
+        </form>
+      </main>
+    </div>
+  </section>
+
+  <!-- Saved pages view -->
+  <section class="view" id="view-saved">
+    <div id="saved-list" class="saved-list"></div>
+    <div id="saved-detail" class="saved-detail" hidden>
+      <button type="button" id="saved-back" class="text-btn">← All saved pages</button>
+      <h2 id="saved-detail-title"></h2>
+      <p id="saved-detail-url" class="muted"></p>
+      <section class="detail-block">
+        <h3>Summary</h3>
+        <div id="saved-summary" class="detail-content"></div>
+      </section>
+      <section class="detail-block">
+        <h3>Quotes</h3>
+        <ul id="saved-quotes" class="quote-list"></ul>
+      </section>
+      <section class="detail-block">
+        <h3>Chat history</h3>
+        <div id="saved-chat" class="messages compact"></div>
+      </section>
+      <button type="button" id="delete-page-btn" class="danger-btn">Clear memory for this page</button>
+    </div>
+  </section>
+
+  <!-- Graph view -->
+  <section class="view" id="view-graph">
+    <div class="graph-toolbar">
+      <span class="muted">Your saved pages, quotes, and concepts</span>
+      <button type="button" id="refresh-graph-btn" class="text-btn">Refresh</button>
+    </div>
+    <div id="graph-canvas" class="graph-canvas">
+      <svg id="graph-svg" viewBox="0 0 600 400"></svg>
+      <p id="graph-empty" class="muted graph-empty">Save pages and quotes to see your knowledge graph.</p>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span id="status" class="muted">Connecting to backend…</span>
+    <button type="button" id="clear-all-btn" class="text-btn danger-text">Clear all data</button>
+  </footer>
+
+  <script src="panel.js"></script>
+</body>
+</html>

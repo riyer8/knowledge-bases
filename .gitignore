@@ -29,3 +29,6 @@ DesktopApp/DesktopApp.xcodeproj/project.xcworkspace/xcuserdata/ramya.xcuserdatad
 # Launcher runtime files
 .kb_backend.pid
 .kb_backend.log
+
+# Optional per-machine extension ID
+chrome-extension/.extension-id

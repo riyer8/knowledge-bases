@@ -4,15 +4,34 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(_REPO_ROOT / ".env")
+
 
 @dataclass
 class Config:
     kb_root: Path = field(default_factory=lambda: Path(os.environ.get("KB_ROOT", "~/.kb")).expanduser())
     # Chat + classification — local Ollama LLM
     chat_model: str = field(default_factory=lambda: os.environ.get("KB_CHAT_MODEL", "qwen2.5:3b"))
-    # Embeddings — dedicated embedding model
+    # Embeddings — Ollama by default; OpenAI when KB_EMBED_PROVIDER=openai
     embed_model: str = field(default_factory=lambda: os.environ.get("KB_EMBED_MODEL", "nomic-embed-text"))
+    embed_provider: str = field(default_factory=lambda: os.environ.get("KB_EMBED_PROVIDER", "auto"))
     backend_port: int = field(default_factory=lambda: int(os.environ.get("KB_PORT", "8765")))
+    # auto: use OpenAI when OPENAI_API_KEY is set, otherwise Ollama
+    llm_provider: str = field(default_factory=lambda: os.environ.get("KB_LLM_PROVIDER", "auto"))
+    openai_api_key: str = field(default_factory=lambda: os.environ.get("OPENAI_API_KEY", ""))
+    openai_model: str = field(default_factory=lambda: os.environ.get("OPENAI_MODEL", "gpt-4o-mini"))
+    openai_embed_model: str = field(
+        default_factory=lambda: os.environ.get("OPENAI_EMBED_MODEL", "text-embedding-3-small")
+    )
+    anthropic_api_key: str = field(default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY", ""))
+    anthropic_model: str = field(default_factory=lambda: os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"))
+
+    @property
+    def pages_dir(self) -> Path:
+        return self.kb_root / "pages"
 
     @property
     def events_raw_dir(self) -> Path:
@@ -63,6 +82,7 @@ class Config:
             self.hashes_dir,
             self.buckets_dir,
             self.auth_dir,
+            self.pages_dir,
         ]
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)

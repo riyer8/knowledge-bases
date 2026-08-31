@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib import error, request
 
 from core.config import config
+from core.llm_providers import chat as provider_chat, embed as provider_embed
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 PROMPT_PATH = Path(__file__).resolve().parent / "chat_prompt.txt"
@@ -30,53 +31,40 @@ def _build_context_block(entries: list[dict]) -> str:
 
 
 def chat(prompt: str, context_entries: list[dict] | None = None) -> str:
-    """Send a chat message to the local Ollama model and return the response."""
+    """Send a chat message to the configured LLM provider and return the response."""
     entries = context_entries or []
     context = _build_context_block(entries)
     system = _load_system_prompt()
 
-    payload = {
-        "model": config.chat_model,
-        "stream": False,
-        "messages": [
-            {"role": "system", "content": system},
-            {
-                "role": "user",
-                "content": f"{prompt}\n\nContext:\n{context}",
-            },
-        ],
-    }
-
-    return _post_ollama("/api/chat", payload, response_key="message.content")
+    messages = [
+        {"role": "system", "content": system},
+        {
+            "role": "user",
+            "content": f"{prompt}\n\nContext:\n{context}",
+        },
+    ]
+    result = provider_chat(messages, stream=False)
+    return str(result)
 
 
 def embed(text: str) -> list[float]:
     """Generate an embedding vector for the given text."""
-    payload = {"model": config.embed_model, "input": text}
-    result = _post_ollama("/api/embed", payload, response_key="embeddings")
-    # Ollama returns a list of embeddings; we always send one input
-    if isinstance(result, list) and result:
-        return result[0]
-    return []
+    return provider_embed(text)
 
 
 def classify(text: str, categories: list[str]) -> str:
-    """Ask the local LLM to classify text into one of the provided categories."""
+    """Ask the configured LLM to classify text into one of the provided categories."""
     cats = ", ".join(categories)
-    payload = {
-        "model": config.chat_model,
-        "stream": False,
-        "messages": [
-            {
-                "role": "user",
-                "content": (
-                    f"Classify the following text into exactly one of these categories: {cats}.\n"
-                    f"Reply with only the category name, nothing else.\n\nText: {text}"
-                ),
-            }
-        ],
-    }
-    return _post_ollama("/api/chat", payload, response_key="message.content").strip()
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                f"Classify the following text into exactly one of these categories: {cats}.\n"
+                f"Reply with only the category name, nothing else.\n\nText: {text}"
+            ),
+        }
+    ]
+    return str(provider_chat(messages, stream=False)).strip()
 
 
 def _post_ollama(path: str, payload: dict, response_key: str) -> any:

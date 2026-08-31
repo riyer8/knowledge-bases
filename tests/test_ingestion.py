@@ -18,11 +18,12 @@ def isolated_kb(tmp_path, monkeypatch):
     reload(cfg_mod)
     import core.privacy.pipeline as pp
     import core.ingestion.pipeline as ip
+    import core.ingestion.event_writer as ew
     import core.memory.store as ms
     import core.memory.vector_store as vs
     import core.memory.bucket_classifier as bc
     import core.memory.graph as g
-    for mod in (pp, vs, bc, g, ms, ip):
+    for mod in (pp, ew, vs, bc, g, ms, ip):
         reload(mod)
     yield tmp_path
 
@@ -40,8 +41,8 @@ def test_ingest_text_writes_clean_event(tmp_path, monkeypatch):
     from core.ingestion.pipeline import ingest_text
     result = ingest_text("I had a great run this morning", source="manual_text")
 
-    assert result["should_pause"] is False
-    assert "run" not in result["text"] or True  # text may be unchanged if no PII
+    assert result["raw_event"] is False
+    assert result["source"] == "manual_text"
 
     clean_dir = tmp_path / "events" / "clean"
     files = list(clean_dir.glob("*.jsonl"))
