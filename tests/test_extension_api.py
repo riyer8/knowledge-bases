@@ -394,6 +394,23 @@ def test_quote_patch_and_delete(backend_url, monkeypatch):
     assert status == 200
 
 
+def test_quote_delete_url_encoded_id(backend_url, monkeypatch):
+    import core.library_service as lib
+    from urllib.parse import quote
+
+    monkeypatch.setattr(lib, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    status, created = _request("POST", f"{backend_url}/library/quotes", {
+        "text": "Encoded delete",
+        "page_url": "https://example.com/encoded",
+    })
+    assert status == 200
+    quote_id = created["quote"]["id"]
+
+    status, _ = _request("DELETE", f"{backend_url}/library/quotes/{quote(quote_id, safe='')}")
+    assert status == 200
+
+
 def test_wiki_ingest_and_status(backend_url):
     status, body = _request("POST", f"{backend_url}/wiki/ingest", {
         "title": "Test Article",

@@ -191,6 +191,15 @@ def save_page(
     index.insert(0, summary_entry)
     _save_saved_index(index)
 
+    quotes = _load_quotes()
+    quotes_changed = False
+    for quote in quotes:
+        if quote.get("page_url") == url and not quote.get("page_id"):
+            quote["page_id"] = page_id
+            quotes_changed = True
+    if quotes_changed:
+        _save_quotes(quotes)
+
     ingest_text(
         text=f"Saved page: {title}\nURL: {url}\n\n{record['summary']}",
         source="saved_page",
@@ -390,7 +399,15 @@ def _load_quotes() -> list[dict[str, Any]]:
     path = _quotes_path()
     if not path.exists():
         return []
-    return json.loads(path.read_text(encoding="utf-8"))
+    quotes = json.loads(path.read_text(encoding="utf-8"))
+    changed = False
+    for quote in quotes:
+        if not quote.get("id"):
+            quote["id"] = str(uuid.uuid4())
+            changed = True
+    if changed:
+        _save_quotes(quotes)
+    return quotes
 
 
 def _save_quotes(quotes: list[dict[str, Any]]) -> None:
@@ -462,8 +479,9 @@ def update_quote(
     text: str | None = None,
     note: str | None = None,
 ) -> dict[str, Any]:
+    quote_id = (quote_id or "").strip()
     quotes = _load_quotes()
-    match = next((q for q in quotes if q.get("id") == quote_id), None)
+    match = next((q for q in quotes if str(q.get("id", "")).strip() == quote_id), None)
     if not match:
         raise ValueError("quote not found")
 
@@ -480,8 +498,11 @@ def update_quote(
 
 
 def delete_quote(quote_id: str) -> bool:
+    quote_id = (quote_id or "").strip()
+    if not quote_id:
+        return False
     quotes = _load_quotes()
-    kept = [q for q in quotes if q.get("id") != quote_id]
+    kept = [q for q in quotes if str(q.get("id", "")).strip() != quote_id]
     if len(kept) == len(quotes):
         return False
     _save_quotes(kept)

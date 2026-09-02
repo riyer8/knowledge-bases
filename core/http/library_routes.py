@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+from urllib.parse import unquote
 
 from core.library_service import (
     clear_library,
@@ -21,9 +22,13 @@ from core.library_service import (
 
 
 class LibraryRoutesMixin:
+    @staticmethod
+    def _path_id(path: str, prefix: str) -> str:
+        return unquote(path.split(prefix, 1)[1].strip("/")).strip()
+
     def handle_library_patch(self, path: str, payload: dict) -> bool:
         if path.startswith("/library/pages/"):
-            page_id = path.split("/library/pages/", 1)[1].strip("/")
+            page_id = self._path_id(path, "/library/pages/")
             if not page_id:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page id required"})
                 return True
@@ -44,7 +49,7 @@ class LibraryRoutesMixin:
             return True
 
         if path.startswith("/library/quotes/"):
-            quote_id = path.split("/library/quotes/", 1)[1].strip("/")
+            quote_id = self._path_id(path, "/library/quotes/")
             if not quote_id:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "quote id required"})
                 return True
@@ -68,7 +73,7 @@ class LibraryRoutesMixin:
 
     def handle_library_delete(self, path: str) -> bool:
         if path.startswith("/library/pages/"):
-            page_id = path.split("/library/pages/", 1)[1].strip("/")
+            page_id = self._path_id(path, "/library/pages/")
             if not page_id:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page id required"})
                 return True
@@ -80,7 +85,7 @@ class LibraryRoutesMixin:
             return True
 
         if path.startswith("/library/quotes/"):
-            quote_id = path.split("/library/quotes/", 1)[1].strip("/")
+            quote_id = self._path_id(path, "/library/quotes/")
             if not quote_id:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "quote id required"})
                 return True
@@ -109,7 +114,7 @@ class LibraryRoutesMixin:
             })
             return
         if path.startswith("/library/pages/"):
-            page_id = path.split("/library/pages/", 1)[1].strip("/")
+            page_id = self._path_id(path, "/library/pages/")
             page = get_saved_page(page_id)
             if not page:
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "page not found"})

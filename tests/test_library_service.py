@@ -141,6 +141,28 @@ def test_list_quotes_by_page_url(library_env, monkeypatch):
     assert quotes[0]["text"] == "Before page saved"
 
 
+def test_save_page_links_orphan_quotes_by_url(library_env, monkeypatch):
+    monkeypatch.setattr(library_env, "_generate_summary", lambda page: "Summary")
+    monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
+    monkeypatch.setattr(library_env, "remember_concept", lambda **kwargs: {"id": "c1"})
+
+    quote = library_env.save_quote(
+        text="Saved before page",
+        page_url="https://example.com/link",
+        page_title="Link",
+    )
+    assert not quote["page_id"]
+
+    saved = library_env.save_page({
+        "url": "https://example.com/link",
+        "title": "Link",
+        "visible_text": "Content",
+    })
+    quotes = library_env.list_quotes(page_id=saved["id"])
+    assert len(quotes) == 1
+    assert quotes[0]["id"] == quote["id"]
+
+
 def test_list_quotes_by_url(library_env, monkeypatch):
     monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
     library_env.save_quote(

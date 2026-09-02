@@ -1,4 +1,5 @@
 const BACKEND = "http://127.0.0.1:8765";
+const backendReadyCache = { ok: false, checkedAt: 0, ttlMs: 5000 };
 
 const state = {
   page: null,
@@ -193,8 +194,7 @@ async function init() {
       updateSelection(changes.latestSelection.newValue || "");
     }
     if (area === "session" && changes.quoteSavedAt) {
-      loadPageQuotes();
-      syncHighlightsToPage();
+      void Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
     }
     if (area === "session" && changes.activeTabUrl) {
       const nextUrl = changes.activeTabUrl.newValue || "";
@@ -211,8 +211,7 @@ async function init() {
   });
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "QUOTE_SAVED") {
-      loadPageQuotes();
-      syncHighlightsToPage();
+      void Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
     }
     if (message?.type === "TAB_CHANGED" && message.url && message.url !== state.page?.url) {
       refreshPage();
@@ -334,7 +333,7 @@ function bindEvents() {
     schedulePageDraftSave();
     savePageDetails();
   });
-  els.pageQuotes?.addEventListener("click", handleQuoteEditAction);
+  els.pageQuotes?.addEventListener("click", handlePageQuoteAction);
   on(els.proactiveDismiss, "click", () => {
     els.proactiveBanner.hidden = true;
   });
@@ -717,21 +716,38 @@ function sendRuntimeMessage(message) {
   });
 }
 
-async function ensureBackendReady() {
-  if (await checkBackendHealth()) {
-    setStatus("Ready");
-    hideSetupHelp();
+async function ensureBackendReady({ quiet = false } = {}) {
+  const now = Date.now();
+  if (backendReadyCache.ok && now - backendReadyCache.checkedAt < backendReadyCache.ttlMs) {
+    if (!quiet) {
+      setStatus("Ready");
+      hideSetupHelp();
+    }
     return true;
   }
 
-  setStatus("Starting backend…");
+  if (await checkBackendHealth()) {
+    backendReadyCache.ok = true;
+    backendReadyCache.checkedAt = now;
+    if (!quiet) {
+      setStatus("Ready");
+      hideSetupHelp();
+    }
+    return true;
+  }
+  backendReadyCache.ok = false;
+
+  if (!quiet) setStatus("Starting backend…");
   const result = await sendRuntimeMessage({ type: "ENSURE_BACKEND" });
   if (await checkBackendHealth()) {
+    backendReadyCache.ok = true;
+    backendReadyCache.checkedAt = Date.now();
     const provider = await getBackendProvider();
-    setStatus(provider ? `Ready (${provider})` : "Ready");
+    if (!quiet) setStatus(provider ? `Ready (${provider})` : "Ready");
     hideSetupHelp();
     return true;
   }
+  backendReadyCache.ok = false;
 
   if (!result?.ok) {
     if (result?.error === "launcher_missing") {
@@ -855,8 +871,7 @@ async function syncPageLibraryState() {
     resizeTitleField();
     state.page.title = getDisplayTitle();
     state.page.metadata = collectMetadataFromForm();
-    await loadPageQuotes();
-    await syncHighlightsToPage();
+    await Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
     const provider = await getBackendProvider();
     setStatus(provider ? `Ready (${provider})` : "Ready");
   } catch (err) {
@@ -924,23 +939,47 @@ function renderPageQuotes() {
     card.dataset.quoteId = quoteId;
     card.dataset.quoteIndex = String(index);
     els.pageQuotes.appendChild(card);
-
-    card.querySelector("[data-quote-edit]")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      startQuoteEdit(card, quote);
-    });
-    card.querySelector("[data-quote-delete]")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      void deleteQuote(quote);
-    });
   });
 }
 
+function quoteApiPath(quoteId) {
+  return `${BACKEND}/library/quotes/${encodeURIComponent(String(quoteId || "").trim())}`;
+}
+
+function handlePageQuoteAction(event) {
+  const deleteBtn = event.target.closest("[data-quote-delete]");
+  if (deleteBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const card = deleteBtn.closest(".quote-card");
+    const quote = findQuoteById(
+      deleteBtn.dataset.quoteId || card?.dataset.quoteId,
+      Number(card?.dataset.quoteIndex)
+    );
+    if (quote) void deleteQuote(quote);
+    return;
+  }
+
+  const editBtn = event.target.closest("[data-quote-edit]");
+  if (editBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    const card = editBtn.closest(".quote-card");
+    const quote = findQuoteById(
+      editBtn.dataset.quoteId || card?.dataset.quoteId,
+      Number(card?.dataset.quoteIndex)
+    );
+    if (quote && card) startQuoteEdit(card, quote);
+    return;
+  }
+
+  handleQuoteEditAction(event);
+}
+
 function findQuoteById(quoteId, quoteIndex) {
-  if (quoteId) {
-    const match = state.quotes.find((q) => q.id === quoteId);
+  const normalizedId = String(quoteId || "").trim();
+  if (normalizedId) {
+    const match = state.quotes.find((q) => String(q.id || "").trim() === normalizedId);
     if (match) return match;
   }
   if (quoteIndex >= 0 && quoteIndex < state.quotes.length) {
@@ -1006,7 +1045,7 @@ async function saveQuoteEdit(card, quote) {
     return;
   }
   try {
-    const res = await fetch(`${BACKEND}/library/quotes/${quote.id}`, {
+    const res = await fetch(quoteApiPath(quote.id), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text, note }),
@@ -1024,6 +1063,7 @@ async function saveQuoteEdit(card, quote) {
 }
 
 async function deleteQuote(quote) {
+  const quoteId = String(quote?.id || "").trim();
   const confirmed = await showConfirmDialog({
     title: "Delete quote?",
     message: "Remove this quote from your library?",
@@ -1033,32 +1073,41 @@ async function deleteQuote(quote) {
   });
   if (!confirmed) return;
 
-  if (!quote.id || quote.id.startsWith("local-")) {
-    state.quotes = state.quotes.filter((q) => q.id !== quote.id);
+  const current = findQuoteById(quoteId, -1) || quote;
+  const id = String(current?.id || quoteId).trim();
+
+  if (!id || id.startsWith("local-")) {
+    state.quotes = state.quotes.filter((q) => String(q.id || "").trim() !== id);
     renderPageQuotes();
+    void syncHighlightsToPage();
     setStatus("Quote deleted");
     return;
   }
 
-  setStatus("Deleting quote…");
+  const previousQuotes = state.quotes.slice();
+  state.quotes = state.quotes.filter((q) => String(q.id || "").trim() !== id);
+  renderPageQuotes();
+  void syncHighlightsToPage();
+
   try {
-    const ready = await ensureBackendReady();
+    const ready = await ensureBackendReady({ quiet: true });
     if (!ready) throw new Error("Backend not connected");
 
-    const res = await fetch(`${BACKEND}/library/quotes/${encodeURIComponent(quote.id)}`, {
-      method: "DELETE",
-    });
+    const res = await fetch(quoteApiPath(id), { method: "DELETE" });
+    if (res.status === 404) {
+      setStatus("Quote deleted");
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || `Could not delete quote (${res.status})`);
     }
-    state.quotes = state.quotes.filter((q) => q.id !== quote.id);
-    renderPageQuotes();
-    await syncHighlightsToPage();
     setStatus("Quote deleted");
   } catch (err) {
+    state.quotes = previousQuotes;
+    renderPageQuotes();
     setStatus(err.message, true);
-    await loadPageQuotes();
+    void loadPageQuotes();
   }
 }
 
@@ -1446,8 +1495,11 @@ async function clearSavedLibrary() {
     state.savedPageId = null;
     state.savedPages = [];
     state.selectedSavedId = null;
+    state.quotes = [];
     markPageSaved(false);
+    renderPageQuotes();
     setStatus("Saved pages cleared");
+    if (state.view === "chat") void loadPageQuotes();
     if (state.view === "saved") loadSavedPages();
     if (state.view === "graph") renderGraph();
     if (state.view === "settings") loadSettingsView();
