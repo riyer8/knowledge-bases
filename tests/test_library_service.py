@@ -109,7 +109,6 @@ def test_graph_visual(library_env, monkeypatch):
     monkeypatch.setattr(library_env, "_generate_summary", lambda page: "Summary")
     monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
     monkeypatch.setattr(library_env, "related_for_page", lambda **kwargs: [])
-    monkeypatch.setattr(library_env, "list_concepts", lambda limit=50: [])
 
     library_env.save_page({
         "url": "https://example.com/e",

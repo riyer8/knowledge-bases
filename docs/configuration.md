@@ -90,6 +90,24 @@ Library data (`~/.kb/library/`) is managed by `core/library_service.py`.
 
 ---
 
+## Runtime settings API
+
+Clients (Chrome extension, macOS app) can read and update allowed `.env` keys without
+editing the file manually:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/settings` | Current provider, model names, masked key hints, setup notes |
+| `POST` | `/settings` | Update provider, API keys, models (writes `.env`, reloads config) |
+
+Allowed `POST` body fields: `llm_provider`, `openai_api_key`, `anthropic_api_key`,
+`openai_model`, `chat_model`, `embed_provider`, `proactive_interval_minutes`.
+
+Full request/response shapes: [api.md](api.md#settings-all-clients). Environment variable reference
+is in the tables above.
+
+---
+
 ## Recommended setups
 
 ### OpenAI (simplest)

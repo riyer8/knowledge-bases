@@ -22,6 +22,7 @@
         <button class="nav-btn" data-view="saved" title="Saved pages with summaries and history">Saved</button>
         <button class="nav-btn" data-view="life" title="Review how your activity is categorized">Life</button>
         <button class="nav-btn" data-view="graph" title="Connections between pages and ideas">Graph</button>
+        <button class="nav-btn" data-view="wiki" title="LLM-compiled wiki from your reading">Wiki</button>
       </nav>
       <button
         type="button"
@@ -66,6 +67,7 @@
     </details>
     <div class="header-actions page-context-only">
       <button type="button" id="save-page-btn" class="toolbar-btn primary">Save page</button>
+      <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn" title="Add current page to wiki raw sources">+ Wiki</button>
       <button type="button" id="explore-btn" class="toolbar-btn sparkles" title="Things to explore">✨ Explore</button>
       <span id="save-badge" class="save-badge" hidden>Saved</span>
     </div>
@@ -148,6 +150,7 @@
         <div id="saved-chat" class="messages compact"></div>
       </section>
       <button type="button" id="delete-page-btn" class="danger-btn">Clear memory for this page</button>
+      <button type="button" id="add-to-wiki-btn" class="toolbar-btn">Add to wiki</button>
     </div>
   </section>
 
@@ -175,6 +178,21 @@
       <svg id="graph-svg" viewBox="0 0 600 400"></svg>
       <p id="graph-empty" class="muted graph-empty">Save pages and quotes to see your knowledge graph.</p>
     </div>
+  </section>
+
+  </section>
+
+  <!-- Wiki view -->
+  <section class="view" id="view-wiki">
+    <p class="view-intro muted">Your LLM-compiled knowledge wiki — raw sources compiled into linked articles. Open the full browser for reading and health checks.</p>
+    <div class="wiki-toolbar">
+      <a id="open-wiki-app" class="toolbar-btn" href="http://127.0.0.1:8765/app/" target="_blank" rel="noopener">Open full wiki</a>
+      <button type="button" id="wiki-compile-btn" class="toolbar-btn primary">Compile</button>
+      <button type="button" id="wiki-refresh-btn" class="text-btn">Refresh</button>
+    </div>
+    <div id="wiki-status" class="wiki-status muted"></div>
+    <div id="wiki-articles" class="wiki-articles"></div>
+    <p id="wiki-empty" class="muted empty-hint">Save pages, then add them to the wiki. Compile turns raw sources into articles.</p>
   </section>
 
   <section class="view" id="view-settings">

@@ -125,6 +125,20 @@ pytest tests/test_privacy_eval_cases.py -v
 
 See [testing.md](testing.md) for details.
 
+## Demo data
+
+For presentations or walkthroughs, seed the knowledge base with Symsys 161 demo events
+(capture-to-retrieval loop, course themes, presentation tips):
+
+```bash
+python3 demo/seed_demo.py
+```
+
+This writes five sample events into `~/.kb/` via the normal ingestion pipeline. After
+seeding, start the app and ask chat about **Symsys161** or your class presentation — answers
+should be fast and on-topic. Re-run anytime to add more demo context (events are appended,
+not deduplicated).
+
 ## macOS App
 
 **Context** is a real macOS application (`Context.app`) — the same kind of thing you see in
@@ -146,7 +160,11 @@ open -a Context
 On launch, the app auto-starts the Python backend. Your knowledge data stays in `~/.kb/`.
 
 The app includes **Chat**, **Library** (saved pages and quotes from the extension),
-**Graph**, and **Manual Inputs** panels.
+**Graph**, **Life** (bucket review), **Settings**, and **Manual Inputs** panels.
+
+Configure API keys in the macOS app **Settings** panel or the Chrome extension **Settings**
+tab (gear icon). Both use `GET` / `POST /settings` to read and update `.env` — see
+[configuration.md](configuration.md).
 
 ### Build without installing
 

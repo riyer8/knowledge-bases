@@ -19,6 +19,8 @@ what you're looking at right now.
 
 Both share the Python backend (`python3 main.py`, port 8765) and storage (`~/.kb/`).
 
+**Wiki browser:** [http://127.0.0.1:8765/app/](http://127.0.0.1:8765/app/) — browse compiled articles, compile raw sources, run health checks. Open from the extension **Wiki** tab or desktop Settings.
+
 ## For AI agents
 
 Read [docs/constitution.md](docs/constitution.md) and follow [init.md](init.md) at session start.

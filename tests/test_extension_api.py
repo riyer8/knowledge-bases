@@ -392,3 +392,22 @@ def test_quote_patch_and_delete(backend_url, monkeypatch):
 
     status, _ = _request("DELETE", f"{backend_url}/library/quotes/{quote_id}")
     assert status == 200
+
+
+def test_wiki_ingest_and_status(backend_url):
+    status, body = _request("POST", f"{backend_url}/wiki/ingest", {
+        "title": "Test Article",
+        "content": "Some wiki content about transformers.",
+        "url": "https://example.com/wiki",
+    })
+    assert status == 200
+    assert body["ok"] is True
+    assert body["raw"]["title"] == "Test Article"
+
+    status, body = _request("GET", f"{backend_url}/wiki/status")
+    assert status == 200
+    assert body["raw_count"] >= 1
+
+    status, body = _request("GET", f"{backend_url}/wiki/search?q=transformers")
+    assert status == 200
+    assert len(body["results"]) >= 1

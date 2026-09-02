@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Context Wiki</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <h1>Context Wiki</h1>
+        <p class="muted">LLM-compiled knowledge from your reading</p>
+      </header>
+      <div class="sidebar-actions">
+        <button type="button" id="compile-btn" class="primary-btn">Compile wiki</button>
+        <button type="button" id="health-btn" class="ghost-btn">Health check</button>
+      </div>
+      <div class="status-card" id="status-card">
+        <div><span class="label">Raw sources</span> <strong id="raw-count">—</strong></div>
+        <div><span class="label">Articles</span> <strong id="article-count">—</strong></div>
+        <div><span class="label">Pending compile</span> <strong id="pending-count">—</strong></div>
+      </div>
+      <div class="search-wrap">
+        <input type="search" id="search-input" placeholder="Search wiki…" autocomplete="off" />
+      </div>
+      <nav class="nav-section">
+        <button type="button" class="nav-item active" data-pane="index">Index</button>
+        <button type="button" class="nav-item" data-pane="articles">Articles</button>
+        <button type="button" class="nav-item" data-pane="raw">Raw sources</button>
+      </nav>
+      <ul class="item-list" id="item-list"></ul>
+    </aside>
+    <main class="main">
+      <header class="main-header">
+        <h2 id="content-title">Index</h2>
+        <p id="content-meta" class="muted"></p>
+      </header>
+      <article class="markdown-body" id="content-body">
+        <p class="muted">Loading…</p>
+      </article>
+      <section class="health-panel" id="health-panel" hidden>
+        <h3>Wiki health</h3>
+        <div id="health-issues"></div>
+        <div id="health-suggestions"></div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

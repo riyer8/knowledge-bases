@@ -77,6 +77,22 @@ class Config:
     def hash_salt_path(self) -> Path:
         return self.kb_root / "hashes" / "salt"
 
+    @property
+    def wiki_dir(self) -> Path:
+        return self.kb_root / "wiki"
+
+    @property
+    def wiki_raw_dir(self) -> Path:
+        return self.kb_root / "wiki" / "raw"
+
+    @property
+    def wiki_articles_dir(self) -> Path:
+        return self.kb_root / "wiki" / "articles"
+
+    @property
+    def wiki_outputs_dir(self) -> Path:
+        return self.kb_root / "wiki" / "outputs"
+
     def ensure_dirs(self) -> None:
         dirs = [
             self.events_raw_dir,
@@ -87,6 +103,9 @@ class Config:
             self.buckets_dir,
             self.auth_dir,
             self.pages_dir,
+            self.wiki_raw_dir,
+            self.wiki_articles_dir,
+            self.wiki_outputs_dir,
         ]
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)

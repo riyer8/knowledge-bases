@@ -14,6 +14,12 @@ tree is committed to git.
 │   ├── pages/{id}.json         # Page detail (title, url, summary)
 │   ├── chats/{id}.jsonl        # Per-page chat history
 │   └── quotes.json             # Highlighted quotes
+├── wiki/                       # LLM-maintained markdown wiki
+│   ├── raw/                    # Source documents (from saved pages, clips)
+│   ├── articles/               # Compiled concept articles with [[wikilinks]]
+│   ├── outputs/                # Generated slides, charts (future)
+│   ├── index.md                # Auto-maintained index
+│   └── manifest.json           # Compile tracking
 ├── pages/                      # Ephemeral page context from extension capture
 ├── events/
 │   ├── raw/                    # Pre-privacy events (short TTL)
@@ -39,6 +45,7 @@ tree is committed to git.
 | `events/clean/` | Append-only | `core/privacy/` |
 | `events/paused.log` | Append-only, no PII | `core/privacy/` |
 | `library/` | Mutable | `core/library_service.py` |
+| `wiki/` | Mutable | `core/wiki_service.py` |
 | `pages/` | Mutable | `core/page_context_service.py` |
 | `index/` | Mutable | `core/memory/` |
 | `graph/` | Mutable | `core/memory/` |

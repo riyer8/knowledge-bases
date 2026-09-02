@@ -48,21 +48,23 @@ search, the concept graph, and all LLM calls. Never call external LLM APIs outsi
 
 The browser is the primary reading surface. The extension:
 
-- Extracts structured page context (title, URL, headings, selection, visible text)
+- Extracts structured page context (title, URL, headings, selection, visible text, metadata)
 - Provides unified chat about the current page (`POST /ask`)
-- Saves pages and quotes explicitly (`/library/*`)
-- Visualizes the concept graph in the side panel
+- Saves pages and quotes explicitly (`/library/*`) with editable title, metadata, and quote edit/delete
+- **Page | Saved | Life | Graph** tabs plus **Settings** (gear) for API keys and data controls
+- On-page highlight toolbar for fast quote capture
+- Visualizes a page-centric knowledge graph (saved pages linked by shared topics)
 
 The extension does **not** contain the knowledge brain — it sends context to the backend.
 
 ### macOS Desktop App (`DesktopApp/`)
 
-Swift/SwiftUI app (**Context.app**) with menu bar, desktop pet, chat, **library** (saved pages
-and quotes from the extension), graph view, manual inputs, screenshots, and proactive insights.
+Swift/SwiftUI app (**Context.app**) with menu bar, desktop pet, chat, **library**, **life** panel,
+graph view, manual inputs, screenshots, proactive insights, and settings.
 Connects to the same backend at `http://127.0.0.1:8765`.
 
-**Remaining gap:** desktop chat still uses legacy `POST /chat`; extension uses streaming
-`POST /ask`. Library panel is wired to `/library/*`.
+**Intentional split:** desktop chat uses memory-wide `POST /chat`; extension uses streaming
+`POST /ask` with page context. Both are supported.
 
 Install: `bash scripts/install_app.sh`
 

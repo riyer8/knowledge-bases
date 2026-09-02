@@ -4,29 +4,32 @@
 knowledge-bases/
 ├── core/                          # Python backend
 │   ├── config.py                  # Central config (KB_ROOT, ports, LLM)
-│   ├── frontend_backend.py        # HTTP router — all clients
+│   ├── env_settings.py            # GET/POST /settings — .env read/write
+│   ├── frontend_backend.py        # HTTP entry — wires route mixins
+│   ├── http/                      # Route modules (library, buckets, relationships)
 │   ├── llm_providers.py           # OpenAI / Anthropic / Ollama
-│   ├── library_service.py         # Saved pages, quotes, explore
+│   ├── library_service.py         # Saved pages, quotes, explore, graph
+│   ├── wiki_service.py            # Raw ingest, LLM compile, wiki health
 │   ├── page_context_service.py    # Page ingest, search, connections
 │   ├── ingestion/                 # Screenshot OCR, text ingest, events
 │   ├── privacy/                   # PII detection, hashing, sensitive sites
 │   ├── memory/                    # Embeddings, graph, concept graph, buckets
 │   ├── retrieval/                 # RAG chat, page chat, context assembly
-│   ├── integrations/              # GCal, Gmail, OAuth
-│   └── proactive/                 # Pattern detection, insights
+│   ├── integrations/              # GCal, Gmail, iMessage, OAuth
+│   └── proactive/                 # Pattern detection, insights, life balance
 ├── chrome-extension/
 │   ├── manifest.json
-│   ├── background.js              # Launcher + backend health
+│   ├── background.js              # Launcher + page context + PDF extract
 │   ├── lib/launcher.js            # HTTP auto-start client (:8798)
-│   ├── content/extract.js         # Page extraction
-│   ├── sidepanel/                 # Quotes | Chat, library, graph
+│   ├── content/                   # extract.js, highlights.js (on-page quotes)
+│   ├── sidepanel/                 # Page | Saved | Life | Graph + Settings
 │   └── install-native-host.sh     # Legacy optional path
 ├── DesktopApp/
 │   └── DesktopApp/
 │       ├── App/                   # App delegate, menu bar, hotkeys
 │       ├── Windows/               # MainWindow, ManualInputsWindow
-│       ├── Views/                 # Chat, Library, Graph, Settings, Pet
-│       ├── Services/              # BackendService, LibraryStore
+│       ├── Views/                 # Chat, Library, Graph, Life, Settings, Pet
+│       ├── Services/              # BackendService, LibraryStore, LifeStore, BackendSettingsStore
 │       └── Models/                # DesktopPetSettings
 ├── docs/                          # All documentation (start at docs/README.md)
 │   ├── specs/                     # Event schema, privacy, buckets, anonymization
@@ -38,10 +41,11 @@ knowledge-bases/
 │   ├── install_app.sh             # Build + install Context.app
 │   └── generate_app_icon.py
 ├── tests/                         # pytest + privacy eval fixtures
+├── web/                           # Local wiki browser (served at /app/)
 ├── demo/seed_demo.py              # Presentation seed data
 ├── main.py                        # Backend entry point
 ├── start.sh / stop.sh             # Backend lifecycle
-├── init.md                      # Session protocol (repo root)
+├── init.md                        # Session protocol (repo root)
 ```
 
 Runtime data: `~/.kb/` (see [storage.md](storage.md)). Not in the repo.
@@ -54,10 +58,11 @@ Runtime data: `~/.kb/` (see [storage.md](storage.md)). Not in the repo.
 | `G` | Open graph |
 | `W` | Close main window |
 | `S` | Screenshot capture |
+| `I` | Flag screenshot as important |
 
 ## Documentation
 
-Start at [docs/README.md](docs/README.md). Key references:
+Start at [docs/README.md](README.md). Key references:
 
 - [Configuration](configuration.md) — all env vars
 - [Storage](storage.md) — `~/.kb/` layout

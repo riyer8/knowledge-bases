@@ -76,6 +76,23 @@ List saved pages (newest first).
 
 Saved page detail including chat history and quotes.
 
+### `PATCH /library/pages/{id}`
+
+Update a saved page's title and/or metadata.
+
+```json
+{
+  "title": "New title",
+  "metadata": {
+    "author": "...",
+    "date": "...",
+    "custom": [{"key": "Journal", "value": "..."}]
+  }
+}
+```
+
+At least one of `title` or `metadata` is required.
+
 ### `DELETE /library/pages/{id}`
 
 Delete a saved page and its associated memory.
@@ -113,6 +130,18 @@ Save an individual quote.
 
 List quotes, optionally filtered by page.
 
+### `PATCH /library/quotes/{id}`
+
+Update quote text and/or note. At least one field required.
+
+```json
+{ "text": "updated passage", "note": "optional note" }
+```
+
+### `DELETE /library/quotes/{id}`
+
+Delete a single quote.
+
 ### `POST /library/explore`
 
 AI-suggested things to explore next for a page.
@@ -125,14 +154,80 @@ Returns `{ "suggestions": [...] }`.
 
 ### `GET /library/graph`
 
-Graph nodes and edges for the saved library visualization.
+Page-centric graph for the extension: **saved pages only**, with edges when pages share
+topics from highlighted quotes (individual quotes are not separate nodes).
 
 ### `POST /library/clear`
 
 Clears the saved library only (pages, quotes, per-page chats). Returns
 `{ "ok": true, "scope": "library" }`.
 
-## Desktop App — Legacy Endpoints
+## Settings (all clients)
+
+### `GET /settings`
+
+Runtime settings: LLM provider, models, env file path, masked API key hints, setup notes.
+
+### `POST /settings`
+
+Update repo `.env` (extension Settings panel or API). Supported fields:
+
+```json
+{
+  "llm_provider": "auto | openai | ollama | anthropic",
+  "openai_api_key": "sk-...",
+  "anthropic_api_key": "sk-ant-...",
+  "openai_model": "gpt-4o-mini",
+  "chat_model": "qwen2.5:3b",
+  "embed_provider": "auto | ollama | openai",
+  "proactive_interval_minutes": 20
+}
+```
+
+Omitted API key fields leave existing keys unchanged.
+
+## Wiki (all clients)
+
+LLM-maintained markdown wiki at `~/.kb/wiki/`. Raw sources in `wiki/raw/` are compiled into
+linked articles in `wiki/articles/`. Browse at `http://127.0.0.1:8765/app/`.
+
+### `GET /wiki/status`
+
+Counts of raw sources, articles, and pending compile jobs.
+
+### `GET /wiki/index`
+
+Returns `{ "index": "..." }` — the auto-maintained `index.md` contents.
+
+### `GET /wiki/raw` · `GET /wiki/raw/{id}`
+
+List or fetch raw source documents.
+
+### `GET /wiki/articles` · `GET /wiki/articles/{slug}`
+
+List or fetch compiled wiki articles.
+
+### `GET /wiki/search?q=...`
+
+Full-text search across raw sources and articles.
+
+### `POST /wiki/ingest`
+
+Add a source. Either pass `page_id` (saved library page) or `title` + `content`:
+
+```json
+{ "page_id": "abc123" }
+```
+
+### `POST /wiki/compile`
+
+Incrementally compile unprocessed raw sources into articles (LLM). Body: `{ "max_sources": 3 }`.
+
+### `POST /wiki/health-check`
+
+LLM review of wiki consistency — returns issues, suggestions, and new article ideas.
+
+## Desktop App — Chat & inputs
 
 ### `POST /chat`
 
@@ -143,18 +238,6 @@ General knowledge-store chat (desktop app). Supports conversation history and ca
   "prompt": "user prompt string",
   "history": [{"role": "user", "content": "..."}],
   "include_calendar": true
-}
-```
-
-### `GET /settings`
-
-Runtime settings for clients (proactive cadence, model info).
-
-```json
-{
-  "proactive_interval_minutes": 20,
-  "chat_model": "qwen2.5:3b",
-  "llm_provider": "ollama"
 }
 ```
 

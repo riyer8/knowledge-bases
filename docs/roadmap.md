@@ -84,6 +84,24 @@ Spec: [specs/buckets.md](specs/buckets.md)
 
 ---
 
+## Phase 6 — LLM Wiki (Karpathy-style knowledge base)
+
+Inspired by [Karpathy's knowledge base workflow](https://x.com/karpathy/status/2039805659525644595).
+
+- [x] Raw source ingest (`~/.kb/wiki/raw/`)
+- [x] LLM incremental compile into linked articles (`~/.kb/wiki/articles/`)
+- [x] Auto-maintained `index.md` + manifest
+- [x] Wiki health check (gaps, inconsistencies, article ideas)
+- [x] Full-text search (`GET /wiki/search`)
+- [x] Local web UI (`http://127.0.0.1:8765/app/`)
+- [x] Chrome extension Wiki tab + add-to-wiki from saved pages
+- [x] Desktop link to full wiki browser
+- [ ] Obsidian vault sync (open `~/.kb/wiki/` as vault — manual for now)
+- [ ] Marp slide output generation
+- [ ] Synthetic data + finetuning experiments
+
+---
+
 ## Ongoing
 
 - [x] Keep [status.md](status.md) current after major sessions

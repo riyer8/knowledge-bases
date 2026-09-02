@@ -34,10 +34,15 @@ unified at `~/.kb/`. Documentation lives entirely in `docs/`.
 - Desktop chat with history + calendar context
 - Configurable proactive cadence (Settings + env)
 - Chrome extension proactive insight banner
-- Chrome extension Life tab (bucket review + override)
+- Chrome extension Settings tab (API keys, data controls, in-panel confirm dialogs)
+- Page metadata (collapsible Details), editable quotes, page-centric graph
 - Retrieval latency benchmark gate (`tests/test_retrieval_latency.py`)
 - Screen capture importance flagging (⌘⇧I)
-- 150+ unit and integration tests
+- Split `frontend_backend.py` into `core/http/` route modules
+- Desktop Settings parity for API keys (`BackendSettingsStore`)
+- **Wiki system** — raw ingest, LLM compile, health check, web UI at `/app/`
+- Chrome extension **Wiki** tab (+ Wiki button on Page view)
+- 169 unit and integration tests (run `pytest tests/ -q`)
 
 ## Next priorities
 

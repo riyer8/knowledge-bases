@@ -15,7 +15,12 @@ memory from the desktop. Everything stays on your machine under `~/.kb/`.
 | Explicit page save and quote capture | Extension → `/library/*` |
 | Saved library (pages, quotes, per-page chat) | Extension + macOS app |
 | Sparkles explore suggestions | Extension |
-| Knowledge graph (pages, quotes, concepts) | Extension + macOS app |
+| Knowledge graph (saved pages, linked by shared topics) | Extension + macOS app |
+| Knowledge wiki (raw → LLM-compiled articles) | Extension Wiki tab + `http://127.0.0.1:8765/app/` + desktop |
+| Life buckets (review auto-classifications) | Extension Life tab + macOS Life panel |
+| Proactive insights | Extension banner + macOS pet popup |
+| iMessage ingest (read-only, macOS) | Backend `/integrations/imessage/*` |
+| Settings (API keys, data controls) | Extension Settings (gear) + macOS Settings |
 | Screen capture + privacy pipeline | macOS app + `core/ingestion/` |
 | Manual inputs (files, URLs, notes) | macOS app |
 | Semantic search + connections | Backend API |
@@ -65,9 +70,9 @@ OpenAI; otherwise Ollama. All LLM calls go through `core/llm_providers.py` / `co
 | `~/.kb/events/` | Raw and clean event logs |
 | `~/.kb/hashes/` | Name hash map and salt |
 
-Reset options (symmetric in extension footer and desktop Settings):
+Reset options (extension **Settings** gear → Data, and desktop Settings):
 
-- **Clear library** — saved pages, quotes, per-page chats (`POST /library/clear`)
+- **Clear saved pages** — saved pages, quotes, per-page chats (`POST /library/clear`)
 - **Delete all data** — full `~/.kb/` wipe (`POST /delete-all`)
 
 ## API surface
@@ -81,6 +86,11 @@ Full reference: [api.md](api.md). Core library endpoints:
 | `GET` | `/library/pages` | List saved pages |
 | `GET` | `/library/pages/{id}` | Page detail + chat + quotes |
 | `POST` | `/library/quotes` | Save a highlighted quote |
-| `GET` | `/library/graph` | Graph nodes + edges |
+| `GET` | `/library/graph` | Page-centric graph (saved pages linked by shared topics) |
+| `PATCH` | `/library/pages/{id}` | Update page title and/or metadata |
+| `PATCH` | `/library/quotes/{id}` | Edit quote text or note |
+| `DELETE` | `/library/quotes/{id}` | Delete a quote |
+| `GET` | `/settings` | Runtime settings (provider, models, env path) |
+| `POST` | `/settings` | Update `.env` (API keys, provider, models) |
 | `POST` | `/library/clear` | Clear saved library only |
 | `POST` | `/delete-all` | Wipe all runtime data |

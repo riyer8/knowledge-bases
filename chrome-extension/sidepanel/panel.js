@@ -90,6 +90,13 @@ const els = {
   settingsEnvPath: document.getElementById("settings-env-path"),
   settingsSetupNotes: document.getElementById("settings-setup-notes"),
   refreshLifeBtn: document.getElementById("refresh-life-btn"),
+  wikiStatus: document.getElementById("wiki-status"),
+  wikiArticles: document.getElementById("wiki-articles"),
+  wikiEmpty: document.getElementById("wiki-empty"),
+  wikiCompileBtn: document.getElementById("wiki-compile-btn"),
+  wikiRefreshBtn: document.getElementById("wiki-refresh-btn"),
+  addToWikiBtn: document.getElementById("add-to-wiki-btn"),
+  addPageToWikiBtn: document.getElementById("add-page-to-wiki-btn"),
   confirmOverlay: document.getElementById("confirm-overlay"),
   confirmTitle: document.getElementById("confirm-title"),
   confirmMessage: document.getElementById("confirm-message"),
@@ -97,7 +104,67 @@ const els = {
   confirmCancel: document.getElementById("confirm-cancel"),
 };
 
-let confirmResolver = null;
+let activeConfirmFinish = null;
+
+function showConfirmDialog({
+  title,
+  message,
+  confirmText = "Confirm",
+  cancelText = "Cancel",
+  danger = false,
+}) {
+  return new Promise((resolve) => {
+    if (activeConfirmFinish) {
+      activeConfirmFinish(false);
+    }
+
+    const finish = (value) => {
+      if (!activeConfirmFinish) return;
+      activeConfirmFinish = null;
+      if (els.confirmOverlay) els.confirmOverlay.hidden = true;
+      resolve(Boolean(value));
+    };
+    activeConfirmFinish = finish;
+
+    if (els.confirmTitle) els.confirmTitle.textContent = title;
+    if (els.confirmMessage) {
+      const lines = String(message || "")
+        .split(/\n\s*\n/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+      els.confirmMessage.innerHTML = lines
+        .map((part) => `<p>${escapeHtml(part)}</p>`)
+        .join("");
+    }
+    if (els.confirmOk) {
+      els.confirmOk.textContent = confirmText;
+      els.confirmOk.classList.toggle("danger-btn", danger);
+      els.confirmOk.classList.toggle("primary", !danger);
+    }
+    if (els.confirmCancel) els.confirmCancel.textContent = cancelText;
+
+    const onConfirm = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      finish(true);
+    };
+    const onCancel = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      finish(false);
+    };
+    const onBackdrop = (event) => {
+      if (event.target === els.confirmOverlay) finish(false);
+    };
+
+    els.confirmOk?.addEventListener("click", onConfirm, { once: true });
+    els.confirmCancel?.addEventListener("click", onCancel, { once: true });
+    els.confirmOverlay?.addEventListener("click", onBackdrop, { once: true });
+
+    if (els.confirmOverlay) els.confirmOverlay.hidden = false;
+    els.confirmCancel?.focus();
+  });
+}
 
 function on(el, eventName, handler) {
   if (!el) return;
@@ -190,49 +257,6 @@ async function retryBackendConnection() {
   }
 }
 
-function closeConfirmDialog(confirmed) {
-  if (!els.confirmOverlay) return;
-  els.confirmOverlay.hidden = true;
-  if (confirmResolver) {
-    confirmResolver(Boolean(confirmed));
-    confirmResolver = null;
-  }
-}
-
-function showConfirmDialog({
-  title,
-  message,
-  confirmText = "Confirm",
-  cancelText = "Cancel",
-  danger = false,
-}) {
-  return new Promise((resolve) => {
-    if (confirmResolver) {
-      confirmResolver(false);
-    }
-    confirmResolver = resolve;
-
-    if (els.confirmTitle) els.confirmTitle.textContent = title;
-    if (els.confirmMessage) {
-      const lines = String(message || "")
-        .split(/\n\s*\n/)
-        .map((part) => part.trim())
-        .filter(Boolean);
-      els.confirmMessage.innerHTML = lines
-        .map((part) => `<p>${escapeHtml(part)}</p>`)
-        .join("");
-    }
-    if (els.confirmOk) {
-      els.confirmOk.textContent = confirmText;
-      els.confirmOk.classList.toggle("danger-btn", danger);
-      els.confirmOk.classList.toggle("primary", !danger);
-    }
-    if (els.confirmCancel) els.confirmCancel.textContent = cancelText;
-    if (els.confirmOverlay) els.confirmOverlay.hidden = false;
-    els.confirmCancel?.focus();
-  });
-}
-
 function bindEvents() {
   on(els.form, "submit", async (event) => {
     event.preventDefault();
@@ -262,26 +286,19 @@ function bindEvents() {
   on(els.deletePageBtn, "click", deleteCurrentSavedPage);
   on(els.refreshGraphBtn, "click", renderGraph);
   on(els.refreshLifeBtn, "click", loadLifeView);
+  on(els.wikiCompileBtn, "click", compileWiki);
+  on(els.wikiRefreshBtn, "click", loadWikiView);
+  on(els.addToWikiBtn, "click", addSelectedPageToWiki);
+  on(els.addPageToWikiBtn, "click", addCurrentPageToWiki);
   on(els.clearLibraryBtn, "click", clearSavedLibrary);
   on(els.clearAllBtn, "click", clearAllData);
   on(els.openSettingsBtn, "click", () => switchView("settings"));
   on(els.settingsSaveBtn, "click", saveSettingsFromForm);
   on(els.settingsRetryBtn, "click", retryBackendConnection);
-  on(els.confirmCancel, "click", (event) => {
-    event.stopPropagation();
-    closeConfirmDialog(false);
-  });
-  on(els.confirmOk, "click", (event) => {
-    event.stopPropagation();
-    closeConfirmDialog(true);
-  });
-  on(els.confirmOverlay, "click", (event) => {
-    if (event.target === els.confirmOverlay) closeConfirmDialog(false);
-  });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && confirmResolver) {
+    if (event.key === "Escape" && activeConfirmFinish) {
       event.preventDefault();
-      closeConfirmDialog(false);
+      activeConfirmFinish(false);
     }
   });
   on(els.retryBackendBtn, "click", retryBackendConnection);
@@ -313,7 +330,7 @@ function bindEvents() {
     schedulePageDraftSave();
     savePageDetails();
   });
-  els.pageQuotes?.addEventListener("click", handleQuoteCardAction);
+  els.pageQuotes?.addEventListener("click", handleQuoteEditAction);
   on(els.proactiveDismiss, "click", () => {
     els.proactiveBanner.hidden = true;
   });
@@ -370,6 +387,7 @@ function switchView(view) {
   if (view === "saved") loadSavedPages();
   if (view === "graph") renderGraph();
   if (view === "life") loadLifeView();
+  if (view === "wiki") loadWikiView();
   if (view === "settings") loadSettingsView();
   if (view === "chat") {
     loadPageQuotes();
@@ -900,45 +918,50 @@ function renderPageQuotes() {
       </div>
     `;
     card.dataset.quoteId = quoteId;
+    card.dataset.quoteIndex = String(index);
     els.pageQuotes.appendChild(card);
+
+    card.querySelector("[data-quote-edit]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      startQuoteEdit(card, quote);
+    });
+    card.querySelector("[data-quote-delete]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void deleteQuote(quote);
+    });
   });
 }
 
-function findQuoteById(quoteId) {
-  if (!quoteId) return null;
-  return state.quotes.find((q) => q.id === quoteId) || null;
+function findQuoteById(quoteId, quoteIndex) {
+  if (quoteId) {
+    const match = state.quotes.find((q) => q.id === quoteId);
+    if (match) return match;
+  }
+  if (quoteIndex >= 0 && quoteIndex < state.quotes.length) {
+    return state.quotes[quoteIndex];
+  }
+  return null;
 }
 
-function handleQuoteCardAction(event) {
-  const editBtn = event.target.closest("[data-quote-edit]");
-  const deleteBtn = event.target.closest("[data-quote-delete]");
+function handleQuoteEditAction(event) {
   const saveBtn = event.target.closest("[data-quote-save]");
   const cancelBtn = event.target.closest("[data-quote-cancel-edit]");
+  if (!saveBtn && !cancelBtn) return;
+
   const card = event.target.closest(".quote-card");
   if (!card) return;
 
   event.preventDefault();
   event.stopPropagation();
 
-  const quoteId =
-    editBtn?.dataset.quoteId ||
-    deleteBtn?.dataset.quoteId ||
-    card.dataset.quoteId ||
-    "";
-  const quote = findQuoteById(quoteId);
+  const quote = findQuoteById(card.dataset.quoteId, Number(card.dataset.quoteIndex));
   if (!quote) {
     setStatus("Could not find that quote — try refreshing", true);
     return;
   }
 
-  if (editBtn) {
-    startQuoteEdit(card, quote);
-    return;
-  }
-  if (deleteBtn) {
-    void deleteQuote(quote);
-    return;
-  }
   if (saveBtn) {
     void saveQuoteEdit(card, quote);
     return;
@@ -999,27 +1022,39 @@ async function saveQuoteEdit(card, quote) {
 async function deleteQuote(quote) {
   const confirmed = await showConfirmDialog({
     title: "Delete quote?",
-    message: "This quote will be removed from your saved library for this page.",
-    confirmText: "Delete quote",
-    cancelText: "Keep it",
+    message: "Remove this quote from your library?",
+    confirmText: "Delete",
+    cancelText: "Keep",
     danger: true,
   });
   if (!confirmed) return;
+
   if (!quote.id || quote.id.startsWith("local-")) {
-    state.quotes = state.quotes.filter((q) => q !== quote);
+    state.quotes = state.quotes.filter((q) => q.id !== quote.id);
     renderPageQuotes();
+    setStatus("Quote deleted");
     return;
   }
+
+  setStatus("Deleting quote…");
   try {
-    const res = await fetch(`${BACKEND}/library/quotes/${encodeURIComponent(quote.id)}`, { method: "DELETE" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "Could not delete quote");
+    const ready = await ensureBackendReady();
+    if (!ready) throw new Error("Backend not connected");
+
+    const res = await fetch(`${BACKEND}/library/quotes/${encodeURIComponent(quote.id)}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Could not delete quote (${res.status})`);
+    }
     state.quotes = state.quotes.filter((q) => q.id !== quote.id);
     renderPageQuotes();
     await syncHighlightsToPage();
     setStatus("Quote deleted");
   } catch (err) {
     setStatus(err.message, true);
+    await loadPageQuotes();
   }
 }
 
@@ -1721,6 +1756,113 @@ async function overrideEventBucket(eventId, bucket, button) {
   } catch (err) {
     setStatus(err.message, true);
     button.disabled = false;
+  }
+}
+
+async function addCurrentPageToWiki() {
+  const ready = await ensureBackendReady();
+  if (!ready) {
+    setStatus("Backend not connected", true);
+    return;
+  }
+  if (!state.page) {
+    setStatus("No page loaded", true);
+    return;
+  }
+  setStatus("Adding to wiki…");
+  try {
+    if (!state.savedPageId) {
+      await saveCurrentPage();
+    }
+    const pageId = state.savedPageId;
+    if (!pageId) throw new Error("Save the page first");
+    const res = await fetch(`${BACKEND}/wiki/ingest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page_id: pageId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Wiki ingest failed");
+    setStatus("Added to wiki — run Compile to update articles");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
+async function addSelectedPageToWiki() {
+  if (!state.selectedSavedId) return;
+  const ready = await ensureBackendReady();
+  if (!ready) {
+    setStatus("Backend not connected", true);
+    return;
+  }
+  setStatus("Adding to wiki…");
+  try {
+    const res = await fetch(`${BACKEND}/wiki/ingest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page_id: state.selectedSavedId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Wiki ingest failed");
+    setStatus("Added to wiki");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
+async function loadWikiView() {
+  if (!els.wikiArticles) return;
+  els.wikiArticles.innerHTML = "";
+  try {
+    const [statusRes, articlesRes] = await Promise.all([
+      fetch(`${BACKEND}/wiki/status`),
+      fetch(`${BACKEND}/wiki/articles`),
+    ]);
+    const status = await statusRes.json();
+    const articlesData = await articlesRes.json();
+    if (!statusRes.ok) throw new Error(status.error || "Could not load wiki status");
+    if (els.wikiStatus) {
+      els.wikiStatus.textContent = `${status.raw_count} raw · ${status.article_count} articles · ${status.uncompiled_count} pending compile`;
+    }
+    const articles = articlesData.articles || [];
+    if (els.wikiEmpty) els.wikiEmpty.hidden = articles.length > 0;
+    for (const article of articles.slice(0, 12)) {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "wiki-card";
+      card.innerHTML = `<strong>${escapeHtml(article.title)}</strong><span class="muted">${escapeHtml(article.excerpt || "")}</span>`;
+      card.addEventListener("click", () => {
+        window.open(`${BACKEND}/app/#article-${encodeURIComponent(article.slug)}`, "_blank");
+      });
+      els.wikiArticles.appendChild(card);
+    }
+  } catch (err) {
+    if (els.wikiStatus) els.wikiStatus.textContent = err.message;
+  }
+}
+
+async function compileWiki() {
+  if (!els.wikiCompileBtn) return;
+  els.wikiCompileBtn.disabled = true;
+  els.wikiCompileBtn.textContent = "Compiling…";
+  try {
+    const ready = await ensureBackendReady();
+    if (!ready) throw new Error("Backend not connected");
+    const res = await fetch(`${BACKEND}/wiki/compile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ max_sources: 3 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Compile failed");
+    setStatus(data.message || "Wiki compiled");
+    await loadWikiView();
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    els.wikiCompileBtn.disabled = false;
+    els.wikiCompileBtn.textContent = "Compile";
   }
 }
 
