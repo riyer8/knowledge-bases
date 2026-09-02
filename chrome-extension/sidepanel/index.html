@@ -184,7 +184,7 @@
 
   <!-- Wiki view -->
   <section class="view" id="view-wiki">
-    <p class="view-intro muted">Your LLM-compiled knowledge wiki — raw sources compiled into linked articles. Open the full browser for reading and health checks.</p>
+    <p class="view-intro muted">Compiled articles from your reading. Open the full wiki to browse.</p>
     <div class="wiki-toolbar">
       <a id="open-wiki-app" class="toolbar-btn" href="http://127.0.0.1:8765/app/" target="_blank" rel="noopener">Open full wiki</a>
       <button type="button" id="wiki-compile-btn" class="toolbar-btn primary">Compile</button>
@@ -192,6 +192,12 @@
     </div>
     <div id="wiki-status" class="wiki-status muted"></div>
     <div id="wiki-articles" class="wiki-articles"></div>
+    <section class="wiki-ask">
+      <label for="wiki-ask-input" class="muted">Ask your wiki</label>
+      <textarea id="wiki-ask-input" rows="2" placeholder="What themes connect my saved reading?"></textarea>
+      <button type="button" id="wiki-ask-btn" class="toolbar-btn primary">Ask</button>
+      <div id="wiki-ask-reply" class="wiki-ask-reply" hidden></div>
+    </section>
     <p id="wiki-empty" class="muted empty-hint">Save pages, then add them to the wiki. Compile turns raw sources into articles.</p>
   </section>
 

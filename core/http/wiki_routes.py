@@ -7,6 +7,7 @@ from urllib.parse import unquote, urlparse
 
 from core.library_service import get_saved_page
 from core.wiki_service import (
+    ask_wiki,
     compile_wiki,
     get_article,
     get_raw,
@@ -111,6 +112,21 @@ class WikiRoutesMixin:
             try:
                 result = health_check()
                 self._send_json(HTTPStatus.OK, result)
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            return True
+
+        if path == "/wiki/ask":
+            question = str(payload.get("question", "")).strip()
+            if not question:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "question is required"})
+                return True
+            history = payload.get("history") or []
+            try:
+                result = ask_wiki(question, history=history)
+                self._send_json(HTTPStatus.OK, {"ok": True, **result})
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
             return True

@@ -411,3 +411,17 @@ def test_wiki_ingest_and_status(backend_url):
     status, body = _request("GET", f"{backend_url}/wiki/search?q=transformers")
     assert status == 200
     assert len(body["results"]) >= 1
+
+
+def test_wiki_ask_endpoint(backend_url, monkeypatch):
+    import core.http.wiki_routes as wiki_routes
+    monkeypatch.setattr(wiki_routes, "ask_wiki", lambda question, history=None: {
+        "reply": f"Answer to: {question}",
+        "sources": ["Test"],
+    })
+    status, body = _request("POST", f"{backend_url}/wiki/ask", {
+        "question": "What is in my wiki?",
+    })
+    assert status == 200
+    assert body["ok"] is True
+    assert "Answer to" in body["reply"]

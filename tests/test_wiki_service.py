@@ -94,3 +94,30 @@ def test_wiki_status(wiki_env):
     assert status["raw_count"] == 1
     assert status["article_count"] == 0
     assert status["uncompiled_count"] == 1
+
+
+def test_ask_wiki_uses_context(wiki_env, monkeypatch):
+    wiki_env.ingest_raw("Scaling Laws", "Performance improves with compute and data size.")
+    article_path = wiki_env._articles_dir() / "scaling-laws.md"
+    article_path.parent.mkdir(parents=True, exist_ok=True)
+    article_path.write_text(
+        '---\ntitle: "Scaling Laws"\n---\n\nBigger models tend to perform better.\n',
+        encoding="utf-8",
+    )
+
+    captured: list[list[dict[str, str]]] = []
+
+    def fake_chat(messages, **kwargs):
+        captured.append(messages)
+        return "Scaling laws say performance grows with compute."
+
+    monkeypatch.setattr(wiki_env, "provider_chat", fake_chat)
+    result = wiki_env.ask_wiki("What do scaling laws predict?")
+    assert "Scaling laws" in result["reply"]
+    assert "Scaling Laws" in result["sources"]
+    assert any("Wiki context" in m.get("content", "") for m in captured[-1] if m["role"] == "user")
+
+
+def test_ask_wiki_empty(wiki_env):
+    result = wiki_env.ask_wiki("Anything?")
+    assert "empty" in result["reply"].lower()

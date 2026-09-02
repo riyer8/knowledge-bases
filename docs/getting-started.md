@@ -139,6 +139,16 @@ seeding, start the app and ask chat about **Symsys161** or your class presentati
 should be fast and on-topic. Re-run anytime to add more demo context (events are appended,
 not deduplicated).
 
+## Obsidian (optional IDE)
+
+Open your wiki as an Obsidian vault for reading and editing compiled articles:
+
+1. Install [Obsidian](https://obsidian.md/)
+2. **Open folder as vault** → select `~/.kb/wiki/`
+3. Browse `articles/`, `raw/`, and `index.md` — the same files the web UI and extension use
+
+Context auto-writes most wiki content via **Compile**; you can edit markdown directly when you want control. Use the Obsidian Web Clipper to save articles into `wiki/raw/` (or save via the extension and tap **+ Wiki**).
+
 ## macOS App
 
 **Context** is a real macOS application (`Context.app`) — the same kind of thing you see in

@@ -95,6 +95,9 @@ const els = {
   wikiEmpty: document.getElementById("wiki-empty"),
   wikiCompileBtn: document.getElementById("wiki-compile-btn"),
   wikiRefreshBtn: document.getElementById("wiki-refresh-btn"),
+  wikiAskInput: document.getElementById("wiki-ask-input"),
+  wikiAskBtn: document.getElementById("wiki-ask-btn"),
+  wikiAskReply: document.getElementById("wiki-ask-reply"),
   addToWikiBtn: document.getElementById("add-to-wiki-btn"),
   addPageToWikiBtn: document.getElementById("add-page-to-wiki-btn"),
   confirmOverlay: document.getElementById("confirm-overlay"),
@@ -288,6 +291,7 @@ function bindEvents() {
   on(els.refreshLifeBtn, "click", loadLifeView);
   on(els.wikiCompileBtn, "click", compileWiki);
   on(els.wikiRefreshBtn, "click", loadWikiView);
+  on(els.wikiAskBtn, "click", askWikiQuestion);
   on(els.addToWikiBtn, "click", addSelectedPageToWiki);
   on(els.addPageToWikiBtn, "click", addCurrentPageToWiki);
   on(els.clearLibraryBtn, "click", clearSavedLibrary);
@@ -1839,6 +1843,43 @@ async function loadWikiView() {
     }
   } catch (err) {
     if (els.wikiStatus) els.wikiStatus.textContent = err.message;
+  }
+}
+
+async function askWikiQuestion() {
+  const question = els.wikiAskInput?.value.trim();
+  if (!question || !els.wikiAskBtn) return;
+  const ready = await ensureBackendReady();
+  if (!ready) {
+    setStatus("Backend not connected", true);
+    return;
+  }
+  els.wikiAskBtn.disabled = true;
+  els.wikiAskBtn.textContent = "…";
+  if (els.wikiAskReply) {
+    els.wikiAskReply.hidden = false;
+    els.wikiAskReply.textContent = "Loading…";
+  }
+  try {
+    const res = await fetch(`${BACKEND}/wiki/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Ask failed");
+    if (els.wikiAskReply) {
+      els.wikiAskReply.textContent = data.reply || "";
+    }
+    if (data.sources?.length) {
+      setStatus(`Sources: ${data.sources.join(", ")}`);
+    }
+  } catch (err) {
+    if (els.wikiAskReply) els.wikiAskReply.textContent = err.message;
+    setStatus(err.message, true);
+  } finally {
+    els.wikiAskBtn.disabled = false;
+    els.wikiAskBtn.textContent = "Ask";
   }
 }
 

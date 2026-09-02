@@ -14,6 +14,10 @@ const els = {
   healthPanel: document.getElementById("health-panel"),
   healthIssues: document.getElementById("health-issues"),
   healthSuggestions: document.getElementById("health-suggestions"),
+  askInput: document.getElementById("ask-input"),
+  askBtn: document.getElementById("ask-btn"),
+  askReply: document.getElementById("ask-reply"),
+  askSources: document.getElementById("ask-sources"),
   toast: document.getElementById("toast"),
 };
 
@@ -162,6 +166,34 @@ async function runCompile() {
   }
 }
 
+async function runAsk() {
+  const question = els.askInput?.value.trim();
+  if (!question || !els.askBtn) return;
+  els.askBtn.disabled = true;
+  els.askBtn.textContent = "…";
+  if (els.askReply) {
+    els.askReply.hidden = false;
+    els.askReply.innerHTML = "<p class='muted'>Loading…</p>";
+  }
+  try {
+    const result = await apiPost("/wiki/ask", { question });
+    if (els.askReply) {
+      els.askReply.innerHTML = renderMarkdown(result.reply || "");
+    }
+    if (els.askSources) {
+      const sources = result.sources || [];
+      els.askSources.textContent = sources.length
+        ? `Sources: ${sources.join(" · ")}`
+        : "";
+    }
+  } catch (err) {
+    if (els.askReply) els.askReply.textContent = err.message;
+  } finally {
+    els.askBtn.disabled = false;
+    els.askBtn.textContent = "Ask";
+  }
+}
+
 async function runHealthCheck() {
   els.healthBtn.disabled = true;
   try {
@@ -217,6 +249,13 @@ document.querySelectorAll(".nav-item").forEach((btn) => {
 
 els.compileBtn.addEventListener("click", runCompile);
 els.healthBtn.addEventListener("click", runHealthCheck);
+els.askBtn?.addEventListener("click", runAsk);
+els.askInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    runAsk();
+  }
+});
 els.searchInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") runSearch();
 });

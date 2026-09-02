@@ -16,7 +16,7 @@ memory from the desktop. Everything stays on your machine under `~/.kb/`.
 | Saved library (pages, quotes, per-page chat) | Extension + macOS app |
 | Sparkles explore suggestions | Extension |
 | Knowledge graph (saved pages, linked by shared topics) | Extension + macOS app |
-| Knowledge wiki (raw → LLM-compiled articles) | Extension Wiki tab + `http://127.0.0.1:8765/app/` + desktop |
+| Knowledge wiki (raw → compile → Q&A) | Extension Wiki tab + `http://127.0.0.1:8765/app/` + Obsidian vault |
 | Life buckets (review auto-classifications) | Extension Life tab + macOS Life panel |
 | Proactive insights | Extension banner + macOS pet popup |
 | iMessage ingest (read-only, macOS) | Backend `/integrations/imessage/*` |

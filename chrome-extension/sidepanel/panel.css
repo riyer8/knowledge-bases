@@ -694,6 +694,34 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   line-height: 1.4;
 }
 
+.wiki-ask {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.wiki-ask textarea {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.wiki-ask-reply {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px;
+  background: var(--panel);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+
 .life-toolbar {
   display: flex;
   justify-content: space-between;

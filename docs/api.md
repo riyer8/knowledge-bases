@@ -227,6 +227,16 @@ Incrementally compile unprocessed raw sources into articles (LLM). Body: `{ "max
 
 LLM review of wiki consistency — returns issues, suggestions, and new article ideas.
 
+### `POST /wiki/ask`
+
+Q&A over the compiled wiki. Sends relevant articles + index as context to the LLM.
+
+```json
+{ "question": "How do my notes on scaling laws connect?", "history": [] }
+```
+
+Returns `{ "ok": true, "reply": "...", "sources": ["Article Title", ...] }`.
+
 ## Desktop App — Chat & inputs
 
 ### `POST /chat`

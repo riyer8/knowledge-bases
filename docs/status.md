@@ -40,9 +40,9 @@ unified at `~/.kb/`. Documentation lives entirely in `docs/`.
 - Screen capture importance flagging (⌘⇧I)
 - Split `frontend_backend.py` into `core/http/` route modules
 - Desktop Settings parity for API keys (`BackendSettingsStore`)
-- **Wiki system** — raw ingest, LLM compile, health check, web UI at `/app/`
-- Chrome extension **Wiki** tab (+ Wiki button on Page view)
-- 169 unit and integration tests (run `pytest tests/ -q`)
+- **Wiki system** — raw ingest, LLM compile, health check, Q&A (`POST /wiki/ask`), web UI at `/app/`
+- Chrome extension **Wiki** tab (+ Wiki button, ask-your-wiki)
+- 173 unit and integration tests (run `pytest tests/ -q`)
 
 ## Next priorities
 

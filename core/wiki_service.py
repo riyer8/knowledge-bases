@@ -416,6 +416,82 @@ def wiki_status() -> dict[str, Any]:
     }
 
 
+def _gather_wiki_context(question: str, *, max_chars: int = 24000) -> tuple[str, list[str]]:
+    """Assemble index + relevant articles/raw for Q&A."""
+    parts: list[str] = []
+    sources: list[str] = []
+
+    index = read_index()
+    if index.strip():
+        parts.append(f"## Wiki index\n{index[:5000]}")
+
+    hits = search_wiki(question, limit=10)
+    seen: set[str] = set()
+
+    for hit in hits:
+        key = f"{hit['type']}:{hit['slug']}"
+        if key in seen:
+            continue
+        seen.add(key)
+
+        if hit["type"] == "article":
+            article = get_article(hit["slug"])
+            if not article:
+                continue
+            parts.append(f"## Article: {article['title']}\n{article['content'][:8000]}")
+            sources.append(article["title"])
+        else:
+            raw = get_raw(hit["slug"])
+            if not raw:
+                continue
+            parts.append(f"## Raw source: {raw['title']}\n{raw['content'][:6000]}")
+            sources.append(raw["title"])
+
+    if not hits:
+        for summary in list_articles(limit=6):
+            article = get_article(summary["slug"])
+            if not article:
+                continue
+            parts.append(f"## Article: {article['title']}\n{article['content'][:4000]}")
+            sources.append(article["title"])
+
+    context = "\n\n".join(parts)[:max_chars]
+    return context, sources
+
+
+def ask_wiki(question: str, history: list[dict[str, str]] | None = None) -> dict[str, Any]:
+    """Answer a question using compiled wiki articles and raw sources as context."""
+    question = question.strip()
+    if not question:
+        raise ValueError("question is required")
+
+    if not list_articles(limit=1) and not list_raw(limit=1):
+        return {
+            "reply": "Wiki is empty. Save a page, tap + Wiki, then Compile.",
+            "sources": [],
+        }
+
+    context, sources = _gather_wiki_context(question)
+
+    system = (
+        "Answer from the user's wiki only. Cite article titles. "
+        "Say what's missing if context is thin."
+    )
+    messages: list[dict[str, str]] = [{"role": "system", "content": system}]
+    for turn in (history or [])[-8:]:
+        role = str(turn.get("role", "")).strip()
+        content = str(turn.get("content", "")).strip()
+        if role in {"user", "assistant"} and content:
+            messages.append({"role": role, "content": content})
+
+    messages.append({
+        "role": "user",
+        "content": f"Wiki context:\n{context}\n\nQuestion: {question}",
+    })
+    reply = provider_chat(messages, max_tokens=1800)
+    return {"reply": str(reply).strip(), "sources": list(dict.fromkeys(sources))}
+
+
 def _append_index_line(line: str) -> None:
     index = read_index()
     if line.strip() in index:
