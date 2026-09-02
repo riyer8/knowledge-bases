@@ -7,6 +7,7 @@ enum MainPanel: String, CaseIterable, Identifiable {
     case home = "Home"
     case chat = "Chat"
     case library = "Library"
+    case wiki = "Wiki"
     case life = "Life"
     case manual = "Manual Inputs"
     case graph = "Graph View"
@@ -255,6 +256,7 @@ struct MainWindowView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var manualInputStore = ManualInputStore()
     @StateObject private var libraryStore = LibraryStore()
+    @StateObject private var wikiStore = WikiStore()
     @StateObject private var lifeStore = LifeStore()
     @State private var messages: [ChatMessage] = [
         ChatMessage(text: "hi, i'm sift 👋 what's on your mind?\n\nTry: \"What did I work on this week?\"", isUser: false)
@@ -331,6 +333,12 @@ struct MainWindowView: View {
             } else if state.selectedPanel == .library {
                 LibraryPanelView(
                     libraryStore: libraryStore,
+                    panelTitleColor: panelTitleColor,
+                    sectionBackground: sectionBackground
+                )
+            } else if state.selectedPanel == .wiki {
+                WikiPanelView(
+                    wikiStore: wikiStore,
                     panelTitleColor: panelTitleColor,
                     sectionBackground: sectionBackground
                 )
@@ -467,6 +475,7 @@ struct MainWindowView: View {
         inputText = ""
         await manualInputStore.refreshEntries()
         await libraryStore.refreshAll()
+        await wikiStore.refreshAll()
         await lifeStore.refreshAll()
     }
 }
@@ -479,6 +488,7 @@ private struct CutePanelTabs: View {
         HStack(spacing: 8) {
             tabButton(.chat, icon: "message.fill")
             tabButton(.library, icon: "books.vertical")
+            tabButton(.wiki, icon: "book.pages")
             tabButton(.life, icon: "chart.pie")
             tabButton(.manual, icon: "tray.full")
             tabButton(.graph, icon: "point.3.connected.trianglepath.dotted")
@@ -539,8 +549,9 @@ private struct LandingHomeView: View {
 
             HStack(spacing: 10) {
                 homeCard(title: "Chat", subtitle: "Talk with Sift", icon: "message.fill", panel: .chat)
-                homeCard(title: "Library", subtitle: "Saved pages and quotes", icon: "books.vertical", panel: .library)
-                homeCard(title: "Life", subtitle: "Time and relationships", icon: "chart.pie", panel: .life)
+                homeCard(title: "Library", subtitle: "Saved pages", icon: "books.vertical", panel: .library)
+                homeCard(title: "Wiki", subtitle: "Compiled articles", icon: "book.pages", panel: .wiki)
+                homeCard(title: "Life", subtitle: "Time and people", icon: "chart.pie", panel: .life)
                 homeCard(title: "Graph", subtitle: "Explore connections", icon: "point.3.connected.trianglepath.dotted", panel: .graph)
             }
             .padding(.top, 20)

@@ -29,7 +29,7 @@ knowledge-bases/
 │       ├── App/                   # App delegate, menu bar, hotkeys
 │       ├── Windows/               # MainWindow, ManualInputsWindow
 │       ├── Views/                 # Chat, Library, Graph, Life, Settings, Pet
-│       ├── Services/              # BackendService, LibraryStore, LifeStore, BackendSettingsStore
+│       ├── Services/              # BackendService, LibraryStore, WikiStore, LifeStore
 │       └── Models/                # DesktopPetSettings
 ├── docs/                          # All documentation (start at docs/README.md)
 │   ├── specs/                     # Event schema, privacy, buckets, anonymization

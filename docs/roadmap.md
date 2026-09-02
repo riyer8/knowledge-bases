@@ -95,7 +95,7 @@ Inspired by [Karpathy's knowledge base workflow](https://x.com/karpathy/status/2
 - [x] Full-text search (`GET /wiki/search`)
 - [x] Local web UI (`http://127.0.0.1:8765/app/`)
 - [x] Chrome extension Wiki tab + add-to-wiki from saved pages
-- [x] Desktop link to full wiki browser
+- [x] Desktop Wiki panel (articles, compile, ask)
 - [ ] Obsidian vault sync (open `~/.kb/wiki/` as vault — manual for now)
 - [ ] Marp slide output generation
 - [ ] Synthetic data + finetuning experiments
