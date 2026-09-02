@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.proactive.detector import pending_emails, relationship_drift, upcoming_events
+from core.proactive.life_balance import life_balance_insights
 
 
 def get_insights(max_insights: int = 5) -> list[dict]:
@@ -52,6 +53,10 @@ def get_insights(max_insights: int = 5) -> list[dict]:
             "action_url": "",
             "urgency": 1,
         })
+
+    # 4. Life balance patterns
+    for insight in life_balance_insights(days=7):
+        insights.append(insight)
 
     # Sort by urgency descending, cap at max_insights
     insights.sort(key=lambda x: x["urgency"], reverse=True)

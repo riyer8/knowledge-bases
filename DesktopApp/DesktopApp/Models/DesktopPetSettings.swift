@@ -45,16 +45,20 @@ enum PetIconOption: String, CaseIterable, Identifiable {
 final class DesktopPetSettings: ObservableObject {
     @Published var themeMode: AppThemeMode
     @Published var petIcon: PetIconOption
+    @Published var proactiveIntervalMinutes: Int
 
     private static let themeKey = "desktopPet.themeMode"
     private static let iconKey = "desktopPet.iconOption"
+    private static let proactiveKey = "desktopPet.proactiveIntervalMinutes"
     private var cancellables: Set<AnyCancellable> = []
 
     init() {
         let storedTheme = UserDefaults.standard.string(forKey: Self.themeKey) ?? AppThemeMode.system.rawValue
         let storedIcon = UserDefaults.standard.string(forKey: Self.iconKey) ?? PetIconOption.butterfly.rawValue
+        let storedProactive = UserDefaults.standard.integer(forKey: Self.proactiveKey)
         self.themeMode = AppThemeMode(rawValue: storedTheme) ?? .system
         self.petIcon = PetIconOption(rawValue: storedIcon) ?? .butterfly
+        self.proactiveIntervalMinutes = storedProactive > 0 ? storedProactive : 20
         bindPersistence()
     }
 
@@ -81,6 +85,14 @@ final class DesktopPetSettings: ObservableObject {
             .dropFirst()
             .sink { value in
                 UserDefaults.standard.set(value.rawValue, forKey: Self.iconKey)
+            }
+            .store(in: &cancellables)
+
+        $proactiveIntervalMinutes
+            .dropFirst()
+            .sink { value in
+                let clamped = min(120, max(5, value))
+                UserDefaults.standard.set(clamped, forKey: Self.proactiveKey)
             }
             .store(in: &cancellables)
     }

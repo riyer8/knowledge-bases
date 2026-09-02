@@ -177,7 +177,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             MainWindowController.closeWindow()
             return true
         case "s":
-            requestBackendScreenshot()
+            requestBackendScreenshot(flaggedImportant: false)
+            return true
+        case "i":
+            requestBackendScreenshot(flaggedImportant: true)
             return true
         case "p":
             openProactiveBot()
@@ -201,12 +204,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ProactiveWindowController.show(near: window)
     }
 
-    private func requestBackendScreenshot() {
+    private func requestBackendScreenshot(flaggedImportant: Bool = false) {
         guard let url = URL(string: "http://127.0.0.1:8765/screenshot") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Data("{}".utf8)
+        struct Body: Encodable { let flaggedImportant: Bool }
+        request.httpBody = try? JSONEncoder().encode(Body(flaggedImportant: flaggedImportant))
 
         NotificationCenter.default.post(name: .siftCapturing, object: nil)
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
@@ -225,12 +229,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
+            let message = flaggedImportant
+                ? "Important moment captured and flagged."
+                : "Captured and added to your knowledge base."
             if let data,
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let _ = json["screenshot"] {
-                self?.showToast("Captured and added to your knowledge base.")
+                self?.showToast(message)
             } else {
-                self?.showToast("Captured and added to your knowledge base.")
+                self?.showToast(message)
             }
         }.resume()
     }

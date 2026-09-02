@@ -31,10 +31,14 @@ def test_answer_returns_string(monkeypatch):
     import core.memory.vector_store as vs
     import core.retrieval.chat as chat_mod
     monkeypatch.setattr(vs, "embed", _fake_embed)
-    monkeypatch.setattr(chat_mod, "llm_chat", lambda prompt, context_entries: "Here is what I found.")
+    monkeypatch.setattr(
+        chat_mod,
+        "provider_chat",
+        lambda messages, stream=False: "Here is what I found.",
+    )
 
     from core.retrieval.chat import answer
-    result = answer("what did I do yesterday?")
+    result = answer("what did I do yesterday?", include_calendar=False)
     assert isinstance(result, str)
     assert len(result) > 0
 
@@ -43,10 +47,14 @@ def test_answer_with_no_memory_still_returns(monkeypatch):
     import core.retrieval.chat as chat_mod
     import core.memory.vector_store as vs
     monkeypatch.setattr(vs, "embed", _fake_embed)
-    monkeypatch.setattr(chat_mod, "llm_chat", lambda prompt, context_entries: "I don't have enough context.")
+    monkeypatch.setattr(
+        chat_mod,
+        "provider_chat",
+        lambda messages, stream=False: "I don't have enough context.",
+    )
 
     from core.retrieval.chat import answer
-    result = answer("what is my schedule?")
+    result = answer("what is my schedule?", include_calendar=False)
     assert isinstance(result, str)
 
 

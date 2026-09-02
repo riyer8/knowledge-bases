@@ -28,6 +28,10 @@ class Config:
     )
     anthropic_api_key: str = field(default_factory=lambda: os.environ.get("ANTHROPIC_API_KEY", ""))
     anthropic_model: str = field(default_factory=lambda: os.environ.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"))
+    # Minutes between proactive insight checks (desktop pet + extension banner)
+    proactive_interval_minutes: int = field(
+        default_factory=lambda: int(os.environ.get("KB_PROACTIVE_INTERVAL_MINUTES", "20"))
+    )
 
     @property
     def pages_dir(self) -> Path:

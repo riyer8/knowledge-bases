@@ -13,6 +13,8 @@ const state = {
   savedPages: [],
   selectedSavedId: null,
   pendingQuoteText: "",
+  bucketLeaves: [],
+  lifeEvents: [],
 };
 
 const els = {
@@ -58,6 +60,13 @@ const els = {
   retryStatusBtn: document.getElementById("retry-status-btn"),
   pageSubnav: document.getElementById("page-subnav"),
   chatEmptyHint: document.getElementById("chat-empty-hint"),
+  proactiveBanner: document.getElementById("proactive-banner"),
+  proactiveTitle: document.getElementById("proactive-title"),
+  proactiveBody: document.getElementById("proactive-body"),
+  proactiveDismiss: document.getElementById("proactive-dismiss"),
+  lifeSummary: document.getElementById("life-summary"),
+  lifeEvents: document.getElementById("life-events"),
+  refreshLifeBtn: document.getElementById("refresh-life-btn"),
 };
 
 init();
@@ -91,6 +100,9 @@ async function init() {
   await refreshPage();
   if (!backendReady) {
     showSetupHelp();
+  } else {
+    loadProactiveInsights();
+    setInterval(loadProactiveInsights, 20 * 60 * 1000);
   }
 }
 
@@ -138,9 +150,13 @@ function bindEvents() {
   els.savedBack.addEventListener("click", showSavedList);
   els.deletePageBtn.addEventListener("click", deleteCurrentSavedPage);
   els.refreshGraphBtn.addEventListener("click", renderGraph);
+  els.refreshLifeBtn?.addEventListener("click", loadLifeView);
   els.clearAllBtn.addEventListener("click", clearAllData);
   els.retryBackendBtn.addEventListener("click", retryBackendConnection);
   els.retryStatusBtn.addEventListener("click", retryBackendConnection);
+  els.proactiveDismiss?.addEventListener("click", () => {
+    els.proactiveBanner.hidden = true;
+  });
 
   els.nav.addEventListener("click", (event) => {
     const button = event.target.closest(".nav-btn");
@@ -191,6 +207,7 @@ function switchView(view) {
   });
   if (view === "saved") loadSavedPages();
   if (view === "graph") renderGraph();
+  if (view === "life") loadLifeView();
   if (view === "chat") {
     loadPageQuotes();
     refreshSelectionFromPage();
@@ -863,6 +880,150 @@ function appendMessage(role, text) {
 function removeChatEmptyHint() {
   const hint = document.getElementById("chat-empty-hint");
   if (hint) hint.remove();
+}
+
+async function loadProactiveInsights() {
+  if (!els.proactiveBanner) return;
+  try {
+    const res = await fetch(`${BACKEND}/proactive`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const insights = data.insights || [];
+    if (!insights.length) {
+      els.proactiveBanner.hidden = true;
+      return;
+    }
+    const top = insights[0];
+    els.proactiveTitle.textContent = top.title || "Insight";
+    els.proactiveBody.textContent = top.body || "";
+    els.proactiveBanner.hidden = false;
+  } catch {
+    // Backend may be offline; banner stays hidden
+  }
+}
+
+async function loadLifeView() {
+  if (!els.lifeSummary || !els.lifeEvents) return;
+  els.lifeSummary.innerHTML = '<span class="muted">Loading…</span>';
+  els.lifeEvents.innerHTML = "";
+
+  try {
+    const [summaryRes, eventsRes, taxonomyRes] = await Promise.all([
+      fetch(`${BACKEND}/dashboard/time?days=7`),
+      fetch(`${BACKEND}/buckets/recent?days=7&limit=25`),
+      fetch(`${BACKEND}/buckets/taxonomy`),
+    ]);
+
+    const summary = await summaryRes.json();
+    const eventsData = await eventsRes.json();
+    const taxonomy = await taxonomyRes.json();
+
+    if (!summaryRes.ok) throw new Error(summary.error || "Failed to load summary");
+    if (!eventsRes.ok) throw new Error(eventsData.error || "Failed to load events");
+    if (!taxonomyRes.ok) throw new Error(taxonomy.error || "Failed to load taxonomy");
+
+    state.bucketLeaves = taxonomy.leaves || [];
+    state.lifeEvents = eventsData.events || [];
+
+    els.lifeSummary.innerHTML = "";
+    const topLevel = summary.by_top_level || [];
+    if (!topLevel.length) {
+      els.lifeSummary.innerHTML = '<span class="muted">No classified activity yet.</span>';
+    } else {
+      for (const item of topLevel) {
+        const chip = document.createElement("span");
+        chip.className = "life-chip";
+        chip.textContent = `${item.category}: ${item.percent}%`;
+        els.lifeSummary.appendChild(chip);
+      }
+    }
+
+    renderLifeEvents();
+    setStatus("Life view updated");
+  } catch (err) {
+    els.lifeSummary.innerHTML = "";
+    els.lifeEvents.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+    setStatus(err.message, true);
+  }
+}
+
+function renderLifeEvents() {
+  if (!els.lifeEvents) return;
+  els.lifeEvents.innerHTML = "";
+
+  if (!state.lifeEvents.length) {
+    els.lifeEvents.innerHTML =
+      '<p class="muted empty-hint">Captured events will appear here for bucket review.</p>';
+    return;
+  }
+
+  for (const event of state.lifeEvents) {
+    const card = document.createElement("article");
+    card.className = "life-event";
+    if (event.user_overridden) card.classList.add("user-overridden");
+
+    const meta = document.createElement("div");
+    meta.className = "life-event-meta";
+    meta.innerHTML = `
+      <span>${escapeHtml(event.source || "unknown")}</span>
+      <span class="muted">${escapeHtml(formatTimestamp(event.timestamp))}</span>
+    `;
+
+    const preview = document.createElement("p");
+    preview.className = "life-event-preview";
+    preview.textContent = event.text_preview || "(no preview)";
+
+    const actions = document.createElement("div");
+    actions.className = "life-event-actions";
+
+    const select = document.createElement("select");
+    select.dataset.eventId = event.event_id;
+    for (const leaf of state.bucketLeaves) {
+      const option = document.createElement("option");
+      option.value = leaf;
+      option.textContent = leaf;
+      option.selected = leaf === event.bucket;
+      select.appendChild(option);
+    }
+
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.textContent = "Save";
+    saveBtn.disabled = select.value === event.bucket;
+    select.addEventListener("change", () => {
+      saveBtn.disabled = select.value === event.bucket;
+    });
+    saveBtn.addEventListener("click", () => overrideEventBucket(event.event_id, select.value, saveBtn));
+
+    actions.append(select, saveBtn);
+    card.append(meta, preview, actions);
+    els.lifeEvents.appendChild(card);
+  }
+}
+
+async function overrideEventBucket(eventId, bucket, button) {
+  button.disabled = true;
+  try {
+    const res = await fetch(`${BACKEND}/buckets/override`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_id: eventId, bucket }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Override failed");
+    setStatus(`Moved to ${bucket}`);
+    await loadLifeView();
+  } catch (err) {
+    setStatus(err.message, true);
+    button.disabled = false;
+  }
+}
+
+function formatTimestamp(raw) {
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function setStatus(text, isError = false) {

@@ -234,3 +234,75 @@ def test_connections_endpoint(backend_url, monkeypatch):
     status, body = _request("GET", f"{backend_url}/connections?url=https://example.com")
     assert status == 200
     assert body["connections"] == []
+
+
+def test_buckets_taxonomy(backend_url):
+    status, body = _request("GET", f"{backend_url}/buckets/taxonomy")
+    assert status == 200
+    assert "leaves" in body
+    assert "tree" in body
+    assert "Work/Deep Work" in body["leaves"]
+
+
+def test_buckets_recent(backend_url):
+    status, body = _request("GET", f"{backend_url}/buckets/recent?days=7&limit=10")
+    assert status == 200
+    assert "events" in body
+    assert isinstance(body["events"], list)
+
+
+def test_buckets_override(backend_url, tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_ROOT", str(tmp_path))
+    from importlib import reload
+    import core.config as cfg_mod
+    import core.memory.buckets_service as bs_mod
+    reload(cfg_mod)
+    reload(bs_mod)
+    cfg_mod.config.ensure_dirs()
+
+    status, body = _request("POST", f"{backend_url}/buckets/override", {
+        "event_id": "evt-test",
+        "bucket": "Work/Meetings",
+    })
+    assert status == 200
+    assert body["ok"] is True
+    assert body["bucket"] == "Work/Meetings"
+
+
+def test_dashboard_time(backend_url):
+    status, body = _request("GET", f"{backend_url}/dashboard/time?days=7")
+    assert status == 200
+    assert body["days"] == 7
+    assert "breakdown" in body
+
+
+def test_relationships_list(backend_url):
+    status, body = _request("GET", f"{backend_url}/relationships")
+    assert status == 200
+    assert "profiles" in body
+
+
+def test_proactive_insights(backend_url, monkeypatch):
+    import core.proactive.engine as engine
+    monkeypatch.setattr(
+        engine,
+        "get_insights",
+        lambda max_insights=5: [{"type": "email", "title": "Test", "body": "Body", "urgency": 2}],
+    )
+
+    status, body = _request("GET", f"{backend_url}/proactive")
+    assert status == 200
+    assert body["insights"][0]["title"] == "Test"
+
+
+def test_settings_endpoint(backend_url):
+    status, body = _request("GET", f"{backend_url}/settings")
+    assert status == 200
+    assert "proactive_interval_minutes" in body
+    assert body["proactive_interval_minutes"] >= 5
+
+
+def test_imessage_status(backend_url):
+    status, body = _request("GET", f"{backend_url}/integrations/imessage/status")
+    assert status == 200
+    assert "available" in body

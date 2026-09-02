@@ -31,6 +31,27 @@ body {
   background: var(--panel);
 }
 
+.proactive-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(90deg, rgba(124, 156, 255, 0.15), rgba(124, 156, 255, 0.05));
+  border-bottom: 1px solid var(--border);
+}
+
+.proactive-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.proactive-content strong {
+  color: var(--accent);
+}
+
 .header-row {
   display: flex;
   align-items: center;
@@ -437,6 +458,95 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   align-items: center;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
+}
+
+.life-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.life-summary {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.life-chip {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.life-events {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.life-event {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--panel);
+}
+
+.life-event-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.life-event-preview {
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0 0 8px;
+}
+
+.life-event-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.life-event-actions select {
+  flex: 1;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.life-event-actions button {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.life-event-actions button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.life-event.user-overridden {
+  border-color: var(--accent);
 }
 
 .graph-canvas {

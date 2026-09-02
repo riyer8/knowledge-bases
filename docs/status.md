@@ -6,7 +6,7 @@ _Last updated: 2026-09-02_
 
 1. Read [constitution.md](constitution.md) — rules and doc index
 2. Read this file — current phase and module health
-3. Pick work from [roadmap.md](roadmap.md) (next: desktop `/ask` chat)
+3. Pick work from [roadmap.md](roadmap.md) (next: optional Slack integration or Phase 5)
 4. Follow [init.md](../init.md) for session protocol
 
 Quick health check:
@@ -18,25 +18,32 @@ curl http://127.0.0.1:8765/health
 
 ## Current phase
 
-**Extension MVP shipped. Docs and repo structure consolidated for scale.**
+**Roadmap Phases 1–4 largely complete. Extension MVP + Desktop Life panel shipped.**
 
 The Python backend on `localhost:8765` serves Chrome extension and macOS app. Storage is
 unified at `~/.kb/`. Documentation lives entirely in `docs/`.
 
 ## Recently completed
 
-- Full docs consolidation: constitution, configuration, storage, engineering workflow
-- Removed legacy harness folders (`STATE/`, `TASKS/`, `SPECS/`, `AGENTS/`, `EVALS/`, etc.)
-- Privacy eval harness (22 cases in `tests/test_privacy_eval_cases.py`)
-- macOS Library panel wired to `/library/*`
-- Launcher auto-start for Chrome extension (`scripts/install-launcher.mjs`)
-- Swift build fixes (`Combine` import, About panel credits)
+- Buckets service + Life dashboard API (`/buckets/*`, `/dashboard/time`)
+- Relationship profiles API with user editing (`/relationships/*`)
+- iMessage read-only ingest (`/integrations/imessage/*`)
+- Calendar time-context in RAG chat (`core/retrieval/time_context.py`)
+- Life balance + relationship drift in proactive engine
+- Desktop Life panel (time breakdown + people notes)
+- Desktop chat with history + calendar context
+- Configurable proactive cadence (Settings + env)
+- Chrome extension proactive insight banner
+- Chrome extension Life tab (bucket review + override)
+- Retrieval latency benchmark gate (`tests/test_retrieval_latency.py`)
+- Screen capture importance flagging (⌘⇧I)
+- 150+ unit and integration tests
 
 ## Next priorities
 
-1. Desktop chat on `POST /ask` with streaming (parity with extension)
-2. Proactive "you've read this before" popups using `/connections`
-3. Retrieval latency benchmarks (see [testing.md](testing.md))
+1. Optional Slack integration
+2. Phase 5 external data (Amazon, Health, scraper — needs auth bridges)
+3. Bucket override polish (filter by source, time range in extension)
 
 ## Active decisions
 
@@ -47,6 +54,7 @@ unified at `~/.kb/`. Documentation lives entirely in `docs/`.
 | Extension is a client | Backend owns memory; clients are thin |
 | Launcher over native messaging | HTTP launcher on :8798 starts backend on :8765 |
 | Docs in `docs/` only | `init.md` at root for session protocol; rules in `docs/constitution.md` |
+| Desktop uses `/chat` | Extension uses `/ask` with page context; desktop uses memory-wide `/chat` |
 
 Full rationale: [decisions.md](decisions.md)
 
@@ -54,20 +62,21 @@ Full rationale: [decisions.md](decisions.md)
 
 | Module | Status | Notes |
 |---|---|---|
-| `core/config.py` | done | |
+| `core/config.py` | done | proactive cadence config |
 | `core/privacy/` | done | eval harness in tests |
 | `core/ingestion/` | done | |
-| `core/memory/` | done | |
-| `core/retrieval/` | done | latency benchmarks pending |
-| `core/integrations/` | done | GCal, Gmail read-only |
-| `core/proactive/` | partial | engine done; browser UI pending |
+| `core/memory/` | done | buckets + relationships |
+| `core/retrieval/` | done | calendar context + latency benchmark |
+| `core/integrations/` | done | GCal, Gmail, iMessage |
+| `core/proactive/` | done | engine + desktop + extension UI |
 | `core/library_service.py` | done | |
-| `chrome-extension/` | done | |
-| `DesktopApp/` | partial | library done; `/ask` chat pending |
+| `chrome-extension/` | done | proactive banner + Life tab |
+| `DesktopApp/` | done | library, life, chat with history |
 
 ## Known issues
 
-None blocking.
+- iMessage ingest requires macOS Full Disk Access for `~/Library/Messages/chat.db`
+- Phase 5 integrations (Amazon, Health, scraper) intentionally deferred
 
 ## Blockers
 

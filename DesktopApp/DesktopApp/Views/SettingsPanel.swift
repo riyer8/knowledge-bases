@@ -6,6 +6,7 @@ struct SettingsPanel: View {
 
     @State private var selectedTheme: AppThemeMode
     @State private var selectedIcon: PetIconOption
+    @State private var proactiveMinutes: Int
     @State private var showFinalDeleteConfirm = false
     @State private var isDeleting = false
     @State private var feedbackMessage: String?
@@ -15,6 +16,7 @@ struct SettingsPanel: View {
         self.clearAction = clearAction
         self._selectedTheme = State(initialValue: settings.themeMode)
         self._selectedIcon = State(initialValue: settings.petIcon)
+        self._proactiveMinutes = State(initialValue: settings.proactiveIntervalMinutes)
     }
 
     var body: some View {
@@ -43,6 +45,18 @@ struct SettingsPanel: View {
                 }
                 .pickerStyle(.segmented)
                 Text("More icon styles can be added here later.")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundColor(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Proactive insights")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                Stepper(value: $proactiveMinutes, in: 5...120, step: 5) {
+                    Text("Check every \(proactiveMinutes) minutes")
+                        .font(.system(size: 11, design: .rounded))
+                }
+                Text("How often Sift checks for meetings, emails, and life-balance patterns.")
                     .font(.system(size: 11, design: .rounded))
                     .foregroundColor(.secondary)
             }
@@ -98,6 +112,12 @@ struct SettingsPanel: View {
                 settings.petIcon = selectedIcon
             }
         }
+        .onChange(of: proactiveMinutes) {
+            guard settings.proactiveIntervalMinutes != proactiveMinutes else { return }
+            DispatchQueue.main.async {
+                settings.proactiveIntervalMinutes = proactiveMinutes
+            }
+        }
         .onReceive(settings.$themeMode) { current in
             if selectedTheme != current {
                 selectedTheme = current
@@ -106,6 +126,11 @@ struct SettingsPanel: View {
         .onReceive(settings.$petIcon) { current in
             if selectedIcon != current {
                 selectedIcon = current
+            }
+        }
+        .onReceive(settings.$proactiveIntervalMinutes) { current in
+            if proactiveMinutes != current {
+                proactiveMinutes = current
             }
         }
     }

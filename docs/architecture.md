@@ -133,11 +133,15 @@ page-aware chat (`page_chat.py`).
 
 ### `core/integrations/`
 
-Read-only connectors (Google Calendar, Gmail). Each emits events into the ingestion pipeline.
+Read-only connectors (Google Calendar, Gmail, iMessage). Each emits events into the ingestion pipeline.
 
 ### `core/proactive/`
 
-Pattern detection and ranked insights surfaced to the desktop app.
+Pattern detection and ranked insights surfaced to the desktop app and Chrome extension banner.
+
+### `core/memory/buckets_service.py` + `relationships.py`
+
+Life bucket summaries, tree views, event review, and editable relationship profiles.
 
 ### `core/llm_providers.py`
 
@@ -201,9 +205,11 @@ Base URL: `http://127.0.0.1:8765`. Full reference: [api.md](api.md).
 | Extension chat | `POST /ask`, `POST /page-context`, `POST /remember` |
 | Saved library | `GET/POST /library/pages`, `/library/quotes`, `/library/graph`, `/library/explore` |
 | Search & memory | `GET /search`, `GET /connections`, `GET /history`, `GET /concepts` |
-| Desktop (legacy) | `POST /chat`, `GET /graph`, `POST /screenshot`, `GET /proactive` |
+| Desktop | `POST /chat`, `GET /graph`, `POST /screenshot`, `GET /proactive`, `GET /settings` |
+| Life buckets | `GET /buckets/*`, `GET /dashboard/time`, `POST /buckets/override` |
+| Relationships | `GET/POST /relationships/*` |
 | Manual input | `POST /manual-input`, `GET /manual-inputs` |
-| Integrations | `GET /integrations/status`, sync + OAuth callbacks |
+| Integrations | `GET /integrations/status`, GCal/Gmail OAuth, `POST /integrations/imessage/sync` |
 | Reset | `POST /delete-all`, `POST /library/clear` |
 
 ## LLM Strategy

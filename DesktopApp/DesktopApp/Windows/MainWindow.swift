@@ -7,6 +7,7 @@ enum MainPanel: String, CaseIterable, Identifiable {
     case home = "Home"
     case chat = "Chat"
     case library = "Library"
+    case life = "Life"
     case manual = "Manual Inputs"
     case graph = "Graph View"
     case settings = "Settings"
@@ -254,6 +255,7 @@ struct MainWindowView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var manualInputStore = ManualInputStore()
     @StateObject private var libraryStore = LibraryStore()
+    @StateObject private var lifeStore = LifeStore()
     @State private var messages: [ChatMessage] = [
         ChatMessage(text: "hi, i'm sift 👋 what's on your mind?\n\nTry: \"What did I work on this week?\"", isUser: false)
     ]
@@ -332,6 +334,12 @@ struct MainWindowView: View {
                     panelTitleColor: panelTitleColor,
                     sectionBackground: sectionBackground
                 )
+            } else if state.selectedPanel == .life {
+                LifePanelView(
+                    lifeStore: lifeStore,
+                    panelTitleColor: panelTitleColor,
+                    sectionBackground: sectionBackground
+                )
             } else if state.selectedPanel == .manual {
                 ManualInputsPanel(
                     manualInputStore: manualInputStore,
@@ -399,13 +407,33 @@ struct MainWindowView: View {
     }
 
     private func sendChat(prompt: String) async throws -> String {
-        struct ChatRequest: Codable { let prompt: String }
+        struct ChatTurn: Codable {
+            let role: String
+            let content: String
+        }
+        struct ChatRequest: Codable {
+            let prompt: String
+            let history: [ChatTurn]
+            let includeCalendar: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case prompt, history
+                case includeCalendar = "include_calendar"
+            }
+        }
         struct ChatResponse: Codable { let reply: String }
+
+        let history = messages.dropFirst().map {
+            ChatTurn(role: $0.isUser ? "user" : "assistant", content: $0.text)
+        }
+
         let baseURL = URL(string: "http://127.0.0.1:8765")!
         var request = URLRequest(url: baseURL.appendingPathComponent("chat"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(ChatRequest(prompt: prompt))
+        request.httpBody = try JSONEncoder().encode(
+            ChatRequest(prompt: prompt, history: history, includeCalendar: true)
+        )
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
@@ -439,6 +467,7 @@ private struct CutePanelTabs: View {
         HStack(spacing: 8) {
             tabButton(.chat, icon: "message.fill")
             tabButton(.library, icon: "books.vertical")
+            tabButton(.life, icon: "chart.pie")
             tabButton(.manual, icon: "tray.full")
             tabButton(.graph, icon: "point.3.connected.trianglepath.dotted")
         }
@@ -499,6 +528,7 @@ private struct LandingHomeView: View {
             HStack(spacing: 10) {
                 homeCard(title: "Chat", subtitle: "Talk with Sift", icon: "message.fill", panel: .chat)
                 homeCard(title: "Library", subtitle: "Saved pages and quotes", icon: "books.vertical", panel: .library)
+                homeCard(title: "Life", subtitle: "Time and relationships", icon: "chart.pie", panel: .life)
                 homeCard(title: "Graph", subtitle: "Explore connections", icon: "point.3.connected.trianglepath.dotted", panel: .graph)
             }
             .padding(.top, 20)

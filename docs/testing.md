@@ -49,7 +49,7 @@ These must pass before any change to `core/privacy/`.
 | Suite | Status | Threshold |
 |---|---|---|
 | Privacy | **implemented** | 20+ JSON cases, 0 PII leaks |
-| Retrieval | planned | p95 < 2s, recall > 80% |
+| Retrieval | **implemented** | p95 < 2s (`tests/test_retrieval_latency.py`) |
 | Memory | planned | chunk coherence, graph accuracy |
 | Ingestion | planned | schema conformance, pause/resume |
 | Proactive | planned | hallucination rate, precision |

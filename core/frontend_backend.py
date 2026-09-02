@@ -232,9 +232,27 @@ class FrontendHandler(BaseHTTPRequestHandler):
             folder = query.get("folder", [""])[0].strip() or None
             self._send_json(HTTPStatus.OK, _build_graph_response(only_orphans, only_unlinked, folder))
 
-        elif path == "/buckets":
-            from core.memory.bucket_classifier import _load_classifications
-            self._send_json(HTTPStatus.OK, _load_classifications())
+        elif path == "/buckets" or path.startswith("/buckets/"):
+            self._handle_buckets_get(path, query)
+
+        elif path == "/dashboard/time":
+            from core.memory.buckets_service import get_summary
+            days = int(query.get("days", ["7"])[0])
+            self._send_json(HTTPStatus.OK, get_summary(days=days))
+
+        elif path == "/relationships" or path.startswith("/relationships/"):
+            self._handle_relationships_get(path)
+
+        elif path == "/integrations/imessage/status":
+            from core.integrations.imessage import is_available
+            self._send_json(HTTPStatus.OK, {"available": is_available()})
+
+        elif path == "/settings":
+            self._send_json(HTTPStatus.OK, {
+                "proactive_interval_minutes": config.proactive_interval_minutes,
+                "chat_model": config.chat_model,
+                "llm_provider": resolve_llm_provider(),
+            })
 
         elif path == "/proactive":
             try:
@@ -339,9 +357,53 @@ class FrontendHandler(BaseHTTPRequestHandler):
             if not prompt:
                 self._send_json(HTTPStatus.BAD_REQUEST, {"error": "prompt is required"})
                 return
+            history = payload.get("history") or []
+            include_calendar = bool(payload.get("include_calendar", True))
             try:
-                reply = chat_answer(prompt, extra_context=_demo_hint(prompt))
+                reply = chat_answer(
+                    prompt,
+                    extra_context=_demo_hint(prompt),
+                    history=history,
+                    include_calendar=include_calendar,
+                )
                 self._send_json(HTTPStatus.OK, {"reply": reply})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+
+        elif path == "/buckets/override":
+            event_id = str(payload.get("event_id", "")).strip()
+            bucket = str(payload.get("bucket", "")).strip()
+            if not event_id or not bucket:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "event_id and bucket are required"})
+                return
+            try:
+                from core.memory.buckets_service import override_event_bucket
+                result = override_event_bucket(event_id, bucket)
+                self._send_json(HTTPStatus.OK, {"ok": True, **result})
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+        elif path.startswith("/relationships/"):
+            person_hash = path.split("/relationships/", 1)[1].strip("/")
+            if not person_hash:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "person hash required"})
+                return
+            try:
+                from core.memory.relationships import update_profile
+                profile = update_profile(
+                    person_hash,
+                    display_name=payload.get("display_name"),
+                    notes=payload.get("notes"),
+                )
+                self._send_json(HTTPStatus.OK, {"ok": True, "profile": profile})
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+
+        elif path == "/integrations/imessage/sync":
+            try:
+                from core.integrations.imessage import ingest_recent
+                limit = int(payload.get("limit", 20))
+                self._send_json(HTTPStatus.OK, ingest_recent(limit=limit))
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
@@ -528,6 +590,65 @@ class FrontendHandler(BaseHTTPRequestHandler):
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "page not found"})
                 return
             self._send_json(HTTPStatus.OK, {"ok": True})
+            return
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+
+    def _handle_buckets_get(self, path: str, query: dict) -> None:
+        from core.memory.bucket_classifier import _load_classifications
+        from core.memory.buckets_service import (
+            get_summary,
+            get_taxonomy,
+            get_tree_view,
+            list_events_for_bucket,
+            list_recent_classified_events,
+        )
+
+        if path == "/buckets":
+            self._send_json(HTTPStatus.OK, _load_classifications())
+            return
+        if path == "/buckets/taxonomy":
+            self._send_json(HTTPStatus.OK, get_taxonomy())
+            return
+        if path == "/buckets/summary":
+            days = int(query.get("days", ["7"])[0])
+            self._send_json(HTTPStatus.OK, get_summary(days=days))
+            return
+        if path == "/buckets/tree":
+            days = int(query.get("days", ["7"])[0])
+            self._send_json(HTTPStatus.OK, get_tree_view(days=days))
+            return
+        if path == "/buckets/events":
+            bucket = query.get("bucket", [""])[0].strip()
+            days = int(query.get("days", ["7"])[0])
+            if not bucket:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "bucket is required"})
+                return
+            self._send_json(HTTPStatus.OK, {
+                "events": list_events_for_bucket(bucket, days=days),
+            })
+            return
+        if path == "/buckets/recent":
+            days = int(query.get("days", ["7"])[0])
+            limit = int(query.get("limit", ["30"])[0])
+            self._send_json(HTTPStatus.OK, {
+                "events": list_recent_classified_events(days=days, limit=limit),
+            })
+            return
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
+
+    def _handle_relationships_get(self, path: str) -> None:
+        from core.memory.relationships import get_profile, list_profiles
+
+        if path == "/relationships":
+            self._send_json(HTTPStatus.OK, {"profiles": list_profiles()})
+            return
+        if path.startswith("/relationships/"):
+            person_hash = path.split("/relationships/", 1)[1].strip("/")
+            profile = get_profile(person_hash)
+            if not profile:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "profile not found"})
+                return
+            self._send_json(HTTPStatus.OK, {"profile": profile})
             return
         self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 

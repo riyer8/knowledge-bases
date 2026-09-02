@@ -103,3 +103,18 @@ def resolve_hash(h: str) -> Optional[str]:
     hash_map = _load_map()
     entry = hash_map.get(h)
     return entry["display_name"] if entry else None
+
+
+def update_display_name(person_hash: str, display_name: str) -> None:
+    """User-edited display name for a person hash."""
+    hash_map = _load_map()
+    entry = hash_map.get(person_hash, {
+        "display_name": display_name,
+        "aliases": [],
+        "first_seen": datetime.now(timezone.utc).isoformat(),
+    })
+    entry["display_name"] = display_name.strip()
+    entry["user_edited"] = True
+    entry.setdefault("aliases", [])
+    hash_map[person_hash] = entry
+    _save_map(hash_map)

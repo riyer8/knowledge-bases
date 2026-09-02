@@ -195,10 +195,18 @@ struct PetView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 withAnimation(.easeOut(duration: 0.2)) { showIntroBubble = false }
             }
-            // Auto-check for insights every 20 minutes
-            proactiveTimer = Timer.scheduledTimer(withTimeInterval: 20 * 60, repeats: true) { _ in
-                autoCheckInsights()
-            }
+            scheduleProactiveTimer()
+        }
+        .onChange(of: settings.proactiveIntervalMinutes) { _, _ in
+            scheduleProactiveTimer()
+        }
+    }
+
+    private func scheduleProactiveTimer() {
+        proactiveTimer?.invalidate()
+        let interval = TimeInterval(settings.proactiveIntervalMinutes * 60)
+        proactiveTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+            autoCheckInsights()
         }
     }
 

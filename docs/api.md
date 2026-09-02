@@ -135,13 +135,27 @@ Wipe all library data (saved pages, quotes, chats).
 
 ### `POST /chat`
 
-General knowledge-store chat (desktop app).
+General knowledge-store chat (desktop app). Supports conversation history and calendar context.
 
 ```json
-{ "prompt": "user prompt string" }
+{
+  "prompt": "user prompt string",
+  "history": [{"role": "user", "content": "..."}],
+  "include_calendar": true
+}
 ```
 
-Uses `core/chat_prompt.txt` as the system prompt. Falls back gracefully when no API key is set.
+### `GET /settings`
+
+Runtime settings for clients (proactive cadence, model info).
+
+```json
+{
+  "proactive_interval_minutes": 20,
+  "chat_model": "qwen2.5:3b",
+  "llm_provider": "ollama"
+}
+```
 
 ### `POST /manual-input`
 
@@ -175,13 +189,63 @@ Returns markdown graph nodes and edges. Query params: `orphans=1`, `unlinked=1`,
 
 Captures the current screen and runs it through the ingestion pipeline.
 
+```json
+{ "flaggedImportant": true }
+```
+
+Set `flaggedImportant` to mark the moment as high-priority in retrieval.
+
 ### `GET /proactive`
 
-Returns pending proactive insights for the desktop app.
+Returns pending proactive insights for the desktop app and extension banner.
+
+### `GET /dashboard/time?days=7`
+
+Life-bucket time breakdown for the "how I spend my time" dashboard.
 
 ### `GET /buckets`
 
-Returns life bucket tree classifications.
+Returns life bucket classifications map.
+
+### `GET /buckets/taxonomy`
+
+Bucket tree and flat leaf list.
+
+### `GET /buckets/summary?days=7`
+
+Event counts per bucket over the last N days.
+
+### `GET /buckets/tree?days=7`
+
+Grouped bucket view for UI tree filters.
+
+### `GET /buckets/events?bucket=Work/Meetings&days=7`
+
+Recent events in a bucket.
+
+### `GET /buckets/recent?days=7&limit=30`
+
+Recent classified events across all buckets (for review UIs).
+
+### `POST /buckets/override`
+
+```json
+{ "event_id": "uuid", "bucket": "Work/Meetings" }
+```
+
+### `GET /relationships`
+
+List relationship profiles (from person graph + hash map).
+
+### `GET /relationships/{person_hash}`
+
+Single profile with graph connections.
+
+### `POST /relationships/{person_hash}`
+
+```json
+{ "display_name": "Alice", "notes": "Met at conference" }
+```
 
 ## Integrations
 
@@ -204,6 +268,18 @@ Trigger a sync.
 ### `GET /integrations/pending`
 
 Pending integration items.
+
+### `GET /integrations/imessage/status`
+
+Whether iMessage `chat.db` is readable on this Mac.
+
+### `POST /integrations/imessage/sync`
+
+```json
+{ "limit": 20 }
+```
+
+Ingest recent iMessages through the privacy pipeline.
 
 ## Data Reset
 

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from core.llm_service import chat as llm_chat
+from collections.abc import Iterator
+
+from core.llm_providers import chat as provider_chat
 from core.memory.store import query
 from core.retrieval.context_assembler import assemble, render_response
+from core.retrieval.time_context import calendar_context_block
 
 _SYSTEM_PROMPT = """\
 You are a personal knowledge assistant with access to the user's captured notes, \
@@ -12,17 +15,41 @@ Be concise and conversational. Never reveal internal hash tokens — use them as
 and they will be resolved automatically."""
 
 
-def answer(user_query: str, top_k: int = 8, extra_context: str | None = None) -> str:
-    """Full RAG pipeline: retrieve relevant chunks, assemble context, call LLM, render response."""
+def answer(
+    user_query: str,
+    *,
+    top_k: int = 8,
+    extra_context: str | None = None,
+    history: list[dict[str, str]] | None = None,
+    include_calendar: bool = True,
+) -> str:
+    """Full RAG pipeline with optional conversation history and calendar context."""
     chunks = query(user_query, top_k=top_k)
     context = assemble(chunks)
 
-    hint_block = f"\n\n[Guidance for this response: {extra_context}]" if extra_context else ""
-    prompt = (
-        f"{_SYSTEM_PROMPT}{hint_block}"
-        f"\n\nContext from your knowledge base:\n{context}"
-        f"\n\nQuestion: {user_query}"
-    )
-    raw_response = llm_chat(prompt, context_entries=[])
+    hints: list[str] = []
+    if include_calendar:
+        cal = calendar_context_block()
+        if cal:
+            hints.append(cal)
+    if extra_context:
+        hints.append(extra_context)
 
-    return render_response(raw_response)
+    hint_block = ""
+    if hints:
+        hint_block = "\n\n[Context hints]\n" + "\n\n".join(hints)
+
+    messages: list[dict[str, str]] = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    for turn in history or []:
+        role = str(turn.get("role", "")).strip()
+        content = str(turn.get("content", "")).strip()
+        if role in {"user", "assistant"} and content:
+            messages.append({"role": role, "content": content})
+
+    user_content = (
+        f"Knowledge base context:\n{context}{hint_block}\n\nQuestion: {user_query}"
+    )
+    messages.append({"role": "user", "content": user_content})
+
+    raw_response = provider_chat(messages, stream=False)
+    return render_response(str(raw_response))

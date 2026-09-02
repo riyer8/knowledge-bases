@@ -7,12 +7,20 @@
   <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
+  <section class="proactive-banner" id="proactive-banner" hidden>
+    <div class="proactive-content">
+      <strong id="proactive-title"></strong>
+      <span id="proactive-body" class="muted"></span>
+    </div>
+    <button type="button" id="proactive-dismiss" class="text-btn" aria-label="Dismiss">✕</button>
+  </section>
   <header class="header">
     <div class="header-row">
       <div class="eyebrow">Context</div>
       <nav class="nav" id="nav">
         <button class="nav-btn active" data-view="chat">Page</button>
         <button class="nav-btn" data-view="saved">Saved</button>
+        <button class="nav-btn" data-view="life">Life</button>
         <button class="nav-btn" data-view="graph">Graph</button>
       </nav>
     </div>
@@ -100,6 +108,18 @@
         <div id="saved-chat" class="messages compact"></div>
       </section>
       <button type="button" id="delete-page-btn" class="danger-btn">Clear memory for this page</button>
+    </div>
+  </section>
+
+  <!-- Life / buckets view -->
+  <section class="view" id="view-life">
+    <div class="life-toolbar">
+      <span class="muted">Review auto-classifications</span>
+      <button type="button" id="refresh-life-btn" class="text-btn">Refresh</button>
+    </div>
+    <div id="life-summary" class="life-summary"></div>
+    <div id="life-events" class="life-events">
+      <p class="muted empty-hint">Captured events will appear here for bucket review.</p>
     </div>
   </section>
 
