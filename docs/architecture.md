@@ -217,13 +217,14 @@ Base URL: `http://127.0.0.1:8765`. Full reference: [api.md](api.md).
 ```text
 knowledge-bases/
 ├── core/                 # Python backend (memory, retrieval, privacy, ingestion)
-├── chrome-extension/     # Chrome side panel + native host
+├── chrome-extension/     # Chrome side panel + HTTP launcher
 ├── DesktopApp/           # macOS SwiftUI app
 ├── docs/                 # product + developer documentation
 ├── tests/
 ├── scripts/start_backend.sh
 ├── main.py               # backend launcher
-└── goal.md               # living project status
+├── CLAUDE.md             # engineering constitution
+└── init.md               # AI session protocol
 ```
 
 ### Future extraction (not started)
@@ -239,12 +240,13 @@ Before changing a module, check:
 - What depends on it?
 - What is the blast radius if the interface changes?
 
-Cross-module interface changes require a new entry in `DECISIONS/`.
+Cross-module interface changes require a new entry in `docs/decisions.md`.
 
 ## Related Docs
 
+- [Overview](overview.md)
 - [API Reference](api.md)
 - [Getting Started](getting-started.md)
-- [MVP Roadmap](mvp-roadmap.md)
+- [Roadmap](roadmap.md)
 - [Project Structure](project-structure.md)
 - [Vision](vision.md)

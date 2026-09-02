@@ -116,13 +116,13 @@
   </section>
 
   <section class="setup-panel" id="setup-panel" hidden>
-    <h2>Backend not connected</h2>
-    <p class="muted">Quotes and chat need the local Python backend. Auto-start failed because the native host is not registered for this extension ID.</p>
-    <p class="setup-label">Your extension ID</p>
-    <code id="extension-id" class="setup-code"></code>
+    <h2>One-time setup</h2>
+    <p class="muted">Install the local launcher so Context can start the Python backend when you open the extension (same pattern as apt-hunter).</p>
     <p class="setup-label">Run once in Terminal (from the repo)</p>
-    <code id="install-command" class="setup-code"></code>
-    <p class="muted setup-alt">Or start manually: <code>python3 main.py</code> then click Retry below.</p>
+    <code id="install-command" class="setup-code">node scripts/install-launcher.mjs</code>
+    <p class="muted setup-alt">Then reload the extension. Or start manually: <code>python3 main.py</code></p>
+    <p class="setup-label muted">Extension ID (only needed for legacy native-host setup)</p>
+    <code id="extension-id" class="setup-code"></code>
     <button type="button" id="retry-backend-btn" class="toolbar-btn primary full-width">Retry connection</button>
   </section>
 

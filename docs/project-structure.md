@@ -4,58 +4,42 @@
 knowledge-bases/
 ├── DesktopApp/
 │   └── DesktopApp/
-│       ├── App/
-│       │   └── DesktopAppApp.swift      # app delegate, pet window, hotkeys
-│       ├── Windows/
-│       │   ├── MainWindow.swift         # main window controller + core panels
-│       │   └── ManualInputsWindow.swift # detached manual-inputs window
-│       ├── Views/
-│       │   ├── SettingsPanel.swift      # settings UI (theme, icon, delete-all)
-│       │   ├── PetView.swift            # desktop pet icon/avatar surface
-│       │   ├── ChatWindow.swift         # chat panel UI
-│       │   ├── GraphWindow.swift        # graph panel UI
-│       │   └── ProactivePopup.swift     # proactive insight pop-ups
-│       └── Models/
-│           └── DesktopPetSettings.swift # persisted app settings model
+│       ├── App/                         # app delegate, pet window, hotkeys
+│       ├── Windows/                     # MainWindow, ManualInputsWindow
+│       ├── Views/                       # Chat, Library, Graph, Settings, Pet
+│       ├── Services/                    # BackendService, LibraryStore
+│       └── Models/                      # DesktopPetSettings
 ├── core/
 │   ├── frontend_backend.py              # unified HTTP router (all clients)
 │   ├── config.py                        # centralized path + env config
-│   ├── llm_providers.py                 # OpenAI / Anthropic / Ollama abstraction
-│   ├── llm_service.py                   # legacy LLM wrapper
+│   ├── llm_providers.py                 # OpenAI / Anthropic / Ollama
 │   ├── library_service.py               # saved pages, quotes, explore
 │   ├── page_context_service.py          # page ingest, search, connections
-│   ├── chat_prompt.txt                  # base system prompt
-│   ├── ingestion/                       # screenshot OCR, text ingest, event writer
+│   ├── ingestion/                       # screenshot OCR, text ingest
 │   ├── privacy/                         # PII detection, hashing, sensitive sites
-│   ├── memory/                          # chunking, embeddings, graph, concept graph
+│   ├── memory/                          # embeddings, graph, concept graph
 │   ├── retrieval/                       # semantic search, chat, page chat
 │   ├── integrations/                    # GCal, Gmail, OAuth
-│   └── proactive/                       # pattern detection, insight surfacing
+│   └── proactive/                       # pattern detection, insights
 ├── chrome-extension/
 │   ├── manifest.json
-│   ├── background.js
-│   ├── install-native-host.sh           # one-time auto-start setup
-│   ├── native-host/context_host.py
-│   ├── content/extract.js
-│   └── sidepanel/                       # chat, saved library, graph UI
-├── inputs/
-│   ├── manual/
-│   │   ├── manual_input_server.py       # optional isolated manual-input server
-│   │   └── uploads/                     # runtime uploads (gitignored)
-│   └── screenshot/
-│       └── screenshot_service.py        # screenshot capture service
+│   ├── background.js                    # launcher + backend health
+│   ├── lib/launcher.js                  # HTTP auto-start client
+│   ├── content/extract.js               # page extraction
+│   └── sidepanel/                       # Quotes | Chat, saved library, graph
 ├── scripts/
-│   └── start_backend.sh                 # backend launcher for extension
-├── docs/                                # product + developer documentation
-├── tests/
-├── SPECS/
-├── STATE/
-├── TASKS/
-├── DECISIONS/
-├── EVALS/
-├── main.py                              # root launcher for frontend backend
+│   ├── start_backend.sh                 # backend launcher
+│   ├── launcher.mjs                     # LaunchAgent HTTP service (:8798)
+│   ├── install-launcher.mjs             # one-time launcher install
+│   ├── install_app.sh                   # build + install Context.app
+│   └── generate_app_icon.py
+├── docs/                                # all product + engineering documentation
+├── tests/                               # unit tests + privacy eval fixtures
+├── demo/                                # seed script for presentations
+├── main.py                              # backend entry point
 ├── start.sh                             # one-click backend + app launcher
-└── goal.md                              # living project status
+├── CLAUDE.md                            # engineering constitution
+└── init.md                              # AI session protocol
 ```
 
 Runtime data is stored under `~/.kb/` (not in the repo). See [architecture.md](architecture.md).
@@ -66,5 +50,9 @@ Runtime data is stored under `~/.kb/` (not in the repo). See [architecture.md](a
 |---|---|
 | `C` | Open chat tab |
 | `G` | Open graph tab |
-| `W` | Close chat window |
+| `W` | Close main window |
 | `S` | Trigger backend screenshot capture |
+
+## Documentation map
+
+Everything else lives in [docs/README.md](README.md).

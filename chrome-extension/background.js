@@ -1,9 +1,21 @@
 const BACKEND = "http://127.0.0.1:8765";
+const LAUNCHER_URL = "http://127.0.0.1:8798";
 const NATIVE_HOST = "com.context.backend";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  ensureBackend().catch(() => {});
 });
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureBackend().catch(() => {});
+});
+
+if (chrome.sidePanel?.onOpened) {
+  chrome.sidePanel.onOpened.addListener(() => {
+    ensureBackend().catch(() => {});
+  });
+}
 
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (!tab.url || info.status !== "complete") return;
@@ -50,45 +62,50 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-async function ensureBackend() {
-  if (await isBackendHealthy()) {
-    return { ok: true, status: "already_running" };
-  }
+ensureBackend().catch(() => {});
 
-  const nativeResult = await startViaNativeHost();
-  if (nativeResult.ok) {
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      if (await isBackendHealthy()) {
-        return { ok: true, status: nativeResult.status || "started" };
-      }
-      await sleep(500);
+async function ensureBackend({ maxWaitMs = 45000 } = {}) {
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    if (await isBackendHealthy()) {
+      return { ok: true, status: "already_running" };
     }
-    return {
-      ok: false,
-      error: "Backend started but did not respond. Check .kb_backend.log in the repo.",
-    };
+    await requestLauncherStart();
+    await sleep(1000);
   }
 
   if (await isBackendHealthy()) {
     return { ok: true, status: "already_running" };
   }
 
-  const extId = chrome.runtime.id;
-  if (String(nativeResult.error || "").toLowerCase().includes("forbidden")) {
+  const launcher = await launcherStatus();
+  if (!launcher) {
+    const nativeResult = await startViaNativeHost();
+    if (nativeResult.ok) {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (await isBackendHealthy()) {
+          return { ok: true, status: nativeResult.status || "started" };
+        }
+        await sleep(500);
+      }
+    }
+
     return {
       ok: false,
-      error: "native_host_forbidden",
-      extensionId: extId,
-      hint: `Run: bash chrome-extension/install-native-host.sh ${extId}`,
-      manual: "Or start the backend manually: python3 main.py",
+      error: "launcher_missing",
+      hint: "Run once: node scripts/install-launcher.mjs",
+      manual: "Or start manually: python3 main.py",
+      extensionId: chrome.runtime.id,
     };
   }
 
   return {
-    ...nativeResult,
-    extensionId: extId,
-    hint: `Run: bash chrome-extension/install-native-host.sh ${extId}`,
-    manual: "Or start the backend manually: python3 main.py",
+    ok: false,
+    error: "backend_timeout",
+    hint: "Check ~/Library/Logs/Context/ or .kb_backend.log in the repo",
+    manual: "Try: python3 main.py",
+    extensionId: chrome.runtime.id,
   };
 }
 
@@ -97,9 +114,37 @@ async function isBackendHealthy() {
     const res = await fetch(`${BACKEND}/health`, { cache: "no-store" });
     if (!res.ok) return false;
     const health = await res.json();
-    return health.ok === true || health.api_version >= 1;
+    return health.ok === true;
   } catch {
     return false;
+  }
+}
+
+async function requestLauncherStart() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2500);
+    const response = await fetch(`${LAUNCHER_URL}/start`, {
+      method: "POST",
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function launcherStatus() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 800);
+    const response = await fetch(`${LAUNCHER_URL}/status`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!response.ok) return null;
+    return response.json();
+  } catch {
+    return null;
   }
 }
 

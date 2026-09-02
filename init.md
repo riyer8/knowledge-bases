@@ -18,49 +18,49 @@ Internalize the rules. If anything in your task would violate CLAUDE.md, stop an
 
 ### Step 2 — Current State
 ```
-Read: STATE/current.md
+Read: docs/status.md
 ```
 Understand exactly where the last session left off. What was completed, what is next,
 what active decisions are in play.
 
-### Step 3 — Active Tasks
+### Step 3 — Roadmap / Active Work
 ```
-Read: STATE/active_tasks.md
+Read: docs/roadmap.md
 ```
-Confirm which task you're picking up. If unclear, do not guess — surface the ambiguity.
+Confirm which milestone you're working on. If unclear, do not guess — surface the ambiguity.
 
 ### Step 4 — Blockers
 ```
-Read: STATE/blockers.md
+Read: docs/status.md (Blockers section)
 ```
 If any blocker affects your task, do not proceed past this point without resolving it or
 documenting why it doesn't apply.
 
 ### Step 5 — Known Issues
 ```
-Read: STATE/known_issues.md
+Read: docs/status.md (Known Issues section)
 ```
 Check for any open issues in the modules you will touch.
 
 ### Step 6 — Owned Agent Spec
 ```
-Read: AGENTS/<your-agent>.md
+Read: docs/agents.md
 ```
 Confirm your ownership boundaries, forbidden actions, and required tests for this session.
 
 ### Step 7 — Relevant Specs
 ```
-Read: SPECS/<relevant>.md
+Read: docs/specs/<relevant>.md
 ```
 Read every spec that describes something you will build, modify, or call.
-If no spec exists for what you're about to build, write one first.
+If no spec exists for what you're about to build, add one under `docs/specs/` first.
 
 ### Step 8 — Relevant Decisions
 ```
-Read: DECISIONS/
+Read: docs/decisions.md
 ```
 Scan for any decision that touches your module or task. Decisions explain *why* things
-are the way they are — violating them without a new DECISION file is not allowed.
+are the way they are — violating them without a new decision entry is not allowed.
 
 ### Step 9 — Dependency Graph Check
 ```
@@ -101,9 +101,9 @@ If you discover mid-session that scope must expand, pause and declare the expans
 
 ### Execution Trace Logging
 
-Every non-trivial implementation session must write a trace log to `TRACES/`.
+Every non-trivial implementation session may write a trace log to `docs/traces/` (create the folder if needed).
 
-Name format: `TRACES/TASK-NNN-YYYY-MM-DD.md`
+Name format: `docs/traces/TASK-NNN-YYYY-MM-DD.md`
 
 Trace log must record (in real time, not reconstructed at the end):
 
@@ -112,7 +112,7 @@ Trace log must record (in real time, not reconstructed at the end):
 
 ## Reads
 - [timestamp] Read CLAUDE.md — OK
-- [timestamp] Read STATE/current.md — noted: privacy module not started
+- [timestamp] Read docs/status.md — noted: privacy module not started
 - ...
 
 ## Decisions Made
@@ -137,19 +137,19 @@ Trace log must record (in real time, not reconstructed at the end):
 
 ## Tests Run
 - [timestamp] tests/test_privacy.py — 4/4 passing
-- [timestamp] EVALS/privacy/ — 18/20 passing (2 edge cases logged to known_issues)
+- [timestamp] tests/test_privacy_eval_cases.py — 20/20 passing
 ```
 
 ### Interface Contract Rules
 
 When you create or modify a function that crosses module boundaries:
 
-1. The contract must be written in the owning AGENTS/ file under "Interfaces"
+1. The contract must be documented in `docs/agents.md` under the owning agent
 2. Format: `function_name(input_type) -> output_type | raises ExceptionType`
 3. If you change an existing contract, you must:
-   - Update the AGENTS/ file
+   - Update `docs/agents.md`
    - Update every caller in the same session, or
-   - Create a TASK for the caller's owner to update, and add it as a blocker
+   - Log the dependency in `docs/status.md` blockers and coordinate before proceeding
 
 ### Memory Mutation Rules
 
@@ -166,8 +166,7 @@ These rules govern what can be written where. Violations are bugs.
 | `~/.kb/hashes/salt` | write-once, immutable | infra-agent (first run only) |
 | `~/.kb/auth/` | mutable | integration-agent only |
 | `~/.kb/buckets/` | mutable | memory-agent only |
-| `STATE/*.md` | mutable | any agent (end of session) |
-| `TASKS/*.md` | mutable | any agent (status updates only) |
+| `docs/status.md` | mutable | any agent (end of session) |
 
 **Append-only means:** never delete, never overwrite. New entries only.
 **Write-once means:** written at install time, never touched again.
@@ -219,30 +218,25 @@ These rules govern what can be written where. Violations are bugs.
 
 Do not end a session without completing all of these.
 
-### Step 1 — Update Task Status
-In `TASKS/TASK-NNN.md`, update the `Status` field and check off completed requirements.
+### Step 1 — Update Status
+Update `docs/status.md` with what was completed and the next action.
 
-### Step 2 — Update STATE/active_tasks.md
-Move completed tasks to the completed section. Add any newly queued tasks.
+### Step 2 — Update Roadmap (if applicable)
+Check off completed items in `docs/roadmap.md`.
 
-### Step 3 — Update STATE/current.md
-Write a clear "what just happened" and "next action" so the next session can orient
-in under 2 minutes. Be specific — not "worked on privacy" but "implemented
-detector.py and hasher.py, pipeline.py still needs sensitivity scorer".
+### Step 3 — Log New Issues
+Any bugs found but not fixed → `docs/status.md` (Known Issues section).
 
-### Step 4 — Log New Issues
-Any bugs found but not fixed, edge cases deferred, or degraded behavior → `STATE/known_issues.md`.
+### Step 4 — Log New Blockers
+Anything that blocks forward progress → `docs/status.md` (Blockers section).
 
-### Step 5 — Log New Blockers
-Anything that blocks forward progress → `STATE/blockers.md`.
+### Step 5 — Log New Decisions
+If you made a non-obvious architectural choice → `docs/decisions.md`.
 
-### Step 6 — Log New Decisions
-If you made a non-obvious architectural choice → new file in `DECISIONS/`.
+### Step 6 — Finalize Trace Log
+Complete the trace log in `docs/traces/` if you started one. Mark any open items.
 
-### Step 7 — Finalize Trace Log
-Complete the trace log in `TRACES/`. Mark any open items.
-
-### Step 8 — Postmortem Check
+### Step 7 — Postmortem Check
 Ask: did anything fail in a way that could recur?
 If yes → write a postmortem (see below).
 
@@ -257,7 +251,7 @@ Write a postmortem any time:
 - A bug was introduced and found (even if fixed in the same session)
 - A wrong assumption was baked in and had to be unwound
 - An interface change broke a caller unexpectedly
-- STATE/ was out of date and caused wasted work at session start
+- STATE/docs were out of date and caused wasted work at session start
 - A spec was missing and had to be written mid-implementation
 
 "Institutional memory failure" = the harness did not contain information that would have
@@ -265,7 +259,7 @@ prevented the problem. The fix is always a harness update, not just fixing the c
 
 ### Postmortem Format
 
-File: `POSTMORTEMS/PM-NNN-short-title.md`
+File: `docs/traces/PM-NNN-short-title.md` (or a dedicated postmortem section in `docs/engineering.md`)
 
 ```markdown
 # PM-NNN: Short description of what went wrong
@@ -289,11 +283,11 @@ What was done to fix it this session.
 
 ## Harness Changes
 What was added/updated in the harness to prevent recurrence:
-- [ ] Updated SPEC: ...
-- [ ] Added eval: ...
-- [ ] Updated AGENT spec: ...
+- [ ] Updated spec: docs/specs/...
+- [ ] Added eval case: tests/fixtures/...
+- [ ] Updated agent spec: docs/agents.md
 - [ ] Added to CLAUDE.md: ...
-- [ ] New DECISION file: ...
+- [ ] New decision: docs/decisions.md
 
 ## Lessons
 One or two sentences for future sessions.
@@ -311,29 +305,26 @@ A postmortem with no harness changes is just a complaint — it doesn't prevent 
 ```
 SESSION START
 [ ] Read CLAUDE.md
-[ ] Read STATE/current.md
-[ ] Read STATE/active_tasks.md
-[ ] Read STATE/blockers.md
-[ ] Read STATE/known_issues.md
-[ ] Read AGENTS/<owned-agent>.md
-[ ] Read relevant SPECS/
-[ ] Scan relevant DECISIONS/
-[ ] Check dependency graph for blast radius
+[ ] Read docs/status.md
+[ ] Read docs/roadmap.md
+[ ] Check docs/status.md for blockers and known issues
+[ ] Read docs/agents.md (your ownership boundary)
+[ ] Read relevant docs/specs/
+[ ] Scan docs/decisions.md
+[ ] Check dependency graph in docs/architecture.md
 [ ] Write scope declaration
 
 DURING IMPLEMENTATION
-[ ] Write trace log to TRACES/ (real time)
+[ ] Write trace log to docs/traces/ if non-trivial (real time)
 [ ] Log interface contracts when creating cross-module functions
 [ ] Respect memory mutation rules
 [ ] Run required tests before marking anything done
 
 SESSION END
-[ ] Update TASKS/TASK-NNN.md status
-[ ] Update STATE/active_tasks.md
-[ ] Update STATE/current.md (what happened + next action)
-[ ] Log issues → STATE/known_issues.md
-[ ] Log blockers → STATE/blockers.md
-[ ] Log decisions → DECISIONS/ (if applicable)
-[ ] Finalize TRACES/TASK-NNN-YYYY-MM-DD.md
-[ ] Postmortem if needed → POSTMORTEMS/
+[ ] Update docs/status.md (what happened + next action)
+[ ] Update docs/roadmap.md if milestone completed
+[ ] Log issues/blockers in docs/status.md
+[ ] Log decisions → docs/decisions.md (if applicable)
+[ ] Finalize docs/traces/ log if started
+[ ] Postmortem if needed
 ```

@@ -67,12 +67,14 @@ With `auto`, chat and semantic search both use OpenAI when the key is set — no
 
 ## Chrome Extension
 
-1. Load unpacked from `chrome-extension/` in `chrome://extensions`
-2. One-time native host install (auto-starts backend on click):
+1. **One-time launcher install** (auto-starts backend when you open the extension):
 
 ```bash
-bash chrome-extension/install-native-host.sh YOUR_EXTENSION_ID
+node scripts/install-launcher.mjs
 ```
+
+2. Load unpacked from `chrome-extension/` in `chrome://extensions`
+3. Reload the extension and open Context on any page
 
 See [chrome-extension/README.md](../chrome-extension/README.md) for details.
 
@@ -115,28 +117,13 @@ Run tests:
 pytest tests/
 ```
 
-## Custom Storage Paths
+Privacy eval cases (20+ JSON fixtures):
 
 ```bash
-KB_MANUAL_INPUT_ROOT="/absolute/path/to/inputs/manual" \
-KB_SCREENSHOT_ROOT="/absolute/path/to/screenshot/captures" \
-python3 main.py
+pytest tests/test_privacy_eval_cases.py -v
 ```
 
-## Manual Input Server (Optional)
-
-For isolated manual-ingestion testing:
-
-```bash
-python3 inputs/manual/manual_input_server.py
-```
-
-With custom storage:
-
-```bash
-KB_MANUAL_INPUT_ROOT="/absolute/path/to/inputs/manual" \
-python3 inputs/manual/manual_input_server.py
-```
+See [testing.md](testing.md) for details.
 
 ## macOS App
 
@@ -157,6 +144,9 @@ open -a Context
 ```
 
 On launch, the app auto-starts the Python backend. Your knowledge data stays in `~/.kb/`.
+
+The app includes **Chat**, **Library** (saved pages and quotes from the extension),
+**Graph**, and **Manual Inputs** panels.
 
 ### Build without installing
 

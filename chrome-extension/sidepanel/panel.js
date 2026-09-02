@@ -95,9 +95,8 @@ async function init() {
 }
 
 function showSetupHelp(result = {}) {
-  const extId = result.extensionId || chrome.runtime.id;
-  els.extensionId.textContent = extId;
-  els.installCommand.textContent = `bash chrome-extension/install-native-host.sh ${extId}`;
+  els.extensionId.textContent = result.extensionId || chrome.runtime.id || "—";
+  els.installCommand.textContent = "node scripts/install-launcher.mjs";
   els.setupPanel.hidden = false;
   els.retryStatusBtn.hidden = false;
 }
@@ -370,16 +369,18 @@ async function ensureBackendReady() {
   }
 
   if (!result?.ok) {
-    if (result?.error === "native_host_forbidden" || String(result?.error || "").includes("forbidden")) {
-      setStatus("Native host not registered — see setup steps below", true);
+    if (result?.error === "launcher_missing") {
+      setStatus("Launcher not installed — run setup below (one time)", true);
+    } else if (result?.error === "native_host_forbidden" || String(result?.error || "").includes("forbidden")) {
+      setStatus("Backend auto-start not configured — see setup below", true);
     } else {
-      setStatus(result?.hint || result?.error || result?.manual || "Could not start backend", true);
+      setStatus(result?.hint || result?.manual || result?.error || "Could not start backend", true);
     }
     showSetupHelp(result);
     return false;
   }
 
-  setStatus("Backend health check failed", true);
+  setStatus("Backend did not start in time — try Retry or python3 main.py", true);
   showSetupHelp(result);
   return false;
 }

@@ -28,12 +28,12 @@ Never start building without reading state. Never end a session without updating
 
 ## Architecture Rules
 
-- **Never create a service that duplicates an existing one.** Check `STATE/architecture_state.md` first.
-- **Never modify `core/ingestion/` without updating the ingestion contract** in `SPECS/ingestion-contract.md`.
+- **Never create a service that duplicates an existing one.** Check `docs/status.md` (module health) first.
+- **Never modify `core/ingestion/` without updating the event contract** in `docs/specs/event-schema.md`.
 - **Never bypass the privacy pipeline.** All data entering the system must pass through `core/privacy/` before storage.
 - **Prefer deterministic pipelines over autonomous loops.** Agents should process events, not spin indefinitely.
 - **Local-first.** No data leaves the machine unless the user has explicitly configured an integration.
-- **One source of truth per data type.** If two modules need the same data, define a shared schema in `SPECS/`.
+- **One source of truth per data type.** If two modules need the same data, define a shared schema in `docs/specs/`.
 
 ---
 
@@ -41,7 +41,7 @@ Never start building without reading state. Never end a session without updating
 
 - **Never store raw screenshots.** Extract text/metadata, then delete the image unless explicitly flagged to keep.
 - **Never store unhashed personal names.** All names must be hashed at ingestion. The UI layer renders them back using the hash→display mapping.
-- **Auto-pause on sensitive content.** Screen capture must pause when a password field, banking URL, or credential form is detected. See `SPECS/privacy-pipeline.md`.
+- **Auto-pause on sensitive content.** Screen capture must pause when a password field, banking URL, or credential form is detected. See `docs/specs/privacy-pipeline.md`.
 - **Sensitive site list is in `core/privacy/sensitive_sites.py`.** Update it there, nowhere else.
 - **Never log PII to stdout or any log file.**
 
@@ -71,20 +71,20 @@ Each module is owned by one agent. Do not modify another agent's module without 
 | `core/integrations/` | integration-agent |
 | `core/proactive/` | proactive-agent |
 | `DesktopApp/` | frontend-agent |
-| `tests/`, `EVALS/` | eval-agent |
+| `tests/` | eval-agent |
 | `core/config.py`, `main.py` | infra-agent |
 
-Cross-module changes require updating `DECISIONS/` with a rationale.
+Cross-module changes require updating `docs/decisions.md` with a rationale.
 
 ---
 
 ## Task Rules
 
-- Tasks live in `TASKS/`. Use `TASKS/TEMPLATE.md` to create new ones.
+- Track work in `docs/roadmap.md` and `docs/status.md`.
 - Every task must have explicit success criteria before work begins.
-- Mark tasks complete by updating their status field and updating `STATE/active_tasks.md`.
-- Do not start a new task while a blocking task is unresolved (check `STATE/blockers.md`).
-- Break tasks that would touch more than 2 modules into subtasks.
+- Mark milestones complete by updating `docs/roadmap.md` and `docs/status.md`.
+- Do not start work blocked by items in `docs/status.md` (Blockers section).
+- Break tasks that would touch more than 2 modules into smaller milestones.
 
 ---
 
@@ -92,7 +92,7 @@ Cross-module changes require updating `DECISIONS/` with a rationale.
 
 - Every new function with side effects must have a test.
 - Privacy pipeline functions require tests for: detection accuracy, false positive rate, reversibility.
-- Retrieval functions require latency benchmarks (see `EVALS/retrieval/`).
+- Retrieval functions require latency benchmarks (see `docs/testing.md`).
 - Do not skip tests to ship faster. A broken privacy filter is worse than no feature.
 
 ---

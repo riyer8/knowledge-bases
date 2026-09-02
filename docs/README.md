@@ -1,23 +1,28 @@
 # Documentation
 
-## Project
+Single source of truth for Context (personal knowledge system).
 
-- [goal.md](../goal.md) — living project goal, status, and success criteria
-- [Vision](vision.md) — product thesis, experience, modes, and the "Remember this" feature
-- [Architecture](architecture.md) — system design, multi-client layout, storage, modules
-- [MVP Roadmap](mvp-roadmap.md) — completed extension milestones and next steps
+## Product
+
+- [Overview](overview.md) — what Context does, quick start, data locations
+- [Vision](vision.md) — product thesis and experience design
+- [Architecture](architecture.md) — system design, storage, modules, dependency graph
+- [Roadmap](roadmap.md) — shipped work and phased plan
+- [Status](status.md) — current phase, module health, known issues
 
 ## Development
 
-- [Getting Started](getting-started.md) — run the backend, extension setup, tests
+- [Getting Started](getting-started.md) — backend, extension, macOS app, tests
 - [API Reference](api.md) — HTTP endpoints for all clients
 - [Project Structure](project-structure.md) — repo layout and hotkeys
-- [Chrome Extension](../chrome-extension/README.md) — load unpacked + native host install
+- [Chrome Extension](../chrome-extension/README.md) — load unpacked + launcher install
 
 ## Engineering
 
-These live at the repo root and govern how the system is built:
-
-- [ROADMAP.md](../ROADMAP.md) — phased engineering roadmap
-- [CLAUDE.md](../CLAUDE.md) — engineering constitution
-- [init.md](../init.md) — session initialization protocol
+- [CLAUDE.md](../CLAUDE.md) — engineering constitution (repo root)
+- [init.md](../init.md) — AI session initialization protocol (repo root)
+- [Engineering Workflow](engineering.md) — session checklists, trace/postmortem templates
+- [Agent Ownership](agents.md) — module boundaries and responsibilities
+- [Decisions](decisions.md) — architectural decision log
+- [Testing](testing.md) — unit tests and privacy eval harness
+- [Specs](specs/) — privacy pipeline, event schema, anonymization, buckets
