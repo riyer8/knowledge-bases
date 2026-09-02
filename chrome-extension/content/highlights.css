@@ -1,0 +1,77 @@
+#context-save-toolbar {
+  position: absolute;
+  z-index: 2147483646;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(124, 156, 255, 0.45);
+  background: rgba(15, 17, 21, 0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: auto;
+}
+
+#context-save-toolbar[hidden] {
+  display: none !important;
+}
+
+#context-save-toolbar button {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #f3f4f6;
+  background: rgba(124, 156, 255, 0.2);
+}
+
+#context-save-toolbar button[data-action="save"] {
+  background: #7c9cff;
+  color: #0f1115;
+}
+
+#context-save-toolbar button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+#context-save-toolbar .ctx-note-input {
+  width: 140px;
+  border-radius: 8px;
+  border: 1px solid rgba(124, 156, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f3f4f6;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+mark.ctx-highlight {
+  background: rgba(124, 156, 255, 0.28);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+mark.ctx-highlight.ctx-has-note {
+  border-bottom: 2px solid #7c9cff;
+}
+
+.ctx-highlight-note {
+  position: absolute;
+  z-index: 2147483645;
+  max-width: 220px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(15, 17, 21, 0.95);
+  border: 1px solid rgba(124, 156, 255, 0.35);
+  color: #e5e7eb;
+  font-size: 11px;
+  line-height: 1.35;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}

@@ -2,18 +2,25 @@ import SwiftUI
 
 struct SettingsPanel: View {
     @ObservedObject var settings: DesktopPetSettings
-    let clearAction: () async throws -> Void
+    let clearLibraryAction: () async throws -> Void
+    let deleteAllAction: () async throws -> Void
 
     @State private var selectedTheme: AppThemeMode
     @State private var selectedIcon: PetIconOption
     @State private var proactiveMinutes: Int
+    @State private var showLibraryClearConfirm = false
     @State private var showFinalDeleteConfirm = false
     @State private var isDeleting = false
     @State private var feedbackMessage: String?
 
-    init(settings: DesktopPetSettings, clearAction: @escaping () async throws -> Void) {
+    init(
+        settings: DesktopPetSettings,
+        clearLibraryAction: @escaping () async throws -> Void,
+        deleteAllAction: @escaping () async throws -> Void
+    ) {
         self._settings = ObservedObject(wrappedValue: settings)
-        self.clearAction = clearAction
+        self.clearLibraryAction = clearLibraryAction
+        self.deleteAllAction = deleteAllAction
         self._selectedTheme = State(initialValue: settings.themeMode)
         self._selectedIcon = State(initialValue: settings.petIcon)
         self._proactiveMinutes = State(initialValue: settings.proactiveIntervalMinutes)
@@ -64,11 +71,15 @@ struct SettingsPanel: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Danger Zone")
+                Text("Data")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                Text("Wipes all captured events, embeddings, graph edges, and bucket classifications from ~/.kb/")
+                Text("Clear saved library removes pages and quotes but keeps captured memory. Delete everything wipes all local knowledge.")
                     .font(.system(size: 11, design: .rounded))
                     .foregroundColor(.secondary)
+                Button("Clear Saved Library") {
+                    showLibraryClearConfirm = true
+                }
+                .disabled(isDeleting)
                 Button(role: .destructive) {
                     showFinalDeleteConfirm = true
                 } label: {
@@ -76,7 +87,7 @@ struct SettingsPanel: View {
                         ProgressView()
                             .controlSize(.small)
                     } else {
-                        Text("Delete All Information")
+                        Text("Delete All Data")
                     }
                 }
                 .disabled(isDeleting)
@@ -92,13 +103,21 @@ struct SettingsPanel: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .alert("Delete everything?", isPresented: $showFinalDeleteConfirm) {
+        .alert("Clear saved library?", isPresented: $showLibraryClearConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Clear Library", role: .destructive) {
+                Task { await runClearLibrary() }
+            }
+        } message: {
+            Text("Removes saved pages, quotes, and per-page chats. Captured memory, buckets, and integrations stay intact.")
+        }
+        .alert("Delete all data?", isPresented: $showFinalDeleteConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Delete Everything", role: .destructive) {
                 Task { await runDeleteAll() }
             }
         } message: {
-            Text("This permanently removes all captured knowledge from your local store. Cannot be undone.")
+            Text("Permanently removes all knowledge from ~/.kb/ including events, memory, relationships, and integration tokens. Cannot be undone.")
         }
         .onChange(of: selectedTheme) {
             guard settings.themeMode != selectedTheme else { return }
@@ -135,12 +154,23 @@ struct SettingsPanel: View {
         }
     }
 
+    private func runClearLibrary() async {
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            try await clearLibraryAction()
+            feedbackMessage = "Saved library cleared."
+        } catch {
+            feedbackMessage = "Failed to clear library. Ensure backend is running."
+        }
+    }
+
     private func runDeleteAll() async {
         isDeleting = true
         defer { isDeleting = false }
         do {
-            try await clearAction()
-            feedbackMessage = "All local information was deleted."
+            try await deleteAllAction()
+            feedbackMessage = "All local data was deleted."
         } catch {
             feedbackMessage = "Failed to delete data. Ensure backend is running."
         }

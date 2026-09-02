@@ -12,21 +12,59 @@
       <strong id="proactive-title"></strong>
       <span id="proactive-body" class="muted"></span>
     </div>
-    <button type="button" id="proactive-dismiss" class="text-btn" aria-label="Dismiss">✕</button>
+    <button type="button" id="proactive-dismiss" class="text-btn">Dismiss</button>
   </section>
   <header class="header">
     <div class="header-row">
       <div class="eyebrow">Context</div>
       <nav class="nav" id="nav">
-        <button class="nav-btn active" data-view="chat">Page</button>
-        <button class="nav-btn" data-view="saved">Saved</button>
-        <button class="nav-btn" data-view="life">Life</button>
-        <button class="nav-btn" data-view="graph">Graph</button>
+        <button class="nav-btn active" data-view="chat" title="Current browser tab — save quotes and chat">Page</button>
+        <button class="nav-btn" data-view="saved" title="Saved pages with summaries and history">Saved</button>
+        <button class="nav-btn" data-view="life" title="Review how your activity is categorized">Life</button>
+        <button class="nav-btn" data-view="graph" title="Connections between pages and ideas">Graph</button>
       </nav>
+      <button
+        type="button"
+        id="open-settings-btn"
+        class="icon-btn"
+        title="Settings"
+        aria-label="Settings"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
     </div>
-    <h1 id="page-title">Loading page…</h1>
-    <p id="page-site" class="muted"></p>
-    <div class="header-actions">
+    <textarea
+      id="page-title"
+      class="page-title-input page-context-only"
+      rows="1"
+      spellcheck="false"
+      placeholder="Page title (auto-filled from page)"
+      title="Edit the title before saving"
+    ></textarea>
+    <p id="page-site" class="muted page-context-only"></p>
+    <p id="page-type-hint" class="muted page-type-hint page-context-only" hidden></p>
+    <details class="metadata-panel page-context-only" id="metadata-panel">
+      <summary class="metadata-summary">Details</summary>
+      <div class="metadata-panel-body">
+        <div class="metadata-fields">
+          <label class="meta-field">
+            <span>Author</span>
+            <input type="text" id="meta-author" placeholder="Author" autocomplete="off" />
+          </label>
+          <label class="meta-field">
+            <span>Date</span>
+            <input type="text" id="meta-date" placeholder="Date" autocomplete="off" />
+          </label>
+        </div>
+        <div id="meta-custom-fields" class="meta-custom-fields"></div>
+        <button type="button" id="meta-add-field" class="text-btn meta-add-btn">+ Add field</button>
+        <p class="muted metadata-hint">Auto-filled when possible. Add your own labels below.</p>
+      </div>
+    </details>
+    <div class="header-actions page-context-only">
       <button type="button" id="save-page-btn" class="toolbar-btn primary">Save page</button>
       <button type="button" id="explore-btn" class="toolbar-btn sparkles" title="Things to explore">✨ Explore</button>
       <span id="save-badge" class="save-badge" hidden>Saved</span>
@@ -35,6 +73,7 @@
 
   <!-- Page view: quotes + chat tabs -->
   <section class="view active" id="view-chat">
+    <p class="view-intro muted">Work with the page open in your browser — highlight text to save quotes, or chat about what you're reading.</p>
     <section class="explore-panel" id="explore-panel" hidden>
       <h2>Explore next</h2>
       <div id="explore-suggestions" class="suggestion-list"></div>
@@ -57,7 +96,7 @@
         <input type="text" id="quote-note" class="quote-note" placeholder="Optional note…" />
         <div class="quote-actions">
           <button type="button" id="save-quote-confirm" class="toolbar-btn primary">Save quote</button>
-          <button type="button" id="save-quote-cancel" class="text-btn">Cancel</button>
+          <button type="button" id="save-quote-cancel" class="text-btn">Close</button>
         </div>
       </div>
 
@@ -90,6 +129,7 @@
 
   <!-- Saved pages view -->
   <section class="view" id="view-saved">
+    <p class="view-intro muted">Pages you've saved, with AI summaries, quotes, and chat history for each one.</p>
     <div id="saved-list" class="saved-list"></div>
     <div id="saved-detail" class="saved-detail" hidden>
       <button type="button" id="saved-back" class="text-btn">← All saved pages</button>
@@ -113,6 +153,7 @@
 
   <!-- Life / buckets view -->
   <section class="view" id="view-life">
+    <p class="view-intro muted">Life shows how captured activity (calendar, messages, etc.) is auto-sorted into buckets so you can review and correct it.</p>
     <div class="life-toolbar">
       <span class="muted">Review auto-classifications</span>
       <button type="button" id="refresh-life-btn" class="text-btn">Refresh</button>
@@ -125,6 +166,7 @@
 
   <!-- Graph view -->
   <section class="view" id="view-graph">
+    <p class="view-intro muted">Saved pages only — connected when they share topics from your highlights. Not individual quotes.</p>
     <div class="graph-toolbar">
       <span class="muted">Your saved pages, quotes, and concepts</span>
       <button type="button" id="refresh-graph-btn" class="text-btn">Refresh</button>
@@ -132,6 +174,81 @@
     <div id="graph-canvas" class="graph-canvas">
       <svg id="graph-svg" viewBox="0 0 600 400"></svg>
       <p id="graph-empty" class="muted graph-empty">Save pages and quotes to see your knowledge graph.</p>
+    </div>
+  </section>
+
+  <section class="view" id="view-settings">
+    <p class="view-intro muted">Connect an AI provider, verify setup, and manage local data. Everything stays on this Mac.</p>
+
+    <div class="settings-content">
+      <section class="settings-block">
+        <h2 class="settings-heading">Backend</h2>
+        <p id="settings-backend-status" class="settings-status muted">Checking connection…</p>
+        <p id="settings-provider-summary" class="muted"></p>
+        <button type="button" id="settings-retry-btn" class="text-btn" hidden>Retry connection</button>
+      </section>
+
+      <section class="settings-block">
+        <h2 class="settings-heading">AI provider</h2>
+        <p class="muted settings-lead">Add an API key to use cloud models, or leave on Auto to use OpenAI when configured, otherwise local Ollama.</p>
+        <label class="settings-field">
+          <span>Provider</span>
+          <select id="settings-llm-provider">
+            <option value="auto">Auto (OpenAI if key set, else Ollama)</option>
+            <option value="openai">OpenAI</option>
+            <option value="ollama">Ollama (local)</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </label>
+        <label class="settings-field">
+          <span>OpenAI API key</span>
+          <input type="password" id="settings-openai-key" placeholder="sk-…" autocomplete="off" />
+          <span id="settings-openai-hint" class="muted field-hint"></span>
+        </label>
+        <label class="settings-field">
+          <span>Anthropic API key</span>
+          <input type="password" id="settings-anthropic-key" placeholder="sk-ant-…" autocomplete="off" />
+          <span id="settings-anthropic-hint" class="muted field-hint"></span>
+        </label>
+        <label class="settings-field">
+          <span>OpenAI model</span>
+          <input type="text" id="settings-openai-model" placeholder="gpt-4o-mini" />
+        </label>
+        <label class="settings-field">
+          <span>Ollama chat model</span>
+          <input type="text" id="settings-chat-model" placeholder="qwen2.5:3b" />
+        </label>
+        <button type="button" id="settings-save-btn" class="toolbar-btn primary">Save settings</button>
+        <p id="settings-save-status" class="muted field-hint"></p>
+      </section>
+
+      <section class="settings-block">
+        <h2 class="settings-heading">One-time setup</h2>
+        <p class="muted">Install the launcher so Context can start the Python backend when you open the extension.</p>
+        <p class="setup-label">Run once in Terminal (from the repo)</p>
+        <code id="settings-install-command" class="setup-code">node scripts/install-launcher.mjs</code>
+        <p class="muted setup-alt">Then reload the extension. Or start manually: <code>python3 main.py</code></p>
+        <p class="muted">Config file: <code id="settings-env-path">.env</code></p>
+        <ul id="settings-setup-notes" class="settings-notes muted"></ul>
+      </section>
+
+      <section class="settings-block settings-danger">
+        <h2 class="settings-heading">Data</h2>
+        <div class="data-action">
+          <div class="data-action-copy">
+            <strong>Clear saved pages</strong>
+            <p class="muted">Removes saved pages, quotes, and per-page chats only. Captured events, Life buckets, and integrations stay.</p>
+          </div>
+          <button type="button" id="clear-library-btn" class="toolbar-btn">Clear saved pages</button>
+        </div>
+        <div class="data-action">
+          <div class="data-action-copy">
+            <strong>Delete all data</strong>
+            <p class="muted">Wipes everything in <code>~/.kb/</code> — events, memory, relationships, OAuth tokens, and the saved library. Cannot be undone.</p>
+          </div>
+          <button type="button" id="clear-all-btn" class="danger-btn">Delete all data</button>
+        </div>
+      </section>
     </div>
   </section>
 
@@ -148,9 +265,21 @@
 
   <footer class="footer">
     <span id="status" class="muted">Connecting to backend…</span>
-    <button type="button" id="retry-status-btn" class="text-btn" hidden>Retry</button>
-    <button type="button" id="clear-all-btn" class="text-btn danger-text">Clear all data</button>
+    <div class="footer-actions">
+      <button type="button" id="retry-status-btn" class="text-btn" hidden>Retry</button>
+    </div>
   </footer>
+
+  <div class="confirm-overlay" id="confirm-overlay" hidden>
+    <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <h2 id="confirm-title" class="confirm-title"></h2>
+      <div id="confirm-message" class="confirm-message"></div>
+      <div class="confirm-actions">
+        <button type="button" id="confirm-cancel" class="toolbar-btn">Cancel</button>
+        <button type="button" id="confirm-ok" class="toolbar-btn primary">Confirm</button>
+      </div>
+    </div>
+  </div>
 
   <script src="panel.js"></script>
 </body>

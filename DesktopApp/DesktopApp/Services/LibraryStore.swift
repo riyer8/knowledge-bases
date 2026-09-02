@@ -137,4 +137,27 @@ final class LibraryStore: ObservableObject {
             return false
         }
     }
+
+    func updateTitle(pageId: String, title: String) async -> Bool {
+        do {
+            var request = URLRequest(url: baseURL.appendingPathComponent("library/pages/\(pageId)"))
+            request.httpMethod = "PATCH"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            struct Body: Codable { let title: String }
+            request.httpBody = try JSONEncoder().encode(Body(title: title))
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+            struct PageResponse: Codable { let page: SavedPageDetail? }
+            if let updated = try? JSONDecoder().decode(PageResponse.self, from: data).page {
+                selectedPage = updated
+            }
+            await refreshPages()
+            return true
+        } catch {
+            errorMessage = "Could not update title."
+            return false
+        }
+    }
 }

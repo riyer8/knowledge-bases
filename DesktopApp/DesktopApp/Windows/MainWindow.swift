@@ -355,7 +355,11 @@ struct MainWindowView: View {
                     }
                 )
             } else if state.selectedPanel == .settings {
-                SettingsPanel(settings: settings, clearAction: clearAllData)
+                SettingsPanel(
+                    settings: settings,
+                    clearLibraryAction: clearSavedLibrary,
+                    deleteAllAction: deleteAllData
+                )
             } else {
                 GraphWindowView()
             }
@@ -442,20 +446,28 @@ struct MainWindowView: View {
         return try JSONDecoder().decode(ChatResponse.self, from: data).reply
     }
 
-    private func clearAllData() async throws {
-        let baseURL = URL(string: "http://127.0.0.1:8765")!
-        for path in ["library/clear", "delete-all"] {
-            var request = URLRequest(url: baseURL.appendingPathComponent(path))
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = Data("{}".utf8)
-            let (_, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-                throw URLError(.badServerResponse)
-            }
-        }
+    private func clearSavedLibrary() async throws {
+        try await DataResetService.clearLibrary()
+        await libraryStore.refreshAll()
+    }
+
+    private func deleteAllData() async throws {
+        try await DataResetService.deleteAll()
+        await resetClientStateAfterFullDelete()
+    }
+
+    @MainActor
+    private func resetClientStateAfterFullDelete() async {
+        messages = [
+            ChatMessage(
+                text: "hi, i'm sift 👋 what's on your mind?\n\nTry: \"What did I work on this week?\"",
+                isUser: false
+            ),
+        ]
+        inputText = ""
         await manualInputStore.refreshEntries()
         await libraryStore.refreshAll()
+        await lifeStore.refreshAll()
     }
 }
 

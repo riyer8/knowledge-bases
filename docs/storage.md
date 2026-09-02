@@ -54,9 +54,12 @@ Violating write boundaries is a bug. See [constitution.md](constitution.md).
 
 | Method | Scope |
 |---|---|
-| Extension footer **Clear all data** | Library + related memory |
-| `POST /library/clear` | Saved pages, quotes, library graph |
-| `POST /delete-all` | Broader wipe (desktop settings panel uses both) |
+| Extension footer **Clear library** | Saved pages, quotes, per-page chats (`POST /library/clear`) |
+| Extension footer **Delete all data** | Full `~/.kb/` wipe (`POST /delete-all`) |
+| Desktop Settings **Clear Saved Library** | Same as `POST /library/clear` |
+| Desktop Settings **Delete All Data** | Same as `POST /delete-all` |
+| `POST /library/clear` | Saved pages, quotes, library graph only |
+| `POST /delete-all` | Everything: events, index, graph, hashes, buckets, pages, relationships, OAuth tokens |
 
 Backups are the user's responsibility — there is no cloud sync by design.
 See [decisions.md](decisions.md) DECISION-001.

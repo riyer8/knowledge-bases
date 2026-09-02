@@ -183,6 +183,7 @@ def test_library_clear(backend_url, monkeypatch):
     status, body = _request("POST", f"{backend_url}/library/clear")
     assert status == 200
     assert body["ok"] is True
+    assert body.get("scope") == "library"
 
     status, listed = _request("GET", f"{backend_url}/library/pages")
     assert status == 200
@@ -300,9 +301,94 @@ def test_settings_endpoint(backend_url):
     assert status == 200
     assert "proactive_interval_minutes" in body
     assert body["proactive_interval_minutes"] >= 5
+    assert "env_path" in body
+    assert "llm_provider" in body
+    assert "setup_notes" in body
+
+
+def test_settings_update_endpoint(backend_url, tmp_path, monkeypatch):
+    env_file = tmp_path / ".env"
+    env_file.write_text("KB_LLM_PROVIDER=auto\nOPENAI_API_KEY=\n", encoding="utf-8")
+    monkeypatch.setattr("core.env_settings._ENV_PATH", env_file)
+
+    status, body = _request("POST", f"{backend_url}/settings", {
+        "llm_provider": "openai",
+        "openai_api_key": "sk-test-key-1234",
+        "openai_model": "gpt-4o-mini",
+    })
+    assert status == 200
+    assert body["settings"]["llm_provider_setting"] == "openai"
+    assert body["settings"]["openai_configured"] is True
+
+    status, loaded = _request("GET", f"{backend_url}/settings")
+    assert status == 200
+    assert loaded["openai_configured"] is True
 
 
 def test_imessage_status(backend_url):
     status, body = _request("GET", f"{backend_url}/integrations/imessage/status")
     assert status == 200
     assert "available" in body
+
+
+def test_update_page_title_patch(backend_url, monkeypatch):
+    import core.library_service as lib
+    monkeypatch.setattr(lib, "_generate_summary", lambda page: "Summary")
+    monkeypatch.setattr(lib, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    status, saved = _request("POST", f"{backend_url}/library/save-page", {
+        "page": {"url": "https://example.com/title-edit", "title": "Before", "visible_text": "x"},
+    })
+    assert status == 200
+    page_id = saved["page"]["id"]
+
+    status, body = _request("PATCH", f"{backend_url}/library/pages/{page_id}", {
+        "title": "After edit",
+    })
+    assert status == 200
+    assert body["page"]["title"] == "After edit"
+
+
+def test_update_page_metadata_patch(backend_url, monkeypatch):
+    import core.library_service as lib
+    monkeypatch.setattr(lib, "_generate_summary", lambda page: "Summary")
+    monkeypatch.setattr(lib, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    status, saved = _request("POST", f"{backend_url}/library/save-page", {
+        "page": {"url": "https://example.com/meta-edit", "title": "Before", "visible_text": "x"},
+    })
+    assert status == 200
+    page_id = saved["page"]["id"]
+
+    status, body = _request("PATCH", f"{backend_url}/library/pages/{page_id}", {
+        "metadata": {
+            "author": "Author Name",
+            "date": "2024",
+            "custom": [{"key": "Source", "value": "Web"}],
+        },
+    })
+    assert status == 200
+    assert body["page"]["metadata"]["author"] == "Author Name"
+
+
+def test_quote_patch_and_delete(backend_url, monkeypatch):
+    import core.library_service as lib
+    monkeypatch.setattr(lib, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    status, created = _request("POST", f"{backend_url}/library/quotes", {
+        "text": "Original quote",
+        "page_url": "https://example.com/quote-edit",
+        "page_title": "Page",
+    })
+    assert status == 200
+    quote_id = created["quote"]["id"]
+
+    status, body = _request("PATCH", f"{backend_url}/library/quotes/{quote_id}", {
+        "text": "Updated quote",
+        "note": "My note",
+    })
+    assert status == 200
+    assert body["quote"]["text"] == "Updated quote"
+
+    status, _ = _request("DELETE", f"{backend_url}/library/quotes/{quote_id}")
+    assert status == 200

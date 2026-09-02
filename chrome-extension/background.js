@@ -21,6 +21,19 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (!tab.url || info.status !== "complete") return;
   if (tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) return;
   await chrome.sidePanel.setOptions({ tabId, path: "sidepanel/index.html", enabled: true });
+  const [active] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (active?.id === tabId) {
+    await broadcastActiveTab(tab);
+  }
+});
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    await broadcastActiveTab(tab);
+  } catch {
+    // Tab may have closed before we read it.
+  }
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -42,15 +55,61 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
       try {
-        const [result] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: extractPageContext,
-        });
-        sendResponse({ page: result?.result || null });
+        const page = await getPageContextForTab(tab);
+        sendResponse({ page });
       } catch (err) {
         sendResponse({ error: String(err) });
       }
     });
+    return true;
+  }
+
+  if (message?.type === "GET_PAGE_QUOTES") {
+    (async () => {
+      try {
+        const pageUrl = String(message.page_url || "").trim();
+        if (!pageUrl) {
+          sendResponse({ ok: false, error: "page_url required" });
+          return;
+        }
+        const params = new URLSearchParams({ page_url: pageUrl });
+        const res = await fetch(`${BACKEND}/library/quotes?${params}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to load quotes");
+        sendResponse({ ok: true, quotes: data.quotes || [] });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+    })();
+    return true;
+  }
+
+  if (message?.type === "QUICK_SAVE_QUOTE") {
+    (async () => {
+      try {
+        const pageUrl = String(message.page_url || "").trim();
+        const customTitle = await getCustomTitle(pageUrl);
+        const savedMeta = await lookupSavedPage(pageUrl);
+        const pageTitle = customTitle || savedMeta?.title || String(message.page_title || "").trim();
+        const res = await fetch(`${BACKEND}/library/quotes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: String(message.text || "").trim(),
+            note: String(message.note || "").trim(),
+            page_id: savedMeta?.id || "",
+            page_url: pageUrl,
+            page_title: pageTitle,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Save quote failed");
+        await chrome.storage.session.set({ quoteSavedAt: Date.now() });
+        sendResponse({ ok: true, quote: data.quote });
+      } catch (err) {
+        sendResponse({ ok: false, error: String(err) });
+      }
+    })();
     return true;
   }
 
@@ -59,20 +118,142 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
+  if (message?.type === "PAGE_NAVIGATED" && _sender.tab?.id) {
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (tabs[0]?.id !== _sender.tab.id) return;
+      await broadcastActiveTab({
+        id: _sender.tab.id,
+        url: message.url || _sender.tab.url || "",
+        title: message.title || _sender.tab.title || "",
+      });
+    });
+    return false;
+  }
+
   return false;
 });
+
+async function broadcastActiveTab(tab) {
+  const url = tab?.url || "";
+  if (!url || url.startsWith("chrome://") || url.startsWith("edge://")) return;
+  await chrome.storage.session.set({
+    activeTabUrl: url,
+    activeTabId: tab.id,
+    activeTabTitle: tab.title || "",
+  });
+  chrome.runtime.sendMessage({
+    type: "TAB_CHANGED",
+    url,
+    tabId: tab.id,
+    title: tab.title || "",
+  }).catch(() => {});
+}
+
+function isPdfUrl(url = "") {
+  return /\.pdf($|[?#])/i.test(url);
+}
+
+async function getCustomTitle(url) {
+  if (!url) return "";
+  const key = `customTitle:${url}`;
+  const data = await chrome.storage.local.get(key);
+  return data[key] || "";
+}
+
+async function lookupSavedPage(url) {
+  if (!url) return null;
+  try {
+    const res = await fetch(`${BACKEND}/library/by-url?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
+    return data.page || null;
+  } catch {
+    return null;
+  }
+}
+
+async function getPageContextForTab(tab) {
+  const url = tab.url || "";
+  if (isPdfUrl(url)) {
+    return getPdfPageContext(tab);
+  }
+
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: extractPageContext,
+    });
+    const page = result?.result || null;
+    if (page?.visible_text?.trim()) {
+      const customTitle = await getCustomTitle(url);
+      if (customTitle) page.title = customTitle;
+      return page;
+    }
+  } catch {
+    // Fall through to document extraction for embedded viewers.
+  }
+
+  if (isPdfUrl(url)) {
+    return getPdfPageContext(tab);
+  }
+  return null;
+}
+
+async function getPdfPageContext(tab) {
+  const url = tab.url || "";
+  const customTitle = await getCustomTitle(url);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Could not fetch PDF (${response.status})`);
+  }
+  const buffer = await response.arrayBuffer();
+  const contentBase64 = arrayBufferToBase64(buffer);
+  const extractRes = await fetch(`${BACKEND}/library/extract-document`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url,
+      content_base64: contentBase64,
+      title: customTitle || tab.title || "",
+    }),
+  });
+  const data = await extractRes.json();
+  if (!extractRes.ok) {
+    throw new Error(data.error || "PDF extraction failed");
+  }
+  const page = data.page;
+  if (customTitle) page.title = customTitle;
+  return page;
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 ensureBackend().catch(() => {});
 
 async function ensureBackend({ maxWaitMs = 45000 } = {}) {
   const deadline = Date.now() + maxWaitMs;
+  let delay = 200;
+  let attempt = 0;
 
   while (Date.now() < deadline) {
     if (await isBackendHealthy()) {
       return { ok: true, status: "already_running" };
     }
     await requestLauncherStart();
-    await sleep(1000);
+    await sleep(delay);
+    attempt += 1;
+    if (attempt < 10) {
+      delay = Math.min(delay + 150, 900);
+    } else {
+      delay = 1000;
+    }
   }
 
   if (await isBackendHealthy()) {

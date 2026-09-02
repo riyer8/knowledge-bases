@@ -129,7 +129,8 @@ Graph nodes and edges for the saved library visualization.
 
 ### `POST /library/clear`
 
-Wipe all library data (saved pages, quotes, chats).
+Clears the saved library only (pages, quotes, per-page chats). Returns
+`{ "ok": true, "scope": "library" }`.
 
 ## Desktop App — Legacy Endpoints
 
@@ -285,8 +286,9 @@ Ingest recent iMessages through the privacy pipeline.
 
 ### `POST /delete-all`
 
-Deletes all runtime data under `~/.kb/` (library, events, index, graph, hashes, buckets,
-pages).
+Deletes all runtime data under `~/.kb/` including library, events, index, graph,
+hashes, buckets, pages, relationship profiles, and OAuth tokens. Returns
+`{ "ok": true, "scope": "all" }`.
 
 ### `POST /ingest`
 

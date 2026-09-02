@@ -116,8 +116,15 @@ def test_graph_visual(library_env, monkeypatch):
         "title": "Graph Page",
         "visible_text": "Content",
     })
+    library_env.save_quote(
+        text="A quote that should not appear as its own node",
+        page_url="https://example.com/e",
+        page_title="Graph Page",
+    )
     graph = library_env.graph_visual()
     assert any(n["type"] == "page" for n in graph["nodes"])
+    assert not any(n["type"] == "quote" for n in graph["nodes"])
+    assert len(graph["nodes"]) == 1
 
 
 def test_list_quotes_by_page_url(library_env, monkeypatch):

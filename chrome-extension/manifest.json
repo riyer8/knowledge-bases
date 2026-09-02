@@ -3,7 +3,7 @@
   "name": "Context",
   "version": "0.1.0",
   "description": "Ask anything about the page you're reading. Remembers what you've learned.",
-  "permissions": ["activeTab", "sidePanel", "storage", "scripting", "nativeMessaging"],
+  "permissions": ["activeTab", "tabs", "sidePanel", "storage", "scripting", "nativeMessaging"],
   "host_permissions": [
     "http://127.0.0.1:8765/*",
     "http://localhost:8765/*",
@@ -23,8 +23,10 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/extract.js"],
-      "run_at": "document_idle"
+      "js": ["content/extract.js", "content/highlights.js"],
+      "css": ["content/highlights.css"],
+      "run_at": "document_idle",
+      "all_frames": true
     }
   ]
 }

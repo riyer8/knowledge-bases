@@ -5,6 +5,7 @@ struct LibraryPanelView: View {
     let panelTitleColor: Color
     let sectionBackground: Color
     @State private var showQuotes = false
+    @State private var editingTitle: String = ""
 
     var body: some View {
         HSplitView {
@@ -82,9 +83,11 @@ struct LibraryPanelView: View {
                 if let page = libraryStore.selectedPage {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(page.title)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                .foregroundColor(panelTitleColor)
+                            TextField("Title", text: $editingTitle, onCommit: {
+                                Task { await saveTitle(for: page.id) }
+                            })
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .textFieldStyle(.plain)
                             if let url = URL(string: page.url) {
                                 Link(page.url, destination: url)
                                     .font(.system(size: 10, design: .rounded))
@@ -154,5 +157,17 @@ struct LibraryPanelView: View {
         }
         .background(sectionBackground)
         .task { await libraryStore.refreshAll() }
+        .onChange(of: libraryStore.selectedPage?.id) { _, _ in
+            editingTitle = libraryStore.selectedPage?.title ?? ""
+        }
+        .onAppear {
+            editingTitle = libraryStore.selectedPage?.title ?? ""
+        }
+    }
+
+    private func saveTitle(for pageId: String) async {
+        let trimmed = editingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        _ = await libraryStore.updateTitle(pageId: pageId, title: trimmed)
     }
 }

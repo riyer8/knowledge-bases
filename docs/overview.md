@@ -65,7 +65,10 @@ OpenAI; otherwise Ollama. All LLM calls go through `core/llm_providers.py` / `co
 | `~/.kb/events/` | Raw and clean event logs |
 | `~/.kb/hashes/` | Name hash map and salt |
 
-Reset everything: **Clear all data** in the extension footer or `POST /library/clear`.
+Reset options (symmetric in extension footer and desktop Settings):
+
+- **Clear library** — saved pages, quotes, per-page chats (`POST /library/clear`)
+- **Delete all data** — full `~/.kb/` wipe (`POST /delete-all`)
 
 ## API surface
 
@@ -79,4 +82,5 @@ Full reference: [api.md](api.md). Core library endpoints:
 | `GET` | `/library/pages/{id}` | Page detail + chat + quotes |
 | `POST` | `/library/quotes` | Save a highlighted quote |
 | `GET` | `/library/graph` | Graph nodes + edges |
-| `POST` | `/library/clear` | Wipe library data |
+| `POST` | `/library/clear` | Clear saved library only |
+| `POST` | `/delete-all` | Wipe all runtime data |

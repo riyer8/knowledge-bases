@@ -30,6 +30,7 @@ from core.library_service import (
     clear_library,
     delete_saved_page,
     explore_suggestions,
+    extract_document_context,
     find_saved_page_by_url,
     get_saved_page,
     graph_visual,
@@ -37,6 +38,9 @@ from core.library_service import (
     list_saved_pages,
     save_page as library_save_page,
     save_quote,
+    update_page,
+    update_quote,
+    delete_quote,
 )
 from core.memory.concept_graph import list_concepts, related_for_page
 from core.page_context_service import (
@@ -48,6 +52,7 @@ from core.page_context_service import (
     search_pages,
 )
 from core.retrieval.page_chat import ask_about_page
+from core.env_settings import get_client_settings, update_client_settings
 from core.llm_providers import resolve_llm_provider
 
 # Temporary landing dir for raw screenshots before OCR
@@ -185,7 +190,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
 
     def _send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def _send_json(self, status: HTTPStatus, payload: Any) -> None:
@@ -206,6 +211,57 @@ class FrontendHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT.value)
         self._send_cors_headers()
         self.end_headers()
+
+    def do_PATCH(self) -> None:
+        try:
+            payload = self._read_json()
+        except Exception:
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON"})
+            return
+
+        path = urlparse(self.path).path
+        if path.startswith("/library/pages/"):
+            page_id = path.split("/library/pages/", 1)[1].strip("/")
+            if not page_id:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page id required"})
+                return
+            title = payload.get("title")
+            metadata = payload.get("metadata")
+            if title is not None:
+                title = str(title).strip()
+            if title is None and metadata is None:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "title or metadata is required"})
+                return
+            try:
+                page = update_page(page_id, title=title, metadata=metadata)
+                self._send_json(HTTPStatus.OK, {"ok": True, "page": page})
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            return
+        if path.startswith("/library/quotes/"):
+            quote_id = path.split("/library/quotes/", 1)[1].strip("/")
+            if not quote_id:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "quote id required"})
+                return
+            text = payload.get("text")
+            note = payload.get("note")
+            if text is not None:
+                text = str(text).strip()
+            if text is None and note is None:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "text or note is required"})
+                return
+            try:
+                quote = update_quote(quote_id, text=text, note=note)
+                self._send_json(HTTPStatus.OK, {"ok": True, "quote": quote})
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+            return
+
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -248,11 +304,7 @@ class FrontendHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.OK, {"available": is_available()})
 
         elif path == "/settings":
-            self._send_json(HTTPStatus.OK, {
-                "proactive_interval_minutes": config.proactive_interval_minutes,
-                "chat_model": config.chat_model,
-                "llm_provider": resolve_llm_provider(),
-            })
+            self._send_json(HTTPStatus.OK, get_client_settings())
 
         elif path == "/proactive":
             try:
@@ -507,10 +559,19 @@ class FrontendHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
+        elif path == "/settings":
+            try:
+                settings = update_client_settings(payload)
+                self._send_json(HTTPStatus.OK, {"ok": True, "settings": settings})
+            except ValueError as exc:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+            except Exception as exc:
+                self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+
         elif path == "/delete-all":
             try:
                 _delete_all()
-                self._send_json(HTTPStatus.OK, {"ok": True})
+                self._send_json(HTTPStatus.OK, {"ok": True, "scope": "all"})
             except Exception as exc:
                 self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
 
@@ -588,6 +649,17 @@ class FrontendHandler(BaseHTTPRequestHandler):
             deleted = delete_saved_page(page_id)
             if not deleted:
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "page not found"})
+                return
+            self._send_json(HTTPStatus.OK, {"ok": True})
+            return
+        if path.startswith("/library/quotes/"):
+            quote_id = path.split("/library/quotes/", 1)[1].strip("/")
+            if not quote_id:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "quote id required"})
+                return
+            deleted = delete_quote(quote_id)
+            if not deleted:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": "quote not found"})
                 return
             self._send_json(HTTPStatus.OK, {"ok": True})
             return
@@ -715,9 +787,22 @@ class FrontendHandler(BaseHTTPRequestHandler):
                 suggestions = explore_suggestions(page)
                 self._send_json(HTTPStatus.OK, {"suggestions": suggestions})
                 return
+            if path == "/library/extract-document":
+                try:
+                    page = extract_document_context(
+                        url=str(payload.get("url", "")).strip(),
+                        content_base64=str(payload.get("content_base64", "")).strip(),
+                        title=str(payload.get("title", "")).strip(),
+                    )
+                    self._send_json(HTTPStatus.OK, {"ok": True, "page": page})
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
+                return
             if path == "/library/clear":
-                _delete_all()
-                self._send_json(HTTPStatus.OK, {"ok": True})
+                clear_library()
+                self._send_json(HTTPStatus.OK, {"ok": True, "scope": "library"})
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
         except ValueError as exc:
@@ -837,8 +922,8 @@ def _demo_hint(prompt: str) -> str | None:
 
 def _delete_all() -> None:
     """Wipe all runtime data under ~/.kb/."""
-    clear_library()
     for subdir in [
+        config.kb_root / "library",
         config.events_raw_dir,
         config.events_clean_dir,
         config.index_dir,
@@ -846,9 +931,13 @@ def _delete_all() -> None:
         config.hashes_dir,
         config.buckets_dir,
         config.pages_dir,
+        config.auth_dir,
+        config.kb_root / "relationships",
     ]:
         if subdir.exists():
             shutil.rmtree(subdir)
+    if config.paused_log.exists():
+        config.paused_log.unlink()
     config.ensure_dirs()
 
 
