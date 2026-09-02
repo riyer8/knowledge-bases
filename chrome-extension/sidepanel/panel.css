@@ -6,11 +6,26 @@
   --text: #f3f4f6;
   --muted: #9ca3af;
   --accent: #7c9cff;
+  --accent-soft: rgba(124, 156, 255, 0.12);
   --border: #2a2f3a;
   --danger: #f87171;
+  --radius-sm: 8px;
+  --radius-md: 12px;
 }
 
 * { box-sizing: border-box; }
+
+*:focus-visible {
+  outline: 2px solid rgba(124, 156, 255, 0.55);
+  outline-offset: 2px;
+}
+
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover { background: #3d4658; }
 
 body {
   margin: 0;
@@ -27,9 +42,21 @@ body {
 
 .view-intro {
   margin: 0;
-  padding: 10px 14px 0;
-  font-size: 12px;
-  line-height: 1.45;
+  padding: 8px 14px 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.view-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-pad {
+  padding: 10px 14px 14px;
 }
 
 .header.page-context-hidden .page-context-only {
@@ -193,27 +220,6 @@ body {
   background: var(--panel);
 }
 
-.proactive-banner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
-  background: linear-gradient(90deg, rgba(124, 156, 255, 0.15), rgba(124, 156, 255, 0.05));
-  border-bottom: 1px solid var(--border);
-}
-
-.proactive-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
-}
-
-.proactive-content strong {
-  color: var(--accent);
-}
-
 .header-row {
   display: flex;
   align-items: center;
@@ -266,16 +272,23 @@ body {
   border: 1px solid transparent;
   background: transparent;
   color: var(--muted);
-  border-radius: 8px;
-  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.nav-btn:hover:not(.active) {
+  color: var(--text);
+  background: var(--accent-soft);
 }
 
 .nav-btn.active {
   color: var(--text);
   border-color: var(--border);
-  background: rgba(124, 156, 255, 0.1);
+  background: var(--accent-soft);
 }
 
 h1 { font-size: 16px; line-height: 1.35; margin: 0 0 4px; }
@@ -313,17 +326,23 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.page-tab:hover:not(.active) {
+  color: var(--text);
+  background: var(--accent-soft);
 }
 
 .page-tab.active {
   color: var(--text);
   border-color: var(--accent);
-  background: rgba(124, 156, 255, 0.12);
+  background: var(--accent-soft);
 }
 
 .page-panel {
@@ -540,6 +559,13 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   padding: 8px 12px;
   font-size: 12px;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+a.toolbar-btn {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
 }
 
 .toolbar-btn.primary {
@@ -606,9 +632,13 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   margin-bottom: 10px;
   cursor: pointer;
   background: var(--panel);
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.saved-card:hover { border-color: var(--accent); }
+.saved-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .saved-card h3 { margin: 0 0 4px; font-size: 14px; }
 
 .detail-block {
@@ -660,16 +690,19 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   gap: 8px;
   margin-bottom: 10px;
   flex-wrap: wrap;
+  padding: 0 14px;
 }
 
 .wiki-status {
   margin-bottom: 10px;
   font-size: 12px;
+  padding: 0 14px;
 }
 
 .wiki-articles {
   display: grid;
   gap: 8px;
+  padding: 0 14px;
 }
 
 .wiki-card {
@@ -678,10 +711,16 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   text-align: left;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   cursor: pointer;
   color: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wiki-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .wiki-card strong {
@@ -695,9 +734,12 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
 }
 
 .wiki-ask {
-  margin-top: 12px;
+  margin-top: auto;
   display: grid;
   gap: 8px;
+  padding: 14px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
 }
 
 .wiki-ask textarea {

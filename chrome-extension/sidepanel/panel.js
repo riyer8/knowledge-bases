@@ -62,10 +62,6 @@ const els = {
   retryStatusBtn: document.getElementById("retry-status-btn"),
   pageSubnav: document.getElementById("page-subnav"),
   chatEmptyHint: document.getElementById("chat-empty-hint"),
-  proactiveBanner: document.getElementById("proactive-banner"),
-  proactiveTitle: document.getElementById("proactive-title"),
-  proactiveBody: document.getElementById("proactive-body"),
-  proactiveDismiss: document.getElementById("proactive-dismiss"),
   lifeSummary: document.getElementById("life-summary"),
   lifeEvents: document.getElementById("life-events"),
   pageTypeHint: document.getElementById("page-type-hint"),
@@ -233,8 +229,7 @@ async function init() {
   if (!backendReady) {
     showSetupHelp();
   } else {
-    loadProactiveInsights();
-    setInterval(loadProactiveInsights, 20 * 60 * 1000);
+    hideSetupHelp();
   }
 }
 
@@ -334,9 +329,6 @@ function bindEvents() {
     savePageDetails();
   });
   els.pageQuotes?.addEventListener("click", handlePageQuoteAction);
-  on(els.proactiveDismiss, "click", () => {
-    els.proactiveBanner.hidden = true;
-  });
 
   on(els.nav, "click", (event) => {
     const button = event.target.closest(".nav-btn");
@@ -1660,7 +1652,6 @@ function resetExtensionClientState() {
     els.lifeEvents.innerHTML =
       '<p class="muted empty-hint">Captured events will appear here for bucket review.</p>';
   }
-  if (els.proactiveBanner) els.proactiveBanner.hidden = true;
 }
 
 function appendMessage(role, text) {
@@ -1676,26 +1667,6 @@ function appendMessage(role, text) {
 function removeChatEmptyHint() {
   const hint = document.getElementById("chat-empty-hint");
   if (hint) hint.remove();
-}
-
-async function loadProactiveInsights() {
-  if (!els.proactiveBanner) return;
-  try {
-    const res = await fetch(`${BACKEND}/proactive`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const insights = data.insights || [];
-    if (!insights.length) {
-      els.proactiveBanner.hidden = true;
-      return;
-    }
-    const top = insights[0];
-    els.proactiveTitle.textContent = top.title || "Insight";
-    els.proactiveBody.textContent = top.body || "";
-    els.proactiveBanner.hidden = false;
-  } catch {
-    // Backend may be offline; banner stays hidden
-  }
 }
 
 async function loadLifeView() {

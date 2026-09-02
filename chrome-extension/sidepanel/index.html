@@ -7,13 +7,6 @@
   <link rel="stylesheet" href="panel.css" />
 </head>
 <body>
-  <section class="proactive-banner" id="proactive-banner" hidden>
-    <div class="proactive-content">
-      <strong id="proactive-title"></strong>
-      <span id="proactive-body" class="muted"></span>
-    </div>
-    <button type="button" id="proactive-dismiss" class="text-btn">Dismiss</button>
-  </section>
   <header class="header">
     <div class="header-row">
       <div class="eyebrow">Context</div>
@@ -75,7 +68,7 @@
 
   <!-- Page view: quotes + chat tabs -->
   <section class="view active" id="view-chat">
-    <p class="view-intro muted">Work with the page open in your browser — highlight text to save quotes, or chat about what you're reading.</p>
+    <p class="view-intro muted">Highlight text to save quotes, or chat about this page.</p>
     <section class="explore-panel" id="explore-panel" hidden>
       <h2>Explore next</h2>
       <div id="explore-suggestions" class="suggestion-list"></div>
@@ -131,7 +124,7 @@
 
   <!-- Saved pages view -->
   <section class="view" id="view-saved">
-    <p class="view-intro muted">Pages you've saved, with AI summaries, quotes, and chat history for each one.</p>
+    <p class="view-intro muted">Saved pages with summaries, quotes, and chat.</p>
     <div id="saved-list" class="saved-list"></div>
     <div id="saved-detail" class="saved-detail" hidden>
       <button type="button" id="saved-back" class="text-btn">← All saved pages</button>
@@ -156,7 +149,7 @@
 
   <!-- Life / buckets view -->
   <section class="view" id="view-life">
-    <p class="view-intro muted">Life shows how captured activity (calendar, messages, etc.) is auto-sorted into buckets so you can review and correct it.</p>
+    <p class="view-intro muted">Review and correct auto-sorted activity buckets.</p>
     <div class="life-toolbar">
       <span class="muted">Review auto-classifications</span>
       <button type="button" id="refresh-life-btn" class="text-btn">Refresh</button>
@@ -169,24 +162,23 @@
 
   <!-- Graph view -->
   <section class="view" id="view-graph">
-    <p class="view-intro muted">Saved pages only — connected when they share topics from your highlights. Not individual quotes.</p>
+    <p class="view-intro muted">Pages linked by shared topics.</p>
     <div class="graph-toolbar">
-      <span class="muted">Your saved pages, quotes, and concepts</span>
+      <span class="muted">Page connections</span>
       <button type="button" id="refresh-graph-btn" class="text-btn">Refresh</button>
     </div>
     <div id="graph-canvas" class="graph-canvas">
       <svg id="graph-svg" viewBox="0 0 600 400"></svg>
-      <p id="graph-empty" class="muted graph-empty">Save pages and quotes to see your knowledge graph.</p>
+      <p id="graph-empty" class="muted graph-empty">Save pages to see how they connect.</p>
     </div>
-  </section>
-
   </section>
 
   <!-- Wiki view -->
   <section class="view" id="view-wiki">
-    <p class="view-intro muted">Compiled articles from your reading. Open the full wiki to browse.</p>
+    <p class="view-intro muted">Compiled articles from your reading.</p>
+    <div class="view-scroll">
     <div class="wiki-toolbar">
-      <a id="open-wiki-app" class="toolbar-btn" href="http://127.0.0.1:8765/app/" target="_blank" rel="noopener">Open full wiki</a>
+      <a id="open-wiki-app" class="toolbar-btn" href="http://127.0.0.1:8765/app/#wiki" target="_blank" rel="noopener">Open dashboard</a>
       <button type="button" id="wiki-compile-btn" class="toolbar-btn primary">Compile</button>
       <button type="button" id="wiki-refresh-btn" class="text-btn">Refresh</button>
     </div>
@@ -198,13 +190,20 @@
       <button type="button" id="wiki-ask-btn" class="toolbar-btn primary">Ask</button>
       <div id="wiki-ask-reply" class="wiki-ask-reply" hidden></div>
     </section>
-    <p id="wiki-empty" class="muted empty-hint">Save pages, then add them to the wiki. Compile turns raw sources into articles.</p>
+    <p id="wiki-empty" class="muted empty-hint view-pad">Save pages, add to wiki, then compile.</p>
+    </div>
   </section>
 
   <section class="view" id="view-settings">
-    <p class="view-intro muted">Connect an AI provider, verify setup, and manage local data. Everything stays on this Mac.</p>
+    <p class="view-intro muted">Provider, setup, and data management.</p>
 
     <div class="settings-content">
+      <section class="settings-block">
+        <h2 class="settings-heading">Dashboard</h2>
+        <p class="muted settings-lead">Browse library, graph, life, and wiki in a full local UI.</p>
+        <a href="http://127.0.0.1:8765/app/" target="_blank" rel="noopener" class="toolbar-btn dashboard-link">Open dashboard</a>
+      </section>
+
       <section class="settings-block">
         <h2 class="settings-heading">Backend</h2>
         <p id="settings-backend-status" class="settings-status muted">Checking connection…</p>
