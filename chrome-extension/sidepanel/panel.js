@@ -83,6 +83,7 @@ const els = {
   settingsChatModel: document.getElementById("settings-chat-model"),
   settingsSaveBtn: document.getElementById("settings-save-btn"),
   settingsSaveStatus: document.getElementById("settings-save-status"),
+  settingsTheme: document.getElementById("settings-theme"),
   settingsInstallCommand: document.getElementById("settings-install-command"),
   settingsEnvPath: document.getElementById("settings-env-path"),
   settingsSetupNotes: document.getElementById("settings-setup-notes"),
@@ -304,6 +305,9 @@ function bindEvents() {
   on(els.openSettingsBtn, "click", () => switchView("settings"));
   on(els.settingsSaveBtn, "click", saveSettingsFromForm);
   on(els.settingsRetryBtn, "click", retryBackendConnection);
+  on(els.settingsTheme, "change", (event) => {
+    ContextTheme.setTheme(event.target.value);
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && activeConfirmFinish) {
       event.preventDefault();
@@ -1607,6 +1611,7 @@ function updateSettingsBackendStatus(ok, message = "") {
 }
 
 async function loadSettingsView() {
+  ContextTheme.syncThemeSelect(els.settingsTheme);
   const backendOk = await checkBackendHealth();
   updateSettingsBackendStatus(backendOk);
   if (!backendOk) {

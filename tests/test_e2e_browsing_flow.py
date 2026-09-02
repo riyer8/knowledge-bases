@@ -315,3 +315,23 @@ def test_e2e_library_clear_then_quotes_empty(backend_url, mock_browsing_llm):
 
     status, graph = _request("GET", f"{backend_url}/library/graph")
     assert graph["nodes"] == []
+
+
+def test_e2e_delete_saved_page(backend_url, mock_browsing_llm):
+    """Delete a saved page via API (extension + dashboard parity)."""
+    page = _sample_page(url="https://example.com/delete-me", title="Delete me")
+    status, saved = _request("POST", f"{backend_url}/library/save-page", {
+        "page": page,
+        "history": [],
+    })
+    assert status == 200
+    page_id = saved["page"]["id"]
+
+    status, pages = _request("GET", f"{backend_url}/library/pages")
+    assert any(p["id"] == page_id for p in pages["pages"])
+
+    status, body = _request("DELETE", f"{backend_url}/library/pages/{page_id}")
+    assert status == 200
+
+    status, pages_after = _request("GET", f"{backend_url}/library/pages")
+    assert not any(p["id"] == page_id for p in pages_after["pages"])

@@ -442,3 +442,12 @@ def test_wiki_ask_endpoint(backend_url, monkeypatch):
     assert status == 200
     assert body["ok"] is True
     assert "Answer to" in body["reply"]
+
+
+def test_app_serves_design_assets(backend_url):
+    for asset in ("tokens.css", "theme.js", "markdown.js"):
+        req = request.Request(f"{backend_url}/app/{asset}", method="GET")
+        with request.urlopen(req, timeout=10) as resp:
+            assert resp.status == 200
+            body = resp.read().decode("utf-8")
+            assert len(body) > 20

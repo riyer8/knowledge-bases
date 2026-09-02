@@ -41,7 +41,7 @@ knowledge-bases/
 │   ├── install_app.sh             # Build + install Context.app
 │   └── generate_app_icon.py
 ├── tests/                         # pytest + privacy eval fixtures
-├── web/                           # Local wiki browser (served at /app/)
+├── web/                           # Local dashboard (served at /app/)
 ├── demo/seed_demo.py              # Presentation seed data
 ├── main.py                        # Backend entry point
 ├── start.sh / stop.sh             # Backend lifecycle

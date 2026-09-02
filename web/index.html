@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Context</title>
+  <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="app.css" />
+  <script src="theme.js"></script>
+  <script>ContextTheme.initTheme();</script>
 </head>
 <body>
   <div class="shell">
@@ -124,6 +127,18 @@
       <!-- Settings -->
       <section class="view" id="view-settings">
         <div class="settings-grid">
+          <article class="panel-card">
+            <h3>Appearance</h3>
+            <p class="muted small">Light, dark, or match your system.</p>
+            <label class="theme-field">
+              <span>Theme</span>
+              <select id="settings-theme">
+                <option value="system">System</option>
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </label>
+          </article>
           <article class="panel-card">
             <h3>Backend</h3>
             <p id="settings-backend" class="muted">Checking…</p>

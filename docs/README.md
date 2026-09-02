@@ -20,6 +20,7 @@
 |---|---|
 | [Overview](overview.md) | Features, quick start, data locations |
 | [Vision](vision.md) | Product thesis, UX principles |
+| [Design](design.md) | Color system, typography, components, theme modes |
 | [Architecture](architecture.md) | System design, modules, API summary, dependency graph |
 | [Roadmap](roadmap.md) | Shipped milestones + phased plan |
 | [Status](status.md) | **Current state** — read this before every session |

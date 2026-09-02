@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Context</title>
+  <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="panel.css" />
+  <script src="theme.js"></script>
+  <script>ContextTheme.initTheme();</script>
 </head>
 <body>
   <header class="header">
@@ -206,6 +209,19 @@
         <h2 class="settings-heading">Dashboard</h2>
         <p class="muted settings-lead">Browse library, graph, life, and wiki in a full local UI.</p>
         <a href="http://127.0.0.1:8765/app/" target="_blank" rel="noopener" class="toolbar-btn dashboard-link">Open dashboard</a>
+      </section>
+
+      <section class="settings-block">
+        <h2 class="settings-heading">Appearance</h2>
+        <p class="muted settings-lead">Choose light, dark, or match your system.</p>
+        <label class="settings-field">
+          <span>Theme</span>
+          <select id="settings-theme">
+            <option value="system">System</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </label>
       </section>
 
       <section class="settings-block">

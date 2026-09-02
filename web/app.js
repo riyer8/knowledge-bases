@@ -509,6 +509,7 @@ async function loadWiki() {
 // --- Settings ---
 
 async function loadSettings() {
+  ContextTheme.syncThemeSelect($("settings-theme"));
   try {
     const [health, settings] = await Promise.all([
       apiGet("/health"),
@@ -638,6 +639,10 @@ $("wiki-body")?.addEventListener("click", (e) => {
 const initialView = (location.hash || "#home").slice(1) || "home";
 switchView(VIEW_META[initialView] ? initialView : "home");
 loadHome();
+
+$("settings-theme")?.addEventListener("change", (event) => {
+  ContextTheme.setTheme(event.target.value);
+});
 
 window.addEventListener("hashchange", () => {
   const view = (location.hash || "#home").slice(1);
