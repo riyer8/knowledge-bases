@@ -1308,11 +1308,17 @@ async function loadSavedPages() {
       card.className = "saved-card";
       card.dataset.pageId = page.id;
       const summaryPreview = (page.summary || "").replace(/\s+/g, " ").trim();
+      const quoteCount = Number(page.quote_count || 0);
+      const savedWhen = formatTimestamp(page.saved_at);
       card.innerHTML = `
         <div class="saved-card-main">
           <h3>${escapeHtml(page.title || "Untitled")}</h3>
-          <p class="muted">${escapeHtml(page.site || "")}</p>
-          <p class="saved-card-summary">${escapeHtml(summaryPreview.slice(0, 140))}${summaryPreview.length > 140 ? "…" : ""}</p>
+          <div class="saved-card-meta">
+            <span class="muted">${escapeHtml(page.site || "")}</span>
+            ${quoteCount ? `<span class="saved-card-pill">${quoteCount} quote${quoteCount === 1 ? "" : "s"}</span>` : ""}
+            ${savedWhen ? `<span class="saved-card-pill">${escapeHtml(savedWhen)}</span>` : ""}
+          </div>
+          ${summaryPreview ? `<p class="saved-card-summary">${escapeHtml(summaryPreview.slice(0, 140))}${summaryPreview.length > 140 ? "…" : ""}</p>` : ""}
         </div>
         <button type="button" class="text-btn danger-text saved-card-delete" data-delete-page="${escapeAttr(page.id)}">Delete</button>
       `;
@@ -1737,7 +1743,7 @@ async function loadLifeView() {
       for (const item of topLevel) {
         const chip = document.createElement("span");
         chip.className = "life-chip";
-        chip.textContent = `${item.category}: ${item.percent}%`;
+        chip.innerHTML = `<strong>${escapeHtml(item.category)}</strong> ${escapeHtml(String(item.percent))}%`;
         els.lifeSummary.appendChild(chip);
       }
     }

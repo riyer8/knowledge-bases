@@ -17,9 +17,17 @@ const state = {
   wikiPane: "index",
   wikiArticles: [],
   wikiRaw: [],
+  wikiSelectedKey: null,
 };
 
 const $ = (id) => document.getElementById(id);
+
+function formatShortDate(raw) {
+  if (!raw) return "";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 function toast(msg) {
   const el = $("toast");
@@ -141,9 +149,17 @@ async function loadLibrary() {
       const card = document.createElement("div");
       card.className = `lib-card${page.id === state.selectedPageId ? " active" : ""}`;
       card.dataset.pageId = page.id;
+      const summaryPreview = (page.summary || "").replace(/\s+/g, " ").trim();
+      const quoteCount = Number(page.quote_count || 0);
+      const savedWhen = formatShortDate(page.saved_at);
       card.innerHTML = `
         <h4>${escapeHtml(page.title || "Untitled")}</h4>
-        <p>${escapeHtml(page.site || page.url || "")}</p>
+        <div class="lib-card-meta">
+          <span>${escapeHtml(page.site || "")}</span>
+          ${quoteCount ? `<span class="lib-pill">${quoteCount} quote${quoteCount === 1 ? "" : "s"}</span>` : ""}
+          ${savedWhen ? `<span class="lib-pill">${escapeHtml(savedWhen)}</span>` : ""}
+        </div>
+        ${summaryPreview ? `<p class="lib-card-summary">${escapeHtml(summaryPreview.slice(0, 100))}${summaryPreview.length > 100 ? "…" : ""}</p>` : ""}
       `;
       card.addEventListener("click", () => openPage(page.id));
       list.appendChild(card);
@@ -319,8 +335,7 @@ async function renderGraph() {
       text.setAttribute("x", pos.x);
       text.setAttribute("y", pos.y + 28);
       text.setAttribute("text-anchor", "middle");
-      text.setAttribute("fill", "#9ca3af");
-      text.setAttribute("font-size", "11");
+      text.setAttribute("class", "graph-node-label");
       text.textContent = (node.label || "Page").slice(0, 24);
       group.appendChild(text);
       g.appendChild(group);
@@ -353,7 +368,7 @@ async function loadLife() {
       for (const item of topLevel) {
         const chip = document.createElement("span");
         chip.className = "chip";
-        chip.textContent = `${item.category}: ${item.percent}%`;
+        chip.innerHTML = `<strong>${escapeHtml(item.category)}</strong> ${escapeHtml(String(item.percent))}%`;
         chips.appendChild(chip);
       }
     }
@@ -425,6 +440,7 @@ async function loadWikiStatus() {
 
 async function loadWikiIndex() {
   state.wikiPane = "index";
+  state.wikiSelectedKey = null;
   document.querySelectorAll(".wiki-tab").forEach((el) => {
     el.classList.toggle("active", el.dataset.wikiPane === "index");
   });
@@ -465,7 +481,9 @@ function renderWikiItems() {
   for (const item of items) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
+    const key = state.wikiPane === "raw" ? item.id : item.slug;
     btn.textContent = item.title || item.slug || item.id;
+    btn.classList.toggle("selected", key === state.wikiSelectedKey);
     btn.addEventListener("click", () => {
       if (state.wikiPane === "raw") loadWikiRawItem(item.id);
       else loadWikiArticle(item.slug);
@@ -476,6 +494,8 @@ function renderWikiItems() {
 }
 
 async function loadWikiArticle(slug) {
+  state.wikiSelectedKey = slug;
+  renderWikiItems();
   const data = await apiGet(`/wiki/articles/${encodeURIComponent(slug)}`);
   const article = data.article;
   $("wiki-title").textContent = article.title;
@@ -487,6 +507,8 @@ async function loadWikiArticle(slug) {
 }
 
 async function loadWikiRawItem(rawId) {
+  state.wikiSelectedKey = rawId;
+  renderWikiItems();
   const data = await apiGet(`/wiki/raw/${encodeURIComponent(rawId)}`);
   const raw = data.raw;
   $("wiki-title").textContent = raw.title;

@@ -21,6 +21,9 @@
   --success-soft: rgba(52, 211, 153, 0.08);
   --warning: #fbbf24;
   --on-accent: #0b1020;
+  --graph-node-fill: rgba(124, 156, 255, 0.22);
+  --graph-node-fill-hover: rgba(124, 156, 255, 0.34);
+  --graph-dot: rgba(148, 163, 184, 0.12);
   --focus-ring: rgba(124, 156, 255, 0.55);
   --shadow: rgba(0, 0, 0, 0.35);
   --radius-sm: 8px;
@@ -56,6 +59,9 @@
   --success-soft: rgba(5, 150, 105, 0.08);
   --warning: #d97706;
   --on-accent: #ffffff;
+  --graph-node-fill: rgba(79, 110, 247, 0.16);
+  --graph-node-fill-hover: rgba(79, 110, 247, 0.28);
+  --graph-dot: rgba(100, 116, 139, 0.14);
   --focus-ring: rgba(79, 110, 247, 0.45);
   --shadow: rgba(15, 23, 42, 0.08);
 }

@@ -73,7 +73,7 @@ def test_tokens_css_synced_between_web_and_extension():
 
 @pytest.mark.parametrize(
     "token",
-    ["--accent", "--bg", "--panel", "--text", "--success", "--danger", "--focus-ring"],
+    ["--accent", "--bg", "--panel", "--text", "--success", "--danger", "--focus-ring", "--graph-node-fill"],
 )
 def test_design_tokens_present(token: str):
     content = WEB_TOKENS.read_text(encoding="utf-8")
