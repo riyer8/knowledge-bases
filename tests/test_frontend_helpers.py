@@ -78,4 +78,5 @@ def test_tokens_css_synced_between_web_and_extension():
 def test_design_tokens_present(token: str):
     content = WEB_TOKENS.read_text(encoding="utf-8")
     assert token in content
-    assert "[data-theme=\"light\"]" in content
+    assert '[data-theme-preference="light"]' in content
+    assert '@media (prefers-color-scheme: light)' in content

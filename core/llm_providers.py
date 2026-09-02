@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import Any
@@ -91,8 +93,12 @@ class OpenAIProvider(LLMProvider):
         }
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
-        response = self._client.chat.completions.create(**kwargs)
-        return response.choices[0].message.content or ""
+
+        def _create() -> str:
+            response = self._client.chat.completions.create(**kwargs)
+            return response.choices[0].message.content or ""
+
+        return _call_openai_with_retry(_create)
 
     def _stream_openai(
         self,
@@ -107,7 +113,11 @@ class OpenAIProvider(LLMProvider):
         }
         if max_tokens is not None:
             kwargs["max_tokens"] = max_tokens
-        stream = self._client.chat.completions.create(**kwargs)
+
+        def _open_stream():
+            return self._client.chat.completions.create(**kwargs)
+
+        stream = _call_openai_with_retry(_open_stream)
         for chunk in stream:
             token = chunk.choices[0].delta.content or ""
             if token:
@@ -211,11 +221,15 @@ def embed(text: str) -> list[float]:
         from openai import OpenAI
 
         client = OpenAI(api_key=config.openai_api_key)
-        response = client.embeddings.create(
-            model=config.openai_embed_model,
-            input=text,
-        )
-        return list(response.data[0].embedding)
+
+        def _create() -> list[float]:
+            response = client.embeddings.create(
+                model=config.openai_embed_model,
+                input=text,
+            )
+            return list(response.data[0].embedding)
+
+        return _call_openai_with_retry(_create)
 
     payload = {"model": config.embed_model, "input": text}
     result = _post_json(f"{OLLAMA_BASE_URL}/api/embed", payload)
@@ -223,6 +237,48 @@ def embed(text: str) -> list[float]:
     if isinstance(embeddings, list) and embeddings:
         return embeddings[0]
     return []
+
+
+def _retry_seconds_from_error(exc: Exception) -> int | None:
+    match = re.search(r"try again in (\d+)s", str(exc), re.I)
+    if match:
+        return int(match.group(1)) + 1
+    return None
+
+
+def _friendly_llm_error(exc: Exception) -> str:
+    message = str(exc)
+    if "rate_limit" in message.lower() or "429" in message:
+        wait = _retry_seconds_from_error(exc) or 10
+        return (
+            f"OpenAI rate limit reached — wait about {wait}s and try again, "
+            "or switch to Ollama in Settings."
+        )
+    return message
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    if "rate_limit" in message or "429" in message:
+        return True
+    status = getattr(exc, "status_code", None)
+    return status == 429
+
+
+def _call_openai_with_retry(call, *, max_attempts: int = 3):
+    last_exc: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            return call()
+        except Exception as exc:
+            if not _is_rate_limit_error(exc):
+                raise
+            last_exc = exc
+            if attempt >= max_attempts - 1:
+                break
+            wait = _retry_seconds_from_error(exc) or (attempt + 1) * 5
+            time.sleep(wait)
+    raise RuntimeError(_friendly_llm_error(last_exc or RuntimeError("LLM request failed")))
 
 
 def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str] | None = None) -> dict[str, Any]:

@@ -431,10 +431,11 @@ function renderLifeEvents(events) {
 
 async function loadWikiStatus() {
   const data = await apiGet("/wiki/status");
+  const pending = Number(data.uncompiled_count || 0);
   $("wiki-stats").innerHTML = `
-    <div>Raw: <strong>${data.raw_count}</strong></div>
-    <div>Articles: <strong>${data.article_count}</strong></div>
-    <div>Pending: <strong>${data.uncompiled_count}</strong></div>
+    <div class="wiki-stat"><strong>${data.raw_count}</strong><span>Raw</span></div>
+    <div class="wiki-stat"><strong>${data.article_count}</strong><span>Articles</span></div>
+    <div class="wiki-stat${pending > 0 ? " wiki-stat-warn" : ""}"><strong>${pending}</strong><span>Pending</span></div>
   `;
 }
 
@@ -478,6 +479,15 @@ function renderWikiItems() {
   const list = $("wiki-items");
   list.innerHTML = "";
   const items = state.wikiPane === "raw" ? state.wikiRaw : state.wikiArticles;
+  if (!items.length) {
+    const empty = document.createElement("li");
+    empty.className = "wiki-items-empty muted";
+    empty.textContent = state.wikiPane === "raw"
+      ? "No raw sources yet."
+      : "No articles yet — compile your wiki.";
+    list.appendChild(empty);
+    return;
+  }
   for (const item of items) {
     const li = document.createElement("li");
     const btn = document.createElement("button");

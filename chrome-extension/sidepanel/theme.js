@@ -9,17 +9,23 @@
   }
 
   function resolvedTheme(mode) {
-    if (mode === "light" || mode === "dark") return mode;
-    if (typeof global.matchMedia !== "function") return "dark";
+    const preference = mode || getTheme();
+    if (preference === "light" || preference === "dark") return preference;
+    if (typeof global.matchMedia !== "function") return "light";
     return global.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
 
+  function syncColorScheme(preference) {
+    const scheme =
+      preference === "system" ? resolvedTheme("system") : preference;
+    document.documentElement.style.colorScheme = scheme;
+  }
+
   function applyTheme(mode) {
-    const preference = mode || getTheme();
-    const theme = resolvedTheme(preference);
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-    return theme;
+    const preference = MODES.includes(mode) ? mode : getTheme();
+    document.documentElement.dataset.themePreference = preference;
+    syncColorScheme(preference);
+    return resolvedTheme(preference);
   }
 
   function setTheme(mode) {
@@ -32,7 +38,7 @@
     applyTheme(getTheme());
     if (typeof global.matchMedia === "function") {
       global.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-        if (getTheme() === "system") applyTheme("system");
+        if (getTheme() === "system") syncColorScheme("system");
       });
     }
   }

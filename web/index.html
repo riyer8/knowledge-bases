@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Context</title>
+  <script>
+    (function () {
+      var k = "context-theme";
+      var p = localStorage.getItem(k);
+      if (p !== "light" && p !== "dark") p = "system";
+      document.documentElement.dataset.themePreference = p;
+    })();
+  </script>
   <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="app.css" />
   <script src="theme.js"></script>
@@ -97,8 +105,8 @@
               <button type="button" class="btn primary" id="wiki-compile">Compile</button>
               <button type="button" class="btn ghost" id="wiki-health">Health</button>
             </div>
-            <div class="wiki-stats" id="wiki-stats"></div>
-            <input type="search" id="wiki-search" placeholder="Search wiki…" />
+            <div class="wiki-stats-row" id="wiki-stats"></div>
+            <input type="search" id="wiki-search" placeholder="Search wiki…" aria-label="Search wiki" />
             <div class="wiki-subnav">
               <button type="button" class="wiki-tab active" data-wiki-pane="index">Index</button>
               <button type="button" class="wiki-tab" data-wiki-pane="articles">Articles</button>
@@ -111,14 +119,17 @@
               <h3 id="wiki-title">Index</h3>
               <p id="wiki-meta" class="muted"></p>
             </header>
-            <article class="markdown-body" id="wiki-body"><p class="muted">Loading…</p></article>
+            <article class="markdown-body wiki-article-body" id="wiki-body"><p class="muted">Loading…</p></article>
             <section class="wiki-health" id="wiki-health-panel" hidden></section>
             <section class="wiki-ask">
-              <h4>Ask your wiki</h4>
+              <div class="wiki-ask-head">
+                <h4>Ask your wiki</h4>
+                <p class="muted small">Questions across everything you've compiled.</p>
+              </div>
               <textarea id="wiki-ask-input" rows="3" placeholder="What themes connect my saved reading?"></textarea>
               <button type="button" class="btn primary" id="wiki-ask-btn">Ask</button>
               <div id="wiki-ask-reply" class="wiki-reply markdown-body" hidden></div>
-              <p id="wiki-ask-sources" class="muted"></p>
+              <p id="wiki-ask-sources" class="wiki-ask-sources muted"></p>
             </section>
           </div>
         </div>

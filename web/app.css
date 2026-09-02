@@ -465,9 +465,13 @@ body {
   font-size: 12px;
 }
 
+#view-wiki.view {
+  padding: 16px 20px 24px;
+}
+
 .wiki-layout {
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 280px 1fr;
   gap: 16px;
   flex: 1;
   min-height: 0;
@@ -476,21 +480,51 @@ body {
 .wiki-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: var(--panel);
   padding: 14px;
+  min-height: 0;
 }
 
 .wiki-actions { display: flex; gap: 8px; }
 .wiki-actions .btn { flex: 1; }
 
-.wiki-stats {
-  font-size: 11px;
-  color: var(--muted);
+.wiki-stats-row {
   display: grid;
-  gap: 4px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.wiki-stat {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.wiki-stat strong {
+  display: block;
+  font-size: 17px;
+  color: var(--accent);
+  line-height: 1.1;
+}
+
+.wiki-stat span {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wiki-stat-warn strong { color: var(--warning); }
+
+.wiki-items-empty {
+  padding: 12px 8px;
+  font-size: 12px;
+  list-style: none;
 }
 
 #wiki-search {
@@ -560,13 +594,29 @@ body {
 
 .wiki-main {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: var(--panel);
-  padding: 20px 24px;
+  padding: 22px 26px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.wiki-header h3 { margin: 0 0 4px; font-size: 20px; }
+.wiki-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.wiki-header h3 { margin: 0 0 4px; font-size: 22px; }
+
+.wiki-article-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 12px 0 20px;
+}
 
 .markdown-body {
   line-height: 1.65;
@@ -624,10 +674,21 @@ body {
 
 .wiki-ask {
   border-top: 1px solid var(--border);
-  padding-top: 20px;
+  padding-top: 18px;
+  margin-top: auto;
 }
 
-.wiki-ask h4 { margin: 0 0 8px; font-size: 14px; }
+.wiki-ask-head h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.wiki-ask-head p { margin: 0 0 10px; }
+
+.wiki-ask-sources {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
 
 .wiki-ask textarea {
   width: 100%;

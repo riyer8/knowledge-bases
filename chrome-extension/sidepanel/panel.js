@@ -16,12 +16,13 @@ const state = {
   pendingQuoteText: "",
   bucketLeaves: [],
   lifeEvents: [],
+  wikiSelectedSlug: null,
+  wikiArticles: [],
 };
 
 const els = {
   title: document.getElementById("page-title"),
   site: document.getElementById("page-site"),
-  saveBadge: document.getElementById("save-badge"),
   status: document.getElementById("status"),
   messages: document.getElementById("messages"),
   form: document.getElementById("ask-form"),
@@ -38,8 +39,6 @@ const els = {
   exploreBtn: document.getElementById("explore-btn"),
   explorePanel: document.getElementById("explore-panel"),
   exploreSuggestions: document.getElementById("explore-suggestions"),
-  selectionBar: document.getElementById("selection-bar"),
-  selectionPreview: document.getElementById("selection-preview"),
   nav: document.getElementById("nav"),
   savedList: document.getElementById("saved-list"),
   savedDetail: document.getElementById("saved-detail"),
@@ -70,7 +69,6 @@ const els = {
   metaCustomFields: document.getElementById("meta-custom-fields"),
   metaAddField: document.getElementById("meta-add-field"),
   header: document.querySelector(".header"),
-  openSettingsBtn: document.getElementById("open-settings-btn"),
   settingsBackendStatus: document.getElementById("settings-backend-status"),
   settingsProviderSummary: document.getElementById("settings-provider-summary"),
   settingsRetryBtn: document.getElementById("settings-retry-btn"),
@@ -88,7 +86,15 @@ const els = {
   settingsEnvPath: document.getElementById("settings-env-path"),
   settingsSetupNotes: document.getElementById("settings-setup-notes"),
   refreshLifeBtn: document.getElementById("refresh-life-btn"),
-  wikiStatus: document.getElementById("wiki-status"),
+  wikiStatsRow: document.getElementById("wiki-stats-row"),
+  wikiPendingBanner: document.getElementById("wiki-pending-banner"),
+  wikiPendingText: document.getElementById("wiki-pending-text"),
+  wikiListPanel: document.getElementById("wiki-list-panel"),
+  wikiReader: document.getElementById("wiki-reader"),
+  wikiReaderBack: document.getElementById("wiki-reader-back"),
+  wikiReaderOpen: document.getElementById("wiki-reader-open"),
+  wikiReaderTitle: document.getElementById("wiki-reader-title"),
+  wikiReaderBody: document.getElementById("wiki-reader-body"),
   wikiArticles: document.getElementById("wiki-articles"),
   wikiEmpty: document.getElementById("wiki-empty"),
   wikiCompileBtn: document.getElementById("wiki-compile-btn"),
@@ -96,6 +102,7 @@ const els = {
   wikiAskInput: document.getElementById("wiki-ask-input"),
   wikiAskBtn: document.getElementById("wiki-ask-btn"),
   wikiAskReply: document.getElementById("wiki-ask-reply"),
+  wikiAskSources: document.getElementById("wiki-ask-sources"),
   addToWikiBtn: document.getElementById("add-to-wiki-btn"),
   addPageToWikiBtn: document.getElementById("add-page-to-wiki-btn"),
   confirmOverlay: document.getElementById("confirm-overlay"),
@@ -271,9 +278,10 @@ function bindEvents() {
   });
 
   on(els.savePageBtn, "click", () => {
-    saveCurrentPage().catch((err) => {
+    const action = state.savedPageId ? unsaveCurrentPage() : saveCurrentPage();
+    action.catch((err) => {
       console.error(err);
-      setStatus(err.message || "Save failed", true);
+      setStatus(err.message || (state.savedPageId ? "Remove failed" : "Save failed"), true);
     });
   });
   on(els.saveQuoteBtn, "click", openQuoteCompose);
@@ -298,11 +306,11 @@ function bindEvents() {
   on(els.wikiCompileBtn, "click", compileWiki);
   on(els.wikiRefreshBtn, "click", loadWikiView);
   on(els.wikiAskBtn, "click", askWikiQuestion);
+  on(els.wikiReaderBack, "click", closeWikiReader);
   on(els.addToWikiBtn, "click", addSelectedPageToWiki);
   on(els.addPageToWikiBtn, "click", addCurrentPageToWiki);
   on(els.clearLibraryBtn, "click", clearSavedLibrary);
   on(els.clearAllBtn, "click", clearAllData);
-  on(els.openSettingsBtn, "click", () => switchView("settings"));
   on(els.settingsSaveBtn, "click", saveSettingsFromForm);
   on(els.settingsRetryBtn, "click", retryBackendConnection);
   on(els.settingsTheme, "change", (event) => {
@@ -351,6 +359,8 @@ function bindEvents() {
     switchView(button.dataset.view);
   });
 
+  on(document.getElementById("brand-home"), "click", () => switchView("chat"));
+
   on(els.pageSubnav, "click", (event) => {
     const button = event.target.closest(".page-tab");
     if (!button) return;
@@ -387,13 +397,12 @@ function switchPageTab(tab) {
 function switchView(view) {
   state.view = view;
   document.querySelectorAll(".nav-btn").forEach((el) => {
-    el.classList.toggle("active", view !== "settings" && el.dataset.view === view);
+    el.classList.toggle("active", el.dataset.view === view);
   });
   document.querySelectorAll(".view").forEach((el) => {
     el.classList.toggle("active", el.id === `view-${view}`);
   });
   els.header?.classList.toggle("page-context-hidden", view !== "chat");
-  els.openSettingsBtn?.classList.toggle("active", view === "settings");
   if (view === "saved") loadSavedPages();
   if (view === "graph") renderGraph();
   if (view === "life") loadLifeView();
@@ -409,6 +418,16 @@ function normalizeSelection(text) {
   return (text || "").replace(/\s+/g, " ").trim();
 }
 
+function formatUserError(message) {
+  const text = String(message || "");
+  if (/rate.?limit|429/i.test(text)) {
+    const match = text.match(/try again in (\d+)s/i);
+    const wait = match ? `${match[1]}s` : "a few seconds";
+    return `OpenAI rate limit — wait ${wait} and try again, or switch to Ollama in Settings.`;
+  }
+  return text;
+}
+
 function isSaveableSelection(text) {
   return normalizeSelection(text).length >= 8;
 }
@@ -422,20 +441,12 @@ function updateSelection(selected) {
   const selectionChanged = normalized !== normalizeSelection(previous);
 
   if (!isSaveableSelection(normalized)) {
-    els.selectionBar.hidden = true;
-    els.selectionPreview.textContent = "";
     els.saveQuoteBtn.hidden = true;
     closeQuoteCompose({ keepSelection: true });
     return;
   }
 
-  els.selectionBar.hidden = false;
-  els.selectionPreview.textContent =
-    normalized.slice(0, 180) + (normalized.length > 180 ? "…" : "");
-
   const alreadySaved = normalized === state.lastSavedSelection;
-  els.selectionBar.classList.toggle("saved", alreadySaved);
-
   if (alreadySaved) {
     els.saveQuoteBtn.hidden = true;
     closeQuoteCompose({ keepSelection: true });
@@ -479,8 +490,6 @@ function closeQuoteCompose({ keepSelection = false } = {}) {
   if (!keepSelection) {
     state.selection = "";
     state.lastSavedSelection = "";
-    els.selectionBar.hidden = true;
-    els.selectionPreview.textContent = "";
   }
   const canPromptAgain =
     isSaveableSelection(state.selection) &&
@@ -508,7 +517,6 @@ async function confirmSaveQuote() {
       state.lastSavedSelection = text;
       closeQuoteCompose({ keepSelection: true });
       els.saveQuoteBtn.hidden = true;
-      els.selectionBar.classList.add("saved");
       setStatus("Quote saved");
       hideSetupHelp();
       switchPageTab("quotes");
@@ -1119,10 +1127,38 @@ async function deleteQuote(quote) {
 }
 
 function markPageSaved(saved) {
-  els.saveBadge.hidden = !saved;
-  const label = saved ? "Update saved page" : "Save page";
+  const label = saved ? "Saved" : "+ Save";
   els.savePageBtn.textContent = label;
+  els.savePageBtn.classList.toggle("primary", !saved);
   els.savePageBtn.classList.toggle("saved", saved);
+  els.savePageBtn.title = saved
+    ? "Click to remove from saved pages"
+    : "Save this page with summary and quotes";
+}
+
+async function unsaveCurrentPage() {
+  if (!state.savedPageId) return;
+  const ready = await ensureBackendReady();
+  if (!ready) {
+    setStatus("Backend not connected — check Settings", true);
+    return;
+  }
+  const pageId = state.savedPageId;
+  setStatus("Removing saved page…");
+  try {
+    const res = await fetch(`${BACKEND}/library/pages/${encodeURIComponent(pageId)}`, {
+      method: "DELETE",
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Remove failed");
+    state.savedPageId = null;
+    markPageSaved(false);
+    await loadPageQuotes();
+    setStatus("Removed from saved pages");
+    if (state.view === "graph") renderGraph();
+  } catch (err) {
+    setStatus(err.message, true);
+  }
 }
 
 function renderChatHistory(history) {
@@ -1179,7 +1215,7 @@ async function saveCurrentPage() {
     await loadPageQuotes();
     setStatus("Page saved");
   } catch (err) {
-    setStatus(err.message, true);
+    setStatus(formatUserError(err.message), true);
   }
 }
 
@@ -1281,9 +1317,9 @@ async function askQuestion() {
     assistantNode.innerHTML = renderMarkdown(answer);
     setStatus("Answer ready");
   } catch (err) {
-    assistantNode.textContent = `Error: ${err.message}`;
+    assistantNode.textContent = formatUserError(err.message);
     assistantNode.classList.add("error");
-    setStatus(err.message, true);
+    setStatus(formatUserError(err.message), true);
   } finally {
     state.busy = false;
     els.askBtn.disabled = false;
@@ -1883,6 +1919,7 @@ async function addSelectedPageToWiki() {
 
 async function loadWikiView() {
   if (!els.wikiArticles) return;
+  closeWikiReader();
   els.wikiArticles.innerHTML = "";
   try {
     const [statusRes, articlesRes] = await Promise.all([
@@ -1892,23 +1929,94 @@ async function loadWikiView() {
     const status = await statusRes.json();
     const articlesData = await articlesRes.json();
     if (!statusRes.ok) throw new Error(status.error || "Could not load wiki status");
-    if (els.wikiStatus) {
-      els.wikiStatus.textContent = `${status.raw_count} raw · ${status.article_count} articles · ${status.uncompiled_count} pending compile`;
+
+    renderWikiStats(status);
+    const pending = Number(status.uncompiled_count || 0);
+    if (els.wikiPendingBanner && els.wikiPendingText) {
+      if (pending > 0) {
+        els.wikiPendingBanner.hidden = false;
+        els.wikiPendingText.textContent =
+          `${pending} source${pending === 1 ? "" : "s"} waiting to compile — tap Compile to update articles.`;
+      } else {
+        els.wikiPendingBanner.hidden = true;
+      }
     }
+
     const articles = articlesData.articles || [];
     if (els.wikiEmpty) els.wikiEmpty.hidden = articles.length > 0;
-    for (const article of articles.slice(0, 12)) {
+    state.wikiArticles = articles;
+
+    for (const article of articles) {
       const card = document.createElement("button");
       card.type = "button";
       card.className = "wiki-card";
-      card.innerHTML = `<strong>${escapeHtml(article.title)}</strong><span class="muted">${escapeHtml(article.excerpt || "")}</span>`;
-      card.addEventListener("click", () => {
-        window.open(`${BACKEND}/app/#article-${encodeURIComponent(article.slug)}`, "_blank");
-      });
+      card.dataset.slug = article.slug || "";
+      const excerpt = (article.excerpt || "").trim();
+      card.innerHTML = `
+        <span class="wiki-card-mark">◇</span>
+        <div class="wiki-card-body">
+          <strong>${escapeHtml(article.title || article.slug || "Untitled")}</strong>
+          ${excerpt ? `<span class="wiki-card-excerpt">${escapeHtml(excerpt)}</span>` : ""}
+        </div>
+      `;
+      card.addEventListener("click", () => openWikiArticle(article.slug));
       els.wikiArticles.appendChild(card);
     }
   } catch (err) {
-    if (els.wikiStatus) els.wikiStatus.textContent = err.message;
+    if (els.wikiStatsRow) {
+      els.wikiStatsRow.hidden = true;
+    }
+    if (els.wikiEmpty) {
+      els.wikiEmpty.hidden = false;
+      els.wikiEmpty.textContent = err.message;
+    }
+  }
+}
+
+function renderWikiStats(status) {
+  if (!els.wikiStatsRow) return;
+  const raw = Number(status.raw_count || 0);
+  const articles = Number(status.article_count || 0);
+  const pending = Number(status.uncompiled_count || 0);
+  els.wikiStatsRow.hidden = false;
+  els.wikiStatsRow.innerHTML = `
+    <div class="wiki-stat"><strong>${raw}</strong><span>Raw</span></div>
+    <div class="wiki-stat"><strong>${articles}</strong><span>Articles</span></div>
+    <div class="wiki-stat${pending > 0 ? " wiki-stat-warn" : ""}"><strong>${pending}</strong><span>Pending</span></div>
+  `;
+}
+
+function closeWikiReader() {
+  state.wikiSelectedSlug = null;
+  if (els.wikiReader) els.wikiReader.hidden = true;
+  if (els.wikiListPanel) els.wikiListPanel.hidden = false;
+  document.querySelectorAll(".wiki-card").forEach((el) => el.classList.remove("active"));
+}
+
+async function openWikiArticle(slug) {
+  if (!slug || !els.wikiReader) return;
+  state.wikiSelectedSlug = slug;
+  document.querySelectorAll(".wiki-card").forEach((el) => {
+    el.classList.toggle("active", el.dataset.slug === slug);
+  });
+  if (els.wikiListPanel) els.wikiListPanel.hidden = true;
+  els.wikiReader.hidden = false;
+  if (els.wikiReaderTitle) els.wikiReaderTitle.textContent = "Loading…";
+  if (els.wikiReaderBody) els.wikiReaderBody.innerHTML = "";
+  if (els.wikiReaderOpen) {
+    els.wikiReaderOpen.href = `${BACKEND}/app/#article-${encodeURIComponent(slug)}`;
+  }
+  try {
+    const res = await fetch(`${BACKEND}/wiki/articles/${encodeURIComponent(slug)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Could not load article");
+    const article = data.article;
+    if (els.wikiReaderTitle) els.wikiReaderTitle.textContent = article.title || slug;
+    if (els.wikiReaderBody) {
+      els.wikiReaderBody.innerHTML = renderMarkdown(article.content || "_Empty article._");
+    }
+  } catch (err) {
+    if (els.wikiReaderBody) els.wikiReaderBody.textContent = err.message;
   }
 }
 
@@ -1922,6 +2030,7 @@ async function askWikiQuestion() {
   }
   els.wikiAskBtn.disabled = true;
   els.wikiAskBtn.textContent = "…";
+  if (els.wikiAskSources) els.wikiAskSources.hidden = true;
   if (els.wikiAskReply) {
     els.wikiAskReply.hidden = false;
     els.wikiAskReply.textContent = "Loading…";
@@ -1938,12 +2047,17 @@ async function askWikiQuestion() {
       els.wikiAskReply.classList.add("markdown-body");
       els.wikiAskReply.innerHTML = renderMarkdown(data.reply || "");
     }
-    if (data.sources?.length) {
-      setStatus(`Sources: ${data.sources.join(", ")}`);
+    if (els.wikiAskSources) {
+      if (data.sources?.length) {
+        els.wikiAskSources.hidden = false;
+        els.wikiAskSources.textContent = `Sources: ${data.sources.join(" · ")}`;
+      } else {
+        els.wikiAskSources.hidden = true;
+      }
     }
   } catch (err) {
-    if (els.wikiAskReply) els.wikiAskReply.textContent = err.message;
-    setStatus(err.message, true);
+    if (els.wikiAskReply) els.wikiAskReply.textContent = formatUserError(err.message);
+    setStatus(formatUserError(err.message), true);
   } finally {
     els.wikiAskBtn.disabled = false;
     els.wikiAskBtn.textContent = "Ask";

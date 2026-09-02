@@ -85,3 +85,32 @@ def test_openai_embed_uses_sdk(monkeypatch):
     monkeypatch.setattr(openai, "OpenAI", lambda api_key: FakeClient())
     result = lp.embed("hello world")
     assert result == [0.1, 0.2, 0.3]
+
+
+def test_friendly_llm_error_rate_limit():
+    from core.llm_providers import _friendly_llm_error
+
+    msg = _friendly_llm_error(
+        RuntimeError(
+            "Error code: 429 - rate_limit_exceeded Please try again in 6s"
+        )
+    )
+    assert "rate limit" in msg.lower()
+    assert "7s" in msg
+    assert "Ollama" in msg
+
+
+def test_call_openai_with_retry_succeeds_after_rate_limit(monkeypatch):
+    from core.llm_providers import _call_openai_with_retry
+
+    calls = {"count": 0}
+
+    def flaky():
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("429 rate_limit_exceeded try again in 1s")
+        return "ok"
+
+    monkeypatch.setattr("core.llm_providers.time.sleep", lambda _seconds: None)
+    assert _call_openai_with_retry(flaky) == "ok"
+    assert calls["count"] == 2

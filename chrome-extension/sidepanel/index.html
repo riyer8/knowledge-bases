@@ -4,6 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Context</title>
+  <script>
+    (function () {
+      var k = "context-theme";
+      var p = localStorage.getItem(k);
+      if (p !== "light" && p !== "dark") p = "system";
+      document.documentElement.dataset.themePreference = p;
+    })();
+  </script>
+  <link rel="icon" type="image/png" href="../icons/icon-32.png" />
   <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="panel.css" />
   <script src="theme.js"></script>
@@ -12,26 +21,17 @@
 <body>
   <header class="header">
     <div class="header-row">
-      <div class="eyebrow">Context</div>
-      <nav class="nav" id="nav">
+      <button type="button" class="brand-btn" id="brand-home" title="Context — go to Page">
+        <img src="../icons/icon-32.png" alt="" class="brand-logo" width="22" height="22" />
+      </button>
+      <nav class="nav" id="nav" aria-label="Main">
         <button class="nav-btn active" data-view="chat" title="Current browser tab — save quotes and chat">Page</button>
         <button class="nav-btn" data-view="saved" title="Saved pages with summaries and history">Saved</button>
         <button class="nav-btn" data-view="life" title="Review how your activity is categorized">Life</button>
         <button class="nav-btn" data-view="graph" title="Connections between pages and ideas">Graph</button>
         <button class="nav-btn" data-view="wiki" title="LLM-compiled wiki from your reading">Wiki</button>
+        <button class="nav-btn" data-view="settings" title="Provider, appearance, and data">Settings</button>
       </nav>
-      <button
-        type="button"
-        id="open-settings-btn"
-        class="icon-btn"
-        title="Settings"
-        aria-label="Settings"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-      </button>
     </div>
     <textarea
       id="page-title"
@@ -62,10 +62,9 @@
       </div>
     </details>
     <div class="header-actions page-context-only">
-      <button type="button" id="save-page-btn" class="toolbar-btn primary">Save page</button>
+      <button type="button" id="save-page-btn" class="toolbar-btn primary" title="Save this page with summary and quotes">+ Save</button>
       <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn" title="Add current page to wiki raw sources">+ Wiki</button>
       <button type="button" id="explore-btn" class="toolbar-btn sparkles" title="Things to explore">✨ Explore</button>
-      <span id="save-badge" class="save-badge" hidden>Saved</span>
     </div>
   </header>
 
@@ -83,11 +82,6 @@
     </nav>
 
     <div class="page-panel active" id="page-panel-quotes">
-      <section class="selection-bar" id="selection-bar" hidden>
-        <div class="selection-label" id="selection-label">Selected on page</div>
-        <p id="selection-preview" class="selection-preview"></p>
-      </section>
-
       <div class="quote-compose" id="quote-compose" hidden>
         <p class="compose-label">Save selection</p>
         <blockquote id="quote-preview" class="quote-preview"></blockquote>
@@ -182,22 +176,45 @@
 
   <!-- Wiki view -->
   <section class="view" id="view-wiki">
-    <p class="view-intro muted">Compiled articles from your reading.</p>
-    <div class="view-scroll">
-    <div class="wiki-toolbar">
-      <a id="open-wiki-app" class="toolbar-btn" href="http://127.0.0.1:8765/app/#wiki" target="_blank" rel="noopener">Open dashboard</a>
-      <button type="button" id="wiki-compile-btn" class="toolbar-btn primary">Compile</button>
-      <button type="button" id="wiki-refresh-btn" class="text-btn">Refresh</button>
-    </div>
-    <div id="wiki-status" class="wiki-status muted"></div>
-    <div id="wiki-articles" class="wiki-articles"></div>
-    <section class="wiki-ask">
-      <label for="wiki-ask-input" class="muted">Ask your wiki</label>
-      <textarea id="wiki-ask-input" rows="2" placeholder="What themes connect my saved reading?"></textarea>
-      <button type="button" id="wiki-ask-btn" class="toolbar-btn primary">Ask</button>
-      <div id="wiki-ask-reply" class="wiki-ask-reply markdown-body" hidden></div>
-    </section>
-    <p id="wiki-empty" class="muted empty-hint view-pad">Save pages, add to wiki, then compile.</p>
+    <div class="view-scroll wiki-shell">
+      <div class="wiki-stats-row" id="wiki-stats-row" hidden></div>
+
+      <div class="wiki-toolbar">
+        <button type="button" id="wiki-compile-btn" class="toolbar-btn primary">Compile</button>
+        <button type="button" id="wiki-refresh-btn" class="text-btn">Refresh</button>
+        <a id="open-wiki-app" class="text-btn wiki-dash-link" href="http://127.0.0.1:8765/app/#wiki" target="_blank" rel="noopener">Full wiki →</a>
+      </div>
+
+      <div id="wiki-pending-banner" class="wiki-pending-banner" hidden>
+        <span id="wiki-pending-text"></span>
+      </div>
+
+      <div id="wiki-list-panel" class="wiki-list-panel">
+        <div id="wiki-articles" class="wiki-articles"></div>
+        <p id="wiki-empty" class="empty-state" hidden>
+          Save pages and tap <strong>+ Wiki</strong> on the Page tab, then <strong>Compile</strong> to generate articles.
+        </p>
+      </div>
+
+      <div id="wiki-reader" class="wiki-reader" hidden>
+        <div class="wiki-reader-head">
+          <button type="button" id="wiki-reader-back" class="text-btn">← Articles</button>
+          <a id="wiki-reader-open" class="text-btn" href="#" target="_blank" rel="noopener">Open in dashboard</a>
+        </div>
+        <h3 id="wiki-reader-title" class="wiki-reader-title"></h3>
+        <article id="wiki-reader-body" class="markdown-body wiki-reader-body"></article>
+      </div>
+
+      <section class="wiki-ask">
+        <div class="wiki-ask-head">
+          <h3>Ask your wiki</h3>
+          <p class="muted">Questions across everything you've compiled.</p>
+        </div>
+        <textarea id="wiki-ask-input" rows="2" placeholder="What themes connect my saved reading?"></textarea>
+        <button type="button" id="wiki-ask-btn" class="toolbar-btn primary">Ask</button>
+        <p id="wiki-ask-sources" class="wiki-ask-sources muted" hidden></p>
+        <div id="wiki-ask-reply" class="wiki-ask-reply markdown-body" hidden></div>
+      </section>
     </div>
   </section>
 
