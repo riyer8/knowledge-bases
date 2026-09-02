@@ -280,7 +280,18 @@ function bindEvents() {
   on(els.saveQuoteCancel, "click", () => closeQuoteCompose({ keepSelection: true }));
   on(els.exploreBtn, "click", loadExploreSuggestions);
   on(els.savedBack, "click", showSavedList);
-  on(els.deletePageBtn, "click", deleteCurrentSavedPage);
+  on(els.deletePageBtn, "click", () => deleteSavedPage(state.selectedSavedId));
+  els.savedList?.addEventListener("click", (event) => {
+    const deleteBtn = event.target.closest("[data-delete-page]");
+    if (deleteBtn) {
+      event.preventDefault();
+      event.stopPropagation();
+      void deleteSavedPage(deleteBtn.dataset.deletePage);
+      return;
+    }
+    const card = event.target.closest(".saved-card");
+    if (card?.dataset.pageId) openSavedPage(card.dataset.pageId);
+  });
   on(els.refreshGraphBtn, "click", renderGraph);
   on(els.refreshLifeBtn, "click", loadLifeView);
   on(els.wikiCompileBtn, "click", compileWiki);
@@ -1262,6 +1273,8 @@ async function askQuestion() {
 
     state.history.push({ role: "user", content: question });
     state.history.push({ role: "assistant", content: answer });
+    assistantNode.classList.add("markdown-body");
+    assistantNode.innerHTML = renderMarkdown(answer);
     setStatus("Answer ready");
   } catch (err) {
     assistantNode.textContent = `Error: ${err.message}`;
@@ -1289,12 +1302,16 @@ async function loadSavedPages() {
     for (const page of state.savedPages) {
       const card = document.createElement("div");
       card.className = "saved-card";
+      card.dataset.pageId = page.id;
+      const summaryPreview = (page.summary || "").replace(/\s+/g, " ").trim();
       card.innerHTML = `
-        <h3>${escapeHtml(page.title || "Untitled")}</h3>
-        <p class="muted">${escapeHtml(page.site || "")}</p>
-        <p>${escapeHtml((page.summary || "").slice(0, 120))}…</p>
+        <div class="saved-card-main">
+          <h3>${escapeHtml(page.title || "Untitled")}</h3>
+          <p class="muted">${escapeHtml(page.site || "")}</p>
+          <p class="saved-card-summary">${escapeHtml(summaryPreview.slice(0, 140))}${summaryPreview.length > 140 ? "…" : ""}</p>
+        </div>
+        <button type="button" class="text-btn danger-text saved-card-delete" data-delete-page="${escapeAttr(page.id)}">Delete</button>
       `;
-      card.addEventListener("click", () => openSavedPage(page.id));
       els.savedList.appendChild(card);
     }
   } catch (err) {
@@ -1319,7 +1336,7 @@ async function openSavedPage(pageId) {
     els.savedDetail.hidden = false;
     els.savedDetailTitle.textContent = page.title || "Untitled";
     els.savedDetailUrl.textContent = page.url || "";
-    els.savedSummary.textContent = page.summary || "";
+    els.savedSummary.innerHTML = renderMarkdown(page.summary || "_No summary._");
 
     els.savedQuotes.innerHTML = "";
     const quotes = (page.quotes || []).slice().sort(
@@ -1344,7 +1361,12 @@ async function openSavedPage(pageId) {
     for (const turn of page.chat_history || []) {
       const node = document.createElement("div");
       node.className = `message ${turn.role}`;
-      node.textContent = turn.content;
+      if (turn.role === "assistant") {
+        node.classList.add("markdown-body");
+        node.innerHTML = renderMarkdown(turn.content);
+      } else {
+        node.textContent = turn.content;
+      }
       els.savedChat.appendChild(node);
     }
     if (!page.chat_history?.length) {
@@ -1355,27 +1377,32 @@ async function openSavedPage(pageId) {
   }
 }
 
-async function deleteCurrentSavedPage() {
-  if (!state.selectedSavedId) return;
+async function deleteSavedPage(pageId) {
+  const id = String(pageId || state.selectedSavedId || "").trim();
+  if (!id) return;
   const confirmed = await showConfirmDialog({
-    title: "Clear this page?",
-    message: "Removes the saved summary, quotes, and chat history for this page.",
-    confirmText: "Clear page",
+    title: "Delete page?",
+    message: "Removes this saved page, its quotes, and chat history. This cannot be undone.",
+    confirmText: "Delete",
     cancelText: "Cancel",
     danger: true,
   });
   if (!confirmed) return;
   try {
-    const res = await fetch(`${BACKEND}/library/pages/${state.selectedSavedId}`, { method: "DELETE" });
+    const res = await fetch(`${BACKEND}/library/pages/${encodeURIComponent(id)}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Delete failed");
-    if (state.savedPageId === state.selectedSavedId) {
+    if (state.savedPageId === id) {
       state.savedPageId = null;
       markPageSaved(false);
     }
-    setStatus("Page memory cleared");
+    if (state.selectedSavedId === id) {
+      state.selectedSavedId = null;
+    }
+    setStatus("Page deleted");
     showSavedList();
     loadSavedPages();
+    if (state.view === "graph") renderGraph();
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -1658,7 +1685,12 @@ function appendMessage(role, text) {
   removeChatEmptyHint();
   const node = document.createElement("div");
   node.className = `message ${role}`;
-  node.textContent = text;
+  if (role === "assistant") {
+    node.classList.add("markdown-body");
+    node.innerHTML = renderMarkdown(text);
+  } else {
+    node.textContent = text;
+  }
   els.messages.appendChild(node);
   els.messages.scrollTop = els.messages.scrollHeight;
   return node;
@@ -1892,7 +1924,8 @@ async function askWikiQuestion() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Ask failed");
     if (els.wikiAskReply) {
-      els.wikiAskReply.textContent = data.reply || "";
+      els.wikiAskReply.classList.add("markdown-body");
+      els.wikiAskReply.innerHTML = renderMarkdown(data.reply || "");
     }
     if (data.sources?.length) {
       setStatus(`Sources: ${data.sources.join(", ")}`);
@@ -1940,12 +1973,4 @@ function formatTimestamp(raw) {
 function setStatus(text, isError = false) {
   els.status.textContent = text;
   els.status.classList.toggle("error", isError);
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }

@@ -28,23 +28,11 @@ function toast(msg) {
   setTimeout(() => { el.hidden = true; }, 3200);
 }
 
-function escapeHtml(text) {
-  return String(text || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function renderMarkdown(text) {
-  let html = escapeHtml(text || "");
-  html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
-  html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
-  html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
-  html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#" data-wikilink="$1">$1</a>');
-  html = html.replace(/^- (.+)$/gm, "<li>$1</li>");
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`);
-  html = html.replace(/\n\n/g, "</p><p>");
-  return `<p>${html}</p>`.replace(/<p><\/p>/g, "");
+async function apiDelete(path) {
+  const res = await fetch(`${API}${path}`, { method: "DELETE" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
 }
 
 async function apiGet(path) {
@@ -180,11 +168,16 @@ async function openPage(pageId) {
     const chat = page.chat_history || [];
 
     detail.innerHTML = `
-      <h3>${escapeHtml(page.title || "Untitled")}</h3>
-      <p class="muted"><a href="${escapeHtml(page.url)}" target="_blank" rel="noopener">${escapeHtml(page.url || "")}</a></p>
+      <div class="detail-head">
+        <div>
+          <h3>${escapeHtml(page.title || "Untitled")}</h3>
+          <p class="muted"><a href="${escapeHtml(page.url)}" target="_blank" rel="noopener">${escapeHtml(page.url || "")}</a></p>
+        </div>
+        <button type="button" class="btn ghost danger-outline" id="library-delete-btn">Delete page</button>
+      </div>
       <div class="detail-block">
         <h4>Summary</h4>
-        <p>${escapeHtml(page.summary || "No summary.")}</p>
+        <div class="markdown-body">${renderMarkdown(page.summary || "_No summary._")}</div>
       </div>
       <div class="detail-block">
         <h4>Quotes (${quotes.length})</h4>
@@ -195,6 +188,8 @@ async function openPage(pageId) {
         <div id="detail-chat"></div>
       </div>
     `;
+
+    $("library-delete-btn")?.addEventListener("click", () => deleteLibraryPage(pageId));
 
     const quotesEl = $("detail-quotes");
     if (!quotes.length) {
@@ -218,12 +213,40 @@ async function openPage(pageId) {
       for (const turn of chat) {
         const node = document.createElement("div");
         node.className = `chat-turn ${turn.role}`;
-        node.textContent = turn.content;
+        if (turn.role === "assistant") {
+          node.classList.add("markdown-body");
+          node.innerHTML = renderMarkdown(turn.content);
+        } else {
+          node.textContent = turn.content;
+        }
         chatEl.appendChild(node);
       }
     }
   } catch (err) {
     detail.innerHTML = `<p class='error'>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function deleteLibraryPage(pageId) {
+  if (!pageId) return;
+  const page = state.pages.find((p) => p.id === pageId);
+  const title = page?.title || "this page";
+  if (!window.confirm(`Delete "${title}"?\n\nThis removes the saved page, quotes, and chat history.`)) {
+    return;
+  }
+  try {
+    await apiDelete(`/library/pages/${encodeURIComponent(pageId)}`);
+    if (state.selectedPageId === pageId) {
+      state.selectedPageId = null;
+      $("library-detail").innerHTML =
+        '<p class="empty-state">Select a saved page to read its summary, quotes, and chat history.</p>';
+    }
+    toast("Page deleted");
+    await loadLibrary();
+    if (state.view === "graph") renderGraph();
+    if (state.view === "home") loadHome();
+  } catch (err) {
+    toast(err.message);
   }
 }
 

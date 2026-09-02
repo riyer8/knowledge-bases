@@ -128,11 +128,16 @@
     <div id="saved-list" class="saved-list"></div>
     <div id="saved-detail" class="saved-detail" hidden>
       <button type="button" id="saved-back" class="text-btn">← All saved pages</button>
-      <h2 id="saved-detail-title"></h2>
-      <p id="saved-detail-url" class="muted"></p>
+      <div class="saved-detail-head">
+        <div>
+          <h2 id="saved-detail-title"></h2>
+          <p id="saved-detail-url" class="muted"></p>
+        </div>
+        <button type="button" id="delete-page-btn" class="danger-btn compact">Delete page</button>
+      </div>
       <section class="detail-block">
         <h3>Summary</h3>
-        <div id="saved-summary" class="detail-content"></div>
+        <div id="saved-summary" class="detail-content markdown-body"></div>
       </section>
       <section class="detail-block">
         <h3>Quotes</h3>
@@ -142,7 +147,6 @@
         <h3>Chat history</h3>
         <div id="saved-chat" class="messages compact"></div>
       </section>
-      <button type="button" id="delete-page-btn" class="danger-btn">Clear memory for this page</button>
       <button type="button" id="add-to-wiki-btn" class="toolbar-btn">Add to wiki</button>
     </div>
   </section>
@@ -188,7 +192,7 @@
       <label for="wiki-ask-input" class="muted">Ask your wiki</label>
       <textarea id="wiki-ask-input" rows="2" placeholder="What themes connect my saved reading?"></textarea>
       <button type="button" id="wiki-ask-btn" class="toolbar-btn primary">Ask</button>
-      <div id="wiki-ask-reply" class="wiki-ask-reply" hidden></div>
+      <div id="wiki-ask-reply" class="wiki-ask-reply markdown-body" hidden></div>
     </section>
     <p id="wiki-empty" class="muted empty-hint view-pad">Save pages, add to wiki, then compile.</p>
     </div>
@@ -304,6 +308,7 @@
     </div>
   </div>
 
+  <script src="markdown.js"></script>
   <script src="panel.js"></script>
 </body>
 </html>
