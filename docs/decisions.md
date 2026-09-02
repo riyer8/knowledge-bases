@@ -47,15 +47,28 @@ fewer Chrome permission issues.
 
 ---
 
-## DECISION-004: Docs consolidated under `docs/`
+## DECISION-004: Documentation consolidated under `docs/`
 
 - **Date**: 2026-09-01
 - **Status**: accepted
 
-Product and engineering documentation lives in `docs/`. Root keeps only `CLAUDE.md`
-(constitution) and `init.md` (agent session protocol).
+Product and engineering documentation lives in `docs/`. Root keeps only `init.md` (session protocol).
 
-**Rationale:** Single readable source of truth; avoids scattered STATE/SPECS/TASKS folders.
+Legacy folders removed: `STATE/`, `TASKS/`, `SPECS/`, `AGENTS/`, `EVALS/`, `POSTMORTEMS/`, `TRACES/`, `inputs/`, `CLAUDE.md`.
+
+**Rationale:** Single readable source of truth; agents read `docs/constitution.md` + `docs/status.md`.
+
+---
+
+## DECISION-005: Constitution in docs only
+
+- **Date**: 2026-09-02
+- **Status**: accepted
+
+Removed root `CLAUDE.md`. All engineering rules live in `docs/constitution.md` (including the
+doc index and non-negotiables quick reference formerly in CLAUDE.md).
+
+**Rationale:** Avoid duplicate entry points; `docs/` is the single documentation tree.
 
 ---
 

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 struct SavedPageSummary: Identifiable, Codable, Hashable {

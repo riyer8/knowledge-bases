@@ -2,57 +2,63 @@
 
 ```text
 knowledge-bases/
-├── DesktopApp/
-│   └── DesktopApp/
-│       ├── App/                         # app delegate, pet window, hotkeys
-│       ├── Windows/                     # MainWindow, ManualInputsWindow
-│       ├── Views/                       # Chat, Library, Graph, Settings, Pet
-│       ├── Services/                    # BackendService, LibraryStore
-│       └── Models/                      # DesktopPetSettings
-├── core/
-│   ├── frontend_backend.py              # unified HTTP router (all clients)
-│   ├── config.py                        # centralized path + env config
-│   ├── llm_providers.py                 # OpenAI / Anthropic / Ollama
-│   ├── library_service.py               # saved pages, quotes, explore
-│   ├── page_context_service.py          # page ingest, search, connections
-│   ├── ingestion/                       # screenshot OCR, text ingest
-│   ├── privacy/                         # PII detection, hashing, sensitive sites
-│   ├── memory/                          # embeddings, graph, concept graph
-│   ├── retrieval/                       # semantic search, chat, page chat
-│   ├── integrations/                    # GCal, Gmail, OAuth
-│   └── proactive/                       # pattern detection, insights
+├── core/                          # Python backend
+│   ├── config.py                  # Central config (KB_ROOT, ports, LLM)
+│   ├── frontend_backend.py        # HTTP router — all clients
+│   ├── llm_providers.py           # OpenAI / Anthropic / Ollama
+│   ├── library_service.py         # Saved pages, quotes, explore
+│   ├── page_context_service.py    # Page ingest, search, connections
+│   ├── ingestion/                 # Screenshot OCR, text ingest, events
+│   ├── privacy/                   # PII detection, hashing, sensitive sites
+│   ├── memory/                    # Embeddings, graph, concept graph, buckets
+│   ├── retrieval/                 # RAG chat, page chat, context assembly
+│   ├── integrations/              # GCal, Gmail, OAuth
+│   └── proactive/                 # Pattern detection, insights
 ├── chrome-extension/
 │   ├── manifest.json
-│   ├── background.js                    # launcher + backend health
-│   ├── lib/launcher.js                  # HTTP auto-start client
-│   ├── content/extract.js               # page extraction
-│   └── sidepanel/                       # Quotes | Chat, saved library, graph
+│   ├── background.js              # Launcher + backend health
+│   ├── lib/launcher.js            # HTTP auto-start client (:8798)
+│   ├── content/extract.js         # Page extraction
+│   ├── sidepanel/                 # Quotes | Chat, library, graph
+│   └── install-native-host.sh     # Legacy optional path
+├── DesktopApp/
+│   └── DesktopApp/
+│       ├── App/                   # App delegate, menu bar, hotkeys
+│       ├── Windows/               # MainWindow, ManualInputsWindow
+│       ├── Views/                 # Chat, Library, Graph, Settings, Pet
+│       ├── Services/              # BackendService, LibraryStore
+│       └── Models/                # DesktopPetSettings
+├── docs/                          # All documentation (start at docs/README.md)
+│   ├── specs/                     # Event schema, privacy, buckets, anonymization
+│   └── traces/                    # Optional session logs
 ├── scripts/
-│   ├── start_backend.sh                 # backend launcher
-│   ├── launcher.mjs                     # LaunchAgent HTTP service (:8798)
-│   ├── install-launcher.mjs             # one-time launcher install
-│   ├── install_app.sh                   # build + install Context.app
+│   ├── start_backend.sh           # Backend launcher
+│   ├── launcher.mjs               # LaunchAgent HTTP service
+│   ├── install-launcher.mjs       # One-time launcher install
+│   ├── install_app.sh             # Build + install Context.app
 │   └── generate_app_icon.py
-├── docs/                                # all product + engineering documentation
-├── tests/                               # unit tests + privacy eval fixtures
-├── demo/                                # seed script for presentations
-├── main.py                              # backend entry point
-├── start.sh                             # one-click backend + app launcher
-├── CLAUDE.md                            # engineering constitution
-└── init.md                              # AI session protocol
+├── tests/                         # pytest + privacy eval fixtures
+├── demo/seed_demo.py              # Presentation seed data
+├── main.py                        # Backend entry point
+├── start.sh / stop.sh             # Backend lifecycle
+├── init.md                      # Session protocol (repo root)
 ```
 
-Runtime data is stored under `~/.kb/` (not in the repo). See [architecture.md](architecture.md).
+Runtime data: `~/.kb/` (see [storage.md](storage.md)). Not in the repo.
 
-## Hotkeys (macOS app — Cmd + Shift)
+## Hotkeys (macOS app — ⌘⇧)
 
 | Key | Action |
 |---|---|
-| `C` | Open chat tab |
-| `G` | Open graph tab |
+| `C` | Open chat |
+| `G` | Open graph |
 | `W` | Close main window |
-| `S` | Trigger backend screenshot capture |
+| `S` | Screenshot capture |
 
-## Documentation map
+## Documentation
 
-Everything else lives in [docs/README.md](README.md).
+Start at [docs/README.md](docs/README.md). Key references:
+
+- [Configuration](configuration.md) — all env vars
+- [Storage](storage.md) — `~/.kb/` layout
+- [Constitution](constitution.md) — full engineering rules

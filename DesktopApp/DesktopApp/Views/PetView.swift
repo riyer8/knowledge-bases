@@ -243,11 +243,13 @@ extension Color {
     }
 }
 
+#if DEBUG
 #Preview {
     PetView(settings: DesktopPetSettings())
         .frame(width: 130, height: 150)
         .background(Color.gray.opacity(0.2))
 }
+#endif
 
 private struct PetAvatarView: View {
     let icon: PetIconOption

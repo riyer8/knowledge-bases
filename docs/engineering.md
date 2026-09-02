@@ -1,90 +1,116 @@
 # Engineering Workflow
 
-This document supplements `CLAUDE.md` (constitution) and `init.md` (session protocol).
-Read both before making changes.
+How to work in this repo — for humans and AI agents. The full constitution is in
+[constitution.md](constitution.md). Session steps are in [init.md](../init.md).
 
-## Session start checklist
+---
 
-1. Read `CLAUDE.md`
-2. Read [status.md](status.md) — where we left off
-3. Read [agents.md](agents.md) — confirm your ownership boundary
-4. Read relevant [specs/](specs/) for modules you will touch
-5. Scan [decisions.md](decisions.md) for constraints
-6. Check [architecture.md](architecture.md) dependency graph for blast radius
-7. Write a scope declaration before editing (see `init.md`)
+## Session start
 
-## Session end checklist
+1. Read [constitution.md](constitution.md) (entry point)
+2. Read [constitution.md](constitution.md) if touching privacy, ingestion, or storage
+3. Read [status.md](status.md) — current phase and blockers
+4. Read [roadmap.md](roadmap.md) — confirm your milestone
+5. Read [agents.md](agents.md) — your ownership boundary
+6. Read relevant [specs/](specs/)
+7. Scan [decisions.md](decisions.md)
+8. Check [architecture.md](architecture.md) dependency graph
+9. Write a scope declaration (below)
 
-1. Update [status.md](status.md) with what happened and next action
-2. Add to [decisions.md](decisions.md) if you made a non-obvious architectural choice
-3. Run `pytest tests/`
-4. Update [roadmap.md](roadmap.md) checkboxes if you completed a milestone
+## Session end
+
+1. Update [status.md](status.md) — what happened + next action
+2. Update [roadmap.md](roadmap.md) if a milestone completed
+3. Log blockers/issues in [status.md](status.md)
+4. Add [decisions.md](decisions.md) entry if needed
+5. Run `pytest tests/`
+6. Finalize [traces/](traces/) log if you started one
+
+---
+
+## Scope declaration template
+
+Write this before your first edit:
+
+```markdown
+## Session Scope
+- Milestone: (from roadmap.md)
+- Agent role: (from agents.md)
+- Files to modify: [list]
+- Files to read only: [list]
+- Interfaces changing: [list or "none"]
+- Tests required: [list]
+- Docs to update at end: status.md, ...
+```
+
+Do not expand scope without re-declaring.
+
+---
 
 ## Memory mutation rules
 
-| Storage | Rule | Writer |
-|---|---|---|
-| `~/.kb/events/raw/` | append-only | ingestion |
-| `~/.kb/events/clean/` | append-only | privacy |
-| `~/.kb/index/` | mutable | memory |
-| `~/.kb/graph/` | mutable | memory |
-| `~/.kb/library/` | mutable | memory |
-| `~/.kb/hashes/map.json` | mutable | privacy |
+See [storage.md](storage.md) and [constitution.md](constitution.md). Summary:
 
-Never store raw screenshots, plaintext names, or PII in logs.
+- `events/raw/`, `events/clean/`, `paused.log` → append-only
+- `library/`, `index/`, `graph/`, `buckets/` → memory-agent
+- `hashes/` → privacy-agent (salt is write-once)
 
-## Trace log template
+---
 
-Optional for complex sessions. Save as `docs/traces/TASK-NNN-YYYY-MM-DD.md`:
+## Dependency graph
 
-```markdown
-# Trace: TASK-NNN — YYYY-MM-DD
-
-## Reads
-- [timestamp] Read status.md — noted: ...
-
-## Implementation
-- [timestamp] Created/modified ...
-
-## Tests
-- [timestamp] pytest tests/ — N passing
-
-## Open items
-- ...
+```text
+Clients (extension, DesktopApp)
+        → frontend_backend.py
+        → retrieval | proactive | ingestion
+        → privacy (mandatory for ingestion)
+        → memory + library
+        → llm_providers
 ```
 
-## Postmortem template
+Changing `memory` affects retrieval, proactive, and anything reading the index/graph.
+Changing `privacy` affects all ingestion paths.
 
-When something fails in a way that could recur:
+---
 
-```markdown
-# PM-NNN: Short title
+## Trace logs
 
-- **Date**: YYYY-MM-DD
-- **Severity**: low | medium | high
+For sessions longer than a single file change, log to [traces/](traces/).
+Template in [traces/README.md](traces/README.md).
 
-## What happened
-## Root cause
-## Resolution
-## Harness changes (must have at least one)
-- [ ] Updated spec in docs/specs/
-- [ ] Added eval case
-- [ ] Updated CLAUDE.md or init.md
-```
+---
+
+## Postmortem protocol
+
+Write a postmortem when:
+
+- A session failed to make meaningful progress
+- A bug was introduced (even if fixed same session)
+- Docs were stale and caused wasted work
+- A spec was missing and had to be written mid-implementation
+
+**Rule:** every postmortem must update at least one harness artifact (spec, test, doc).
+
+Format: `docs/traces/PM-NNN-short-title.md`
+
+---
 
 ## Specs index
 
-| Spec | Purpose |
+| Spec | When to read |
 |---|---|
-| [privacy-pipeline.md](specs/privacy-pipeline.md) | Mandatory privacy gate |
-| [event-schema.md](specs/event-schema.md) | Raw/clean event contract |
-| [name-anonymization.md](specs/name-anonymization.md) | Hash → display mapping |
-| [buckets.md](specs/buckets.md) | Life bucket taxonomy (Phase 3) |
+| [privacy-pipeline.md](specs/privacy-pipeline.md) | Any ingestion or storage change |
+| [event-schema.md](specs/event-schema.md) | Ingestion, integrations |
+| [name-anonymization.md](specs/name-anonymization.md) | Privacy, retrieval, UI display |
+| [buckets.md](specs/buckets.md) | Phase 3 classification work |
 
-## Interface contract rule
+---
 
-When creating cross-module functions, document the contract in [agents.md](agents.md)
-under the owning agent. Format: `function(input) -> output | raises Error`.
+## Interface contracts
 
-If you change an existing contract, update all callers in the same session or log the
-dependency in [status.md](status.md) blockers.
+Document cross-module functions in [agents.md](agents.md) under the owning agent:
+
+`function_name(input_type) -> output_type | raises ExceptionType`
+
+If you change a contract, update all callers in the same session or log a blocker in
+[status.md](status.md).

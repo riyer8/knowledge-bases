@@ -37,7 +37,7 @@ bash scripts/install_app.sh
 open -a Context
 ```
 
-See [getting-started.md](getting-started.md) for full setup.
+See [README.md](README.md) for the full documentation index.
 
 ## Architecture (summary)
 

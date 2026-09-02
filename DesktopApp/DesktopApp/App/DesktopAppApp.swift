@@ -120,7 +120,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "Context",
             .applicationVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0",
-            .copyright: "An AI that remembers what you've read.",
+            .credits: NSAttributedString(string: "An AI that remembers what you've read."),
         ])
     }
 

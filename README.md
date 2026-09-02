@@ -1,12 +1,27 @@
-# Knowledge Bases
+# Context
 
-**Context** — an AI that remembers what you've read and understands what you're looking at right now.
+A local-first personal knowledge system — an AI that remembers what you've read and understands
+what you're looking at right now.
 
-The browser becomes the place where knowledge is automatically understood, connected, and remembered — not something you manually save.
+## Quick links
 
-- [docs/](docs/) — product vision, architecture, getting started, API reference
-- [chrome-extension/](chrome-extension/) — Chrome side panel extension
-- [DesktopApp/](DesktopApp/) — macOS **Context** app (`bash scripts/install_app.sh`)
+| | |
+|---|---|
+| **Start here** | [docs/README.md](docs/README.md) |
+| **Run it** | [docs/getting-started.md](docs/getting-started.md) |
+| **Current status** | [docs/status.md](docs/status.md) |
+| **Architecture** | [docs/architecture.md](docs/architecture.md) |
+
+## Clients
+
+- **[chrome-extension/](chrome-extension/)** — Chrome side panel (reading, quotes, chat, graph)
+- **[DesktopApp/](DesktopApp/)** — macOS **Context.app** (`bash scripts/install_app.sh`)
+
+Both share the Python backend (`python3 main.py`, port 8765) and storage (`~/.kb/`).
+
+## For AI agents
+
+Read [docs/constitution.md](docs/constitution.md) and follow [init.md](init.md) at session start.
 
 ---
 

@@ -34,7 +34,7 @@ Copy `.env.example` to `.env` and configure as needed:
 cp .env.example .env
 ```
 
-Key variables:
+Key variables — full reference: [configuration.md](configuration.md).
 
 | Variable | Default | Purpose |
 |---|---|---|

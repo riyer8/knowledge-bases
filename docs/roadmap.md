@@ -23,7 +23,7 @@ API reference: [api.md](api.md)
 
 _Make what exists trustworthy before expanding._
 
-- [x] Engineering constitution (`CLAUDE.md`) and session protocol (`init.md`)
+- [x] Engineering constitution (`docs/constitution.md`) and session protocol (`init.md`)
 - [x] Centralized config (`core/config.py`)
 - [x] Privacy pipeline (`core/privacy/`)
   - [x] Sensitive URL / credential context detection

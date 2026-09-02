@@ -57,13 +57,14 @@ The extension does **not** contain the knowledge brain — it sends context to t
 
 ### macOS Desktop App (`DesktopApp/`)
 
-Swift/SwiftUI app with hotkeys, desktop pet, chat, graph view, manual inputs, screenshots,
-and proactive insights. Connects to the same backend at `http://127.0.0.1:8765`.
+Swift/SwiftUI app (**Context.app**) with menu bar, desktop pet, chat, **library** (saved pages
+and quotes from the extension), graph view, manual inputs, screenshots, and proactive insights.
+Connects to the same backend at `http://127.0.0.1:8765`.
 
-**Current gap:** the desktop app uses legacy endpoints (`/chat`, `/graph`, `/screenshot`,
-`/proactive`). The extension's saved library (`/library/*`) and page-context chat (`/ask`)
-are not yet surfaced in the macOS UI. Both clients already share the same `~/.kb/` storage —
-wiring the desktop app to `/library/*` is the next integration step.
+**Remaining gap:** desktop chat still uses legacy `POST /chat`; extension uses streaming
+`POST /ask`. Library panel is wired to `/library/*`.
+
+Install: `bash scripts/install_app.sh`
 
 ### Future clients
 
@@ -223,8 +224,7 @@ knowledge-bases/
 ├── tests/
 ├── scripts/start_backend.sh
 ├── main.py               # backend launcher
-├── CLAUDE.md             # engineering constitution
-└── init.md               # AI session protocol
+├── init.md             # session protocol (repo root)
 ```
 
 ### Future extraction (not started)
@@ -245,8 +245,11 @@ Cross-module interface changes require a new entry in `docs/decisions.md`.
 ## Related Docs
 
 - [Overview](overview.md)
+- [Configuration](configuration.md)
+- [Storage](storage.md)
 - [API Reference](api.md)
 - [Getting Started](getting-started.md)
 - [Roadmap](roadmap.md)
 - [Project Structure](project-structure.md)
 - [Vision](vision.md)
+- [Constitution](constitution.md)

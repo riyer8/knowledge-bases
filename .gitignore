@@ -3,6 +3,7 @@
 
 # Xcode user/local state
 DerivedData/
+DesktopApp/build/
 *.xcuserstate/
 *.xcuserdata/
 *.xcworkspace/
@@ -16,17 +17,12 @@ __pycache__/
 venv/
 .env
 
-# Manual input runtime artifacts
-inputs/manual/uploads/files/
-inputs/manual/uploads/text/
-inputs/manual/uploads/urls/
-inputs/manual/entries.jsonl
-inputs/screenshot/captures/
-.graph-dependencies.json
-
 # Launcher runtime files
 .kb_backend.pid
 .kb_backend.log
 
 # Optional per-machine extension ID
 chrome-extension/.extension-id
+
+# Runtime graph state (legacy desktop graph)
+.graph-dependencies.json

@@ -12,9 +12,9 @@ Execute these reads in order. Do not begin implementation until all are complete
 
 ### Step 1 — Engineering Constitution
 ```
-Read: CLAUDE.md
+Read: docs/constitution.md
 ```
-Internalize the rules. If anything in your task would violate CLAUDE.md, stop and flag it.
+Internalize the rules. If anything in your task would violate the constitution, stop and flag it.
 
 ### Step 2 — Current State
 ```
@@ -71,7 +71,7 @@ Before touching any module, answer:
 - What depends on this module? (its consumers)
 - What is the blast radius if I change the interface?
 
-If a change affects a consumer you don't own, coordinate via a new TASK before proceeding.
+If a change affects a consumer you don't own, log a blocker in `docs/status.md` and coordinate before proceeding.
 
 ---
 
@@ -82,14 +82,14 @@ implementation. Format:
 
 ```
 ## Session Scope Declaration
-- Task: TASK-NNN
+- Milestone: (from docs/roadmap.md)
 - Agent role: <agent-name>
 - Files I will modify: [explicit list]
 - Files I will read but not modify: [list]
 - Interfaces I will change: [list, or "none"]
 - Interfaces I will call: [list]
 - Tests I must pass before done: [list]
-- State files I will update at end: [list]
+- Docs I will update at end: docs/status.md, ...
 ```
 
 Do not touch any file not in your declared scope without re-declaring.
@@ -103,15 +103,15 @@ If you discover mid-session that scope must expand, pause and declare the expans
 
 Every non-trivial implementation session may write a trace log to `docs/traces/` (create the folder if needed).
 
-Name format: `docs/traces/TASK-NNN-YYYY-MM-DD.md`
+Name format: `docs/traces/YYYY-MM-DD-short-description.md`
 
 Trace log must record (in real time, not reconstructed at the end):
 
 ```markdown
-# Trace: TASK-NNN — YYYY-MM-DD
+# Trace: <title> — YYYY-MM-DD
 
 ## Reads
-- [timestamp] Read CLAUDE.md — OK
+- [timestamp] Read docs/constitution.md — OK
 - [timestamp] Read docs/status.md — noted: privacy module not started
 - ...
 
@@ -165,6 +165,8 @@ These rules govern what can be written where. Violations are bugs.
 | `~/.kb/hashes/map.json` | mutable | privacy-agent only |
 | `~/.kb/hashes/salt` | write-once, immutable | infra-agent (first run only) |
 | `~/.kb/auth/` | mutable | integration-agent only |
+| `~/.kb/library/` | mutable | memory-agent only |
+| `~/.kb/pages/` | mutable | memory-agent only |
 | `~/.kb/buckets/` | mutable | memory-agent only |
 | `docs/status.md` | mutable | any agent (end of session) |
 
@@ -251,7 +253,7 @@ Write a postmortem any time:
 - A bug was introduced and found (even if fixed in the same session)
 - A wrong assumption was baked in and had to be unwound
 - An interface change broke a caller unexpectedly
-- STATE/docs were out of date and caused wasted work at session start
+- Stale docs caused wasted work at session start
 - A spec was missing and had to be written mid-implementation
 
 "Institutional memory failure" = the harness did not contain information that would have
@@ -265,7 +267,7 @@ File: `docs/traces/PM-NNN-short-title.md` (or a dedicated postmortem section in 
 # PM-NNN: Short description of what went wrong
 
 - **Date**: YYYY-MM-DD
-- **Task affected**: TASK-NNN
+- **Task affected**: milestone from docs/roadmap.md
 - **Severity**: low | medium | high
 - **Type**: implementation_failure | state_loss | bad_assumption | interface_break | missing_spec
 
@@ -286,7 +288,7 @@ What was added/updated in the harness to prevent recurrence:
 - [ ] Updated spec: docs/specs/...
 - [ ] Added eval case: tests/fixtures/...
 - [ ] Updated agent spec: docs/agents.md
-- [ ] Added to CLAUDE.md: ...
+- [ ] Updated constitution: docs/constitution.md
 - [ ] New decision: docs/decisions.md
 
 ## Lessons
@@ -304,7 +306,7 @@ A postmortem with no harness changes is just a complaint — it doesn't prevent 
 
 ```
 SESSION START
-[ ] Read CLAUDE.md
+[ ] Read docs/constitution.md
 [ ] Read docs/status.md
 [ ] Read docs/roadmap.md
 [ ] Check docs/status.md for blockers and known issues
