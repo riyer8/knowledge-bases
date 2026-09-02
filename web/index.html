@@ -3,57 +3,149 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Context Wiki</title>
+  <title>Context</title>
   <link rel="stylesheet" href="app.css" />
 </head>
 <body>
-  <div class="app">
+  <div class="shell">
     <aside class="sidebar">
-      <header class="sidebar-header">
-        <h1>Context Wiki</h1>
-        <p class="muted">LLM-compiled knowledge from your reading</p>
-      </header>
-      <div class="sidebar-actions">
-        <button type="button" id="compile-btn" class="primary-btn">Compile wiki</button>
-        <button type="button" id="health-btn" class="ghost-btn">Health check</button>
+      <div class="brand">
+        <span class="brand-mark">◇</span>
+        <div>
+          <h1>Context</h1>
+          <p class="muted">Your local knowledge base</p>
+        </div>
       </div>
-      <div class="status-card" id="status-card">
-        <div><span class="label">Raw sources</span> <strong id="raw-count">—</strong></div>
-        <div><span class="label">Articles</span> <strong id="article-count">—</strong></div>
-        <div><span class="label">Pending compile</span> <strong id="pending-count">—</strong></div>
-      </div>
-      <div class="search-wrap">
-        <input type="search" id="search-input" placeholder="Search wiki…" autocomplete="off" />
-      </div>
-      <nav class="nav-section">
-        <button type="button" class="nav-item active" data-pane="index">Index</button>
-        <button type="button" class="nav-item" data-pane="articles">Articles</button>
-        <button type="button" class="nav-item" data-pane="raw">Raw sources</button>
+      <nav class="side-nav" id="side-nav">
+        <a href="#home" class="side-link active" data-view="home">Overview</a>
+        <a href="#library" class="side-link" data-view="library">Library</a>
+        <a href="#graph" class="side-link" data-view="graph">Graph</a>
+        <a href="#life" class="side-link" data-view="life">Life</a>
+        <a href="#wiki" class="side-link" data-view="wiki">Wiki</a>
+        <a href="#settings" class="side-link" data-view="settings">Settings</a>
       </nav>
-      <ul class="item-list" id="item-list"></ul>
+      <footer class="sidebar-footer">
+        <span id="conn-dot" class="conn-dot"></span>
+        <span id="conn-label" class="muted">Connecting…</span>
+      </footer>
     </aside>
-    <main class="main">
-      <header class="main-header">
-        <h2 id="content-title">Index</h2>
-        <p id="content-meta" class="muted"></p>
+
+    <div class="workspace">
+      <header class="topbar">
+        <h2 id="view-title">Overview</h2>
+        <p id="view-subtitle" class="muted">Everything in your knowledge base at a glance.</p>
       </header>
-      <article class="markdown-body" id="content-body">
-        <p class="muted">Loading…</p>
-      </article>
-      <section class="health-panel" id="health-panel" hidden>
-        <h3>Wiki health</h3>
-        <div id="health-issues"></div>
-        <div id="health-suggestions"></div>
+
+      <!-- Overview -->
+      <section class="view active" id="view-home">
+        <div class="stat-grid" id="home-stats"></div>
+        <div class="home-panels">
+          <article class="panel-card">
+            <h3>Recent saved pages</h3>
+            <ul class="link-list" id="home-recent-pages"></ul>
+          </article>
+          <article class="panel-card">
+            <h3>Wiki</h3>
+            <p id="home-wiki-summary" class="muted">Loading…</p>
+            <button type="button" class="btn ghost" data-goto="wiki">Open wiki</button>
+          </article>
+        </div>
       </section>
-      <section class="ask-panel">
-        <h3>Ask your wiki</h3>
-        <p class="muted">Ask across your articles.</p>
-        <textarea id="ask-input" rows="3" placeholder="What connects my notes on scaling laws?"></textarea>
-        <button type="button" id="ask-btn" class="primary-btn">Ask</button>
-        <div id="ask-reply" class="ask-reply" hidden></div>
-        <p id="ask-sources" class="muted"></p>
+
+      <!-- Library -->
+      <section class="view" id="view-library">
+        <div class="split-layout">
+          <div class="split-list" id="library-list">
+            <p class="muted empty">Loading…</p>
+          </div>
+          <div class="split-detail" id="library-detail">
+            <p class="empty-state">Select a saved page to read its summary, quotes, and chat history.</p>
+          </div>
+        </div>
       </section>
-    </main>
+
+      <!-- Graph -->
+      <section class="view" id="view-graph">
+        <div class="toolbar">
+          <span class="muted">Pages linked by shared topics</span>
+          <button type="button" class="btn text" id="graph-refresh">Refresh</button>
+        </div>
+        <div class="graph-wrap">
+          <svg id="graph-svg" viewBox="0 0 800 500"></svg>
+          <p id="graph-empty" class="empty-state" hidden>Save pages in the extension to see connections here.</p>
+        </div>
+      </section>
+
+      <!-- Life -->
+      <section class="view" id="view-life">
+        <div class="toolbar">
+          <span class="muted">Auto-classified activity — correct buckets as needed</span>
+          <button type="button" class="btn text" id="life-refresh">Refresh</button>
+        </div>
+        <div class="chip-row" id="life-chips"></div>
+        <div class="event-list" id="life-events"></div>
+      </section>
+
+      <!-- Wiki -->
+      <section class="view" id="view-wiki">
+        <div class="wiki-layout">
+          <aside class="wiki-sidebar">
+            <div class="wiki-actions">
+              <button type="button" class="btn primary" id="wiki-compile">Compile</button>
+              <button type="button" class="btn ghost" id="wiki-health">Health</button>
+            </div>
+            <div class="wiki-stats" id="wiki-stats"></div>
+            <input type="search" id="wiki-search" placeholder="Search wiki…" />
+            <div class="wiki-subnav">
+              <button type="button" class="wiki-tab active" data-wiki-pane="index">Index</button>
+              <button type="button" class="wiki-tab" data-wiki-pane="articles">Articles</button>
+              <button type="button" class="wiki-tab" data-wiki-pane="raw">Raw</button>
+            </div>
+            <ul class="wiki-items" id="wiki-items"></ul>
+          </aside>
+          <div class="wiki-main">
+            <header class="wiki-header">
+              <h3 id="wiki-title">Index</h3>
+              <p id="wiki-meta" class="muted"></p>
+            </header>
+            <article class="markdown-body" id="wiki-body"><p class="muted">Loading…</p></article>
+            <section class="wiki-health" id="wiki-health-panel" hidden></section>
+            <section class="wiki-ask">
+              <h4>Ask your wiki</h4>
+              <textarea id="wiki-ask-input" rows="3" placeholder="What themes connect my saved reading?"></textarea>
+              <button type="button" class="btn primary" id="wiki-ask-btn">Ask</button>
+              <div id="wiki-ask-reply" class="wiki-reply" hidden></div>
+              <p id="wiki-ask-sources" class="muted"></p>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="view" id="view-settings">
+        <div class="settings-grid">
+          <article class="panel-card">
+            <h3>Backend</h3>
+            <p id="settings-backend" class="muted">Checking…</p>
+            <p id="settings-storage" class="muted"></p>
+          </article>
+          <article class="panel-card">
+            <h3>AI provider</h3>
+            <p id="settings-provider" class="muted"></p>
+            <p class="muted small">Change provider and API keys in the Chrome extension Settings tab or desktop app.</p>
+          </article>
+          <article class="panel-card">
+            <h3>Clients</h3>
+            <ul class="bullets muted">
+              <li>Chrome extension — save quotes and chat while browsing</li>
+              <li>This dashboard — browse library, graph, life, and wiki</li>
+              <li>Desktop app — full macOS experience</li>
+              <li>Obsidian — open <code>~/.kb/wiki/</code> as a vault</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+    </div>
   </div>
   <div class="toast" id="toast" hidden></div>
   <script src="app.js"></script>

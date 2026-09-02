@@ -1,54 +1,31 @@
-const API = `${window.location.origin}`;
+const API = window.location.origin;
 
-const els = {
-  rawCount: document.getElementById("raw-count"),
-  articleCount: document.getElementById("article-count"),
-  pendingCount: document.getElementById("pending-count"),
-  compileBtn: document.getElementById("compile-btn"),
-  healthBtn: document.getElementById("health-btn"),
-  searchInput: document.getElementById("search-input"),
-  itemList: document.getElementById("item-list"),
-  contentTitle: document.getElementById("content-title"),
-  contentMeta: document.getElementById("content-meta"),
-  contentBody: document.getElementById("content-body"),
-  healthPanel: document.getElementById("health-panel"),
-  healthIssues: document.getElementById("health-issues"),
-  healthSuggestions: document.getElementById("health-suggestions"),
-  askInput: document.getElementById("ask-input"),
-  askBtn: document.getElementById("ask-btn"),
-  askReply: document.getElementById("ask-reply"),
-  askSources: document.getElementById("ask-sources"),
-  toast: document.getElementById("toast"),
+const VIEW_META = {
+  home: { title: "Overview", subtitle: "Everything in your knowledge base at a glance." },
+  library: { title: "Library", subtitle: "Saved pages with summaries, quotes, and chat history." },
+  graph: { title: "Graph", subtitle: "How your saved pages connect through shared topics." },
+  life: { title: "Life", subtitle: "Review and correct auto-classified activity." },
+  wiki: { title: "Wiki", subtitle: "LLM-compiled articles from your reading." },
+  settings: { title: "Settings", subtitle: "Backend status and connected clients." },
 };
 
-let state = {
-  pane: "index",
-  articles: [],
-  raw: [],
+const state = {
+  view: "home",
+  pages: [],
+  selectedPageId: null,
+  bucketLeaves: [],
+  wikiPane: "index",
+  wikiArticles: [],
+  wikiRaw: [],
 };
 
-function showToast(message) {
-  els.toast.textContent = message;
-  els.toast.hidden = false;
-  setTimeout(() => { els.toast.hidden = true; }, 3200);
-}
+const $ = (id) => document.getElementById(id);
 
-async function apiGet(path) {
-  const res = await fetch(`${API}${path}`);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
-}
-
-async function apiPost(path, body = {}) {
-  const res = await fetch(`${API}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.hidden = false;
+  setTimeout(() => { el.hidden = true; }, 3200);
 }
 
 function escapeHtml(text) {
@@ -67,207 +44,579 @@ function renderMarkdown(text) {
   html = html.replace(/^- (.+)$/gm, "<li>$1</li>");
   html = html.replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`);
   html = html.replace(/\n\n/g, "</p><p>");
-  html = `<p>${html}</p>`;
-  html = html.replace(/<p><\/p>/g, "");
-  return html;
+  return `<p>${html}</p>`.replace(/<p><\/p>/g, "");
 }
 
-function renderItemList() {
-  els.itemList.innerHTML = "";
-  const items = state.pane === "raw" ? state.raw : state.articles;
+async function apiGet(path) {
+  const res = await fetch(`${API}${path}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function apiPost(path, body = {}) {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function setConn(ok, label) {
+  $("conn-dot").className = `conn-dot ${ok ? "ok" : "err"}`;
+  $("conn-label").textContent = label;
+}
+
+function switchView(view) {
+  state.view = view;
+  document.querySelectorAll(".side-link").forEach((el) => {
+    el.classList.toggle("active", el.dataset.view === view);
+  });
+  document.querySelectorAll(".view").forEach((el) => {
+    el.classList.toggle("active", el.id === `view-${view}`);
+  });
+  const meta = VIEW_META[view] || VIEW_META.home;
+  $("view-title").textContent = meta.title;
+  $("view-subtitle").textContent = meta.subtitle;
+  if (view === "library") loadLibrary();
+  if (view === "graph") renderGraph();
+  if (view === "life") loadLife();
+  if (view === "wiki") loadWiki();
+  if (view === "settings") loadSettings();
+  if (view === "home") loadHome();
+}
+
+// --- Overview ---
+
+async function loadHome() {
+  try {
+    const [health, pages, wiki] = await Promise.all([
+      apiGet("/health"),
+      apiGet("/library/pages?limit=20"),
+      apiGet("/wiki/status").catch(() => ({ raw_count: 0, article_count: 0, uncompiled_count: 0 })),
+    ]);
+
+    const pageList = pages.pages || [];
+    const events = await apiGet("/buckets/recent?days=7&limit=1").catch(() => ({ events: [] }));
+
+    $("home-stats").innerHTML = `
+      <div class="stat-card"><strong>${pageList.length}</strong><span>Saved pages</span></div>
+      <div class="stat-card"><strong>${wiki.article_count || 0}</strong><span>Wiki articles</span></div>
+      <div class="stat-card"><strong>${wiki.raw_count || 0}</strong><span>Raw sources</span></div>
+      <div class="stat-card"><strong>${health.llm_provider || "—"}</strong><span>LLM provider</span></div>
+    `;
+
+    const recent = $("home-recent-pages");
+    recent.innerHTML = "";
+    if (!pageList.length) {
+      recent.innerHTML = "<li class='muted'>No saved pages yet — use the Chrome extension.</li>";
+    } else {
+      for (const page of pageList.slice(0, 5)) {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.textContent = page.title || "Untitled";
+        btn.addEventListener("click", () => {
+          switchView("library");
+          openPage(page.id);
+        });
+        li.appendChild(btn);
+        recent.appendChild(li);
+      }
+    }
+
+    $("home-wiki-summary").textContent =
+      `${wiki.article_count || 0} articles · ${wiki.uncompiled_count || 0} pending compile`;
+    setConn(true, health.llm_provider ? `Ready · ${health.llm_provider}` : "Connected");
+  } catch (err) {
+    setConn(false, "Backend offline");
+    $("home-stats").innerHTML = `<p class="empty-state">Start the backend with <code>python3 main.py</code></p>`;
+  }
+}
+
+// --- Library ---
+
+async function loadLibrary() {
+  const list = $("library-list");
+  list.innerHTML = "<p class='empty muted'>Loading…</p>";
+  try {
+    const data = await apiGet("/library/pages?limit=100");
+    state.pages = data.pages || [];
+    list.innerHTML = "";
+    if (!state.pages.length) {
+      list.innerHTML = "<p class='empty-state'>No saved pages yet.<br>Save from the Chrome extension while browsing.</p>";
+      return;
+    }
+    for (const page of state.pages) {
+      const card = document.createElement("div");
+      card.className = `lib-card${page.id === state.selectedPageId ? " active" : ""}`;
+      card.dataset.pageId = page.id;
+      card.innerHTML = `
+        <h4>${escapeHtml(page.title || "Untitled")}</h4>
+        <p>${escapeHtml(page.site || page.url || "")}</p>
+      `;
+      card.addEventListener("click", () => openPage(page.id));
+      list.appendChild(card);
+    }
+    if (state.selectedPageId) openPage(state.selectedPageId);
+  } catch (err) {
+    list.innerHTML = `<p class='empty error'>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function openPage(pageId) {
+  state.selectedPageId = pageId;
+  document.querySelectorAll(".lib-card").forEach((el) => {
+    el.classList.toggle("active", el.dataset.pageId === pageId);
+  });
+  const detail = $("library-detail");
+  detail.innerHTML = "<p class='muted'>Loading…</p>";
+  try {
+    const data = await apiGet(`/library/pages/${encodeURIComponent(pageId)}`);
+    const page = data.page;
+    const quotes = page.quotes || [];
+    const chat = page.chat_history || [];
+
+    detail.innerHTML = `
+      <h3>${escapeHtml(page.title || "Untitled")}</h3>
+      <p class="muted"><a href="${escapeHtml(page.url)}" target="_blank" rel="noopener">${escapeHtml(page.url || "")}</a></p>
+      <div class="detail-block">
+        <h4>Summary</h4>
+        <p>${escapeHtml(page.summary || "No summary.")}</p>
+      </div>
+      <div class="detail-block">
+        <h4>Quotes (${quotes.length})</h4>
+        <div id="detail-quotes"></div>
+      </div>
+      <div class="detail-block">
+        <h4>Chat (${chat.length} messages)</h4>
+        <div id="detail-chat"></div>
+      </div>
+    `;
+
+    const quotesEl = $("detail-quotes");
+    if (!quotes.length) {
+      quotesEl.innerHTML = "<p class='muted'>No quotes saved for this page.</p>";
+    } else {
+      for (const q of quotes) {
+        const card = document.createElement("div");
+        card.className = "quote-card";
+        card.innerHTML = `
+          <blockquote>${escapeHtml(q.text)}</blockquote>
+          ${q.note ? `<p class="muted">${escapeHtml(q.note)}</p>` : ""}
+        `;
+        quotesEl.appendChild(card);
+      }
+    }
+
+    const chatEl = $("detail-chat");
+    if (!chat.length) {
+      chatEl.innerHTML = "<p class='muted'>No chat history.</p>";
+    } else {
+      for (const turn of chat) {
+        const node = document.createElement("div");
+        node.className = `chat-turn ${turn.role}`;
+        node.textContent = turn.content;
+        chatEl.appendChild(node);
+      }
+    }
+  } catch (err) {
+    detail.innerHTML = `<p class='error'>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// --- Graph ---
+
+function layoutNodes(nodes, width, height) {
+  const positions = {};
+  const cx = width / 2;
+  const cy = height / 2;
+  const radius = Math.min(width, height) * 0.34;
+  nodes.forEach((node, index) => {
+    const angle = (index / nodes.length) * Math.PI * 2 - Math.PI / 2;
+    positions[node.id] = {
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
+    };
+  });
+  return positions;
+}
+
+async function renderGraph() {
+  const svg = $("graph-svg");
+  const empty = $("graph-empty");
+  svg.innerHTML = "";
+  try {
+    const data = await apiGet("/library/graph");
+    const nodes = (data.nodes || []).filter((n) => n.type === "page");
+    const edges = data.edges || [];
+    if (!nodes.length) {
+      empty.hidden = false;
+      return;
+    }
+    empty.hidden = true;
+    const width = 800;
+    const height = Math.max(500, nodes.length * 80);
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    const positions = layoutNodes(nodes, width, height);
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+    for (const edge of edges) {
+      const from = positions[edge.source];
+      const to = positions[edge.target];
+      if (!from || !to) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", from.x);
+      line.setAttribute("y1", from.y);
+      line.setAttribute("x2", to.x);
+      line.setAttribute("y2", to.y);
+      line.setAttribute("class", "graph-edge");
+      g.appendChild(line);
+    }
+
+    for (const node of nodes) {
+      const pos = positions[node.id];
+      if (!pos) continue;
+      const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      group.style.cursor = "pointer";
+      group.addEventListener("click", () => {
+        const id = node.id.replace(/^page:/, "");
+        switchView("library");
+        openPage(id);
+      });
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("r", "14");
+      circle.setAttribute("cx", pos.x);
+      circle.setAttribute("cy", pos.y);
+      circle.setAttribute("class", "graph-node");
+      group.appendChild(circle);
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", pos.x);
+      text.setAttribute("y", pos.y + 28);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("fill", "#9ca3af");
+      text.setAttribute("font-size", "11");
+      text.textContent = (node.label || "Page").slice(0, 24);
+      group.appendChild(text);
+      g.appendChild(group);
+    }
+    svg.appendChild(g);
+  } catch (err) {
+    empty.hidden = false;
+    empty.textContent = err.message;
+  }
+}
+
+// --- Life ---
+
+async function loadLife() {
+  $("life-chips").innerHTML = "<span class='muted'>Loading…</span>";
+  $("life-events").innerHTML = "";
+  try {
+    const [summary, events, taxonomy] = await Promise.all([
+      apiGet("/dashboard/time?days=7"),
+      apiGet("/buckets/recent?days=7&limit=30"),
+      apiGet("/buckets/taxonomy"),
+    ]);
+    state.bucketLeaves = taxonomy.leaves || [];
+    const chips = $("life-chips");
+    chips.innerHTML = "";
+    const topLevel = summary.by_top_level || [];
+    if (!topLevel.length) {
+      chips.innerHTML = "<span class='muted'>No classified activity yet.</span>";
+    } else {
+      for (const item of topLevel) {
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent = `${item.category}: ${item.percent}%`;
+        chips.appendChild(chip);
+      }
+    }
+    renderLifeEvents(events.events || []);
+  } catch (err) {
+    $("life-events").innerHTML = `<p class='empty-state'>${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function renderLifeEvents(events) {
+  const container = $("life-events");
+  container.innerHTML = "";
+  if (!events.length) {
+    container.innerHTML = "<p class='empty-state'>Captured events will appear here for review.</p>";
+    return;
+  }
+  for (const event of events) {
+    const card = document.createElement("article");
+    card.className = "event-card";
+    card.innerHTML = `
+      <div class="event-meta">
+        <span>${escapeHtml(event.source || "unknown")}</span>
+        <span>${escapeHtml(event.timestamp || "")}</span>
+      </div>
+      <p class="event-preview">${escapeHtml(event.text_preview || "(no preview)")}</p>
+      <div class="event-actions">
+        <select data-event-id="${escapeHtml(event.event_id)}"></select>
+        <button type="button" class="btn ghost save-bucket">Save</button>
+      </div>
+    `;
+    const select = card.querySelector("select");
+    for (const leaf of state.bucketLeaves) {
+      const opt = document.createElement("option");
+      opt.value = leaf;
+      opt.textContent = leaf;
+      opt.selected = leaf === event.bucket;
+      select.appendChild(opt);
+    }
+    const saveBtn = card.querySelector(".save-bucket");
+    saveBtn.disabled = true;
+    select.addEventListener("change", () => {
+      saveBtn.disabled = select.value === event.bucket;
+    });
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      try {
+        await apiPost("/buckets/override", { event_id: event.event_id, bucket: select.value });
+        toast(`Moved to ${select.value}`);
+        loadLife();
+      } catch (err) {
+        toast(err.message);
+        saveBtn.disabled = false;
+      }
+    });
+    container.appendChild(card);
+  }
+}
+
+// --- Wiki ---
+
+async function loadWikiStatus() {
+  const data = await apiGet("/wiki/status");
+  $("wiki-stats").innerHTML = `
+    <div>Raw: <strong>${data.raw_count}</strong></div>
+    <div>Articles: <strong>${data.article_count}</strong></div>
+    <div>Pending: <strong>${data.uncompiled_count}</strong></div>
+  `;
+}
+
+async function loadWikiIndex() {
+  state.wikiPane = "index";
+  document.querySelectorAll(".wiki-tab").forEach((el) => {
+    el.classList.toggle("active", el.dataset.wikiPane === "index");
+  });
+  const data = await apiGet("/wiki/index");
+  $("wiki-title").textContent = "Index";
+  $("wiki-meta").textContent = "Auto-maintained table of contents";
+  $("wiki-body").innerHTML = renderMarkdown(data.index);
+  $("wiki-items").innerHTML = "";
+  $("wiki-health-panel").hidden = true;
+}
+
+async function loadWikiArticles() {
+  state.wikiPane = "articles";
+  document.querySelectorAll(".wiki-tab").forEach((el) => {
+    el.classList.toggle("active", el.dataset.wikiPane === "articles");
+  });
+  const data = await apiGet("/wiki/articles");
+  state.wikiArticles = data.articles || [];
+  renderWikiItems();
+  if (state.wikiArticles[0]) loadWikiArticle(state.wikiArticles[0].slug);
+}
+
+async function loadWikiRawList() {
+  state.wikiPane = "raw";
+  document.querySelectorAll(".wiki-tab").forEach((el) => {
+    el.classList.toggle("active", el.dataset.wikiPane === "raw");
+  });
+  const data = await apiGet("/wiki/raw");
+  state.wikiRaw = data.raw || [];
+  renderWikiItems();
+  if (state.wikiRaw[0]) loadWikiRawItem(state.wikiRaw[0].id);
+}
+
+function renderWikiItems() {
+  const list = $("wiki-items");
+  list.innerHTML = "";
+  const items = state.wikiPane === "raw" ? state.wikiRaw : state.wikiArticles;
   for (const item of items) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
-    const title = item.title || item.slug;
-    btn.innerHTML = `${escapeHtml(title)}<span class="item-meta">${state.pane === "raw" ? (item.compiled ? "compiled" : "pending") : item.excerpt || ""}</span>`;
+    btn.textContent = item.title || item.slug || item.id;
     btn.addEventListener("click", () => {
-      if (state.pane === "raw") loadRaw(item.id);
-      else loadArticle(item.slug);
+      if (state.wikiPane === "raw") loadWikiRawItem(item.id);
+      else loadWikiArticle(item.slug);
     });
     li.appendChild(btn);
-    els.itemList.appendChild(li);
+    list.appendChild(li);
   }
 }
 
-async function loadStatus() {
-  const data = await apiGet("/wiki/status");
-  els.rawCount.textContent = data.raw_count;
-  els.articleCount.textContent = data.article_count;
-  els.pendingCount.textContent = data.uncompiled_count;
-}
-
-async function loadIndex() {
-  state.pane = "index";
-  document.querySelectorAll(".nav-item").forEach((el) => {
-    el.classList.toggle("active", el.dataset.pane === "index");
-  });
-  const data = await apiGet("/wiki/index");
-  els.contentTitle.textContent = "Index";
-  els.contentMeta.textContent = "Auto-maintained table of contents";
-  els.contentBody.innerHTML = renderMarkdown(data.index);
-  els.healthPanel.hidden = true;
-  els.itemList.innerHTML = "";
-}
-
-async function loadArticles() {
-  state.pane = "articles";
-  document.querySelectorAll(".nav-item").forEach((el) => {
-    el.classList.toggle("active", el.dataset.pane === "articles");
-  });
-  const data = await apiGet("/wiki/articles");
-  state.articles = data.articles || [];
-  renderItemList();
-  if (state.articles[0]) loadArticle(state.articles[0].slug);
-}
-
-async function loadRawList() {
-  state.pane = "raw";
-  document.querySelectorAll(".nav-item").forEach((el) => {
-    el.classList.toggle("active", el.dataset.pane === "raw");
-  });
-  const data = await apiGet("/wiki/raw");
-  state.raw = data.raw || [];
-  renderItemList();
-  if (state.raw[0]) loadRaw(state.raw[0].id);
-}
-
-async function loadArticle(slug) {
+async function loadWikiArticle(slug) {
   const data = await apiGet(`/wiki/articles/${encodeURIComponent(slug)}`);
   const article = data.article;
-  els.contentTitle.textContent = article.title;
-  els.contentMeta.textContent = article.backlinks?.length
+  $("wiki-title").textContent = article.title;
+  $("wiki-meta").textContent = article.backlinks?.length
     ? `Links: ${article.backlinks.join(", ")}`
     : "";
-  els.contentBody.innerHTML = renderMarkdown(article.content);
-  els.healthPanel.hidden = true;
+  $("wiki-body").innerHTML = renderMarkdown(article.content);
+  $("wiki-health-panel").hidden = true;
 }
 
-async function loadRaw(rawId) {
+async function loadWikiRawItem(rawId) {
   const data = await apiGet(`/wiki/raw/${encodeURIComponent(rawId)}`);
   const raw = data.raw;
-  els.contentTitle.textContent = raw.title;
-  els.contentMeta.textContent = raw.url || raw.metadata?.source_type || "";
-  els.contentBody.innerHTML = renderMarkdown(raw.content);
-  els.healthPanel.hidden = true;
+  $("wiki-title").textContent = raw.title;
+  $("wiki-meta").textContent = raw.url || "";
+  $("wiki-body").innerHTML = renderMarkdown(raw.content);
+  $("wiki-health-panel").hidden = true;
 }
 
-async function runCompile() {
-  els.compileBtn.disabled = true;
-  els.compileBtn.textContent = "Compiling…";
+async function loadWiki() {
   try {
-    const result = await apiPost("/wiki/compile", { max_sources: 3 });
-    showToast(result.message || "Wiki compiled");
-    await refresh();
+    await loadWikiStatus();
+    if (state.wikiPane === "articles") await loadWikiArticles();
+    else if (state.wikiPane === "raw") await loadWikiRawList();
+    else await loadWikiIndex();
   } catch (err) {
-    showToast(err.message);
-  } finally {
-    els.compileBtn.disabled = false;
-    els.compileBtn.textContent = "Compile wiki";
+    $("wiki-body").innerHTML = `<p class='empty-state'>${escapeHtml(err.message)}</p>`;
   }
 }
 
-async function runAsk() {
-  const question = els.askInput?.value.trim();
-  if (!question || !els.askBtn) return;
-  els.askBtn.disabled = true;
-  els.askBtn.textContent = "…";
-  if (els.askReply) {
-    els.askReply.hidden = false;
-    els.askReply.innerHTML = "<p class='muted'>Loading…</p>";
-  }
+// --- Settings ---
+
+async function loadSettings() {
   try {
-    const result = await apiPost("/wiki/ask", { question });
-    if (els.askReply) {
-      els.askReply.innerHTML = renderMarkdown(result.reply || "");
-    }
-    if (els.askSources) {
-      const sources = result.sources || [];
-      els.askSources.textContent = sources.length
-        ? `Sources: ${sources.join(" · ")}`
-        : "";
-    }
+    const [health, settings] = await Promise.all([
+      apiGet("/health"),
+      apiGet("/settings"),
+    ]);
+    $("settings-backend").textContent = `Connected · API v${health.api_version}`;
+    $("settings-storage").textContent = `Storage: ${health.kb_root}`;
+    $("settings-provider").textContent =
+      `Provider: ${settings.llm_provider_setting || "auto"} · Active: ${health.llm_provider || "—"}`;
+    setConn(true, "Connected");
   } catch (err) {
-    if (els.askReply) els.askReply.textContent = err.message;
-  } finally {
-    els.askBtn.disabled = false;
-    els.askBtn.textContent = "Ask";
+    $("settings-backend").textContent = "Backend offline — run python3 main.py";
+    setConn(false, "Offline");
   }
 }
 
-async function runHealthCheck() {
-  els.healthBtn.disabled = true;
-  try {
-    const result = await apiPost("/wiki/health-check");
-    els.healthPanel.hidden = false;
-    els.healthIssues.innerHTML = (result.issues || [])
-      .map((item) => `<div class="health-item"><strong>${escapeHtml(item.severity)}</strong>: ${escapeHtml(item.message)}</div>`)
-      .join("") || "<p class='muted'>No issues found.</p>";
-    const suggestions = [
-      ...(result.suggestions || []).map((s) => `Explore: ${s}`),
-      ...(result.new_article_ideas || []).map((s) => `New article idea: ${s}`),
-    ];
-    els.healthSuggestions.innerHTML = suggestions.length
-      ? `<ul>${suggestions.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
-      : "";
-    showToast("Health check complete");
-  } catch (err) {
-    showToast(err.message);
-  } finally {
-    els.healthBtn.disabled = false;
-  }
-}
+// --- Init ---
 
-async function runSearch() {
-  const q = els.searchInput.value.trim();
-  if (!q) return;
-  const data = await apiGet(`/wiki/search?q=${encodeURIComponent(q)}`);
-  state.pane = "articles";
-  state.articles = (data.results || []).map((r) => ({
-    slug: r.slug,
-    title: r.title,
-    excerpt: r.excerpt,
-  }));
-  renderItemList();
-  if (state.articles[0]) loadArticle(state.articles[0].slug);
-}
-
-async function refresh() {
-  await loadStatus();
-  if (state.pane === "index") await loadIndex();
-  else if (state.pane === "raw") await loadRawList();
-  else await loadArticles();
-}
-
-document.querySelectorAll(".nav-item").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const pane = btn.dataset.pane;
-    if (pane === "index") loadIndex();
-    else if (pane === "raw") loadRawList();
-    else loadArticles();
+document.querySelectorAll(".side-link").forEach((link) => {
+  link.addEventListener("click", (e) => {
+    e.preventDefault();
+    switchView(link.dataset.view);
+    history.replaceState(null, "", `#${link.dataset.view}`);
   });
 });
 
-els.compileBtn.addEventListener("click", runCompile);
-els.healthBtn.addEventListener("click", runHealthCheck);
-els.askBtn?.addEventListener("click", runAsk);
-els.askInput?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    runAsk();
-  }
-});
-els.searchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") runSearch();
+document.querySelectorAll("[data-goto]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    switchView(btn.dataset.goto);
+    history.replaceState(null, "", `#${btn.dataset.goto}`);
+  });
 });
 
-els.contentBody.addEventListener("click", (e) => {
+$("graph-refresh")?.addEventListener("click", renderGraph);
+$("life-refresh")?.addEventListener("click", loadLife);
+
+document.querySelectorAll(".wiki-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    const pane = tab.dataset.wikiPane;
+    if (pane === "index") loadWikiIndex();
+    else if (pane === "raw") loadWikiRawList();
+    else loadWikiArticles();
+  });
+});
+
+$("wiki-compile")?.addEventListener("click", async () => {
+  const btn = $("wiki-compile");
+  btn.disabled = true;
+  btn.textContent = "Compiling…";
+  try {
+    const result = await apiPost("/wiki/compile", { max_sources: 3 });
+    toast(result.message || "Compiled");
+    await loadWiki();
+  } catch (err) {
+    toast(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Compile";
+  }
+});
+
+$("wiki-health")?.addEventListener("click", async () => {
+  try {
+    const result = await apiPost("/wiki/health-check");
+    const panel = $("wiki-health-panel");
+    panel.hidden = false;
+    panel.innerHTML = `
+      <strong>Health check</strong>
+      <ul>${(result.issues || []).map((i) => `<li>${escapeHtml(i.severity)}: ${escapeHtml(i.message)}</li>`).join("") || "<li>No issues</li>"}</ul>
+    `;
+    toast("Health check complete");
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+$("wiki-ask-btn")?.addEventListener("click", async () => {
+  const question = $("wiki-ask-input")?.value.trim();
+  if (!question) return;
+  const btn = $("wiki-ask-btn");
+  const reply = $("wiki-ask-reply");
+  btn.disabled = true;
+  reply.hidden = false;
+  reply.innerHTML = "<p class='muted'>Thinking…</p>";
+  try {
+    const result = await apiPost("/wiki/ask", { question });
+    reply.innerHTML = renderMarkdown(result.reply || "");
+    $("wiki-ask-sources").textContent = (result.sources || []).length
+      ? `Sources: ${result.sources.join(" · ")}`
+      : "";
+  } catch (err) {
+    reply.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("wiki-search")?.addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter") return;
+  const q = e.target.value.trim();
+  if (!q) return;
+  try {
+    const data = await apiGet(`/wiki/search?q=${encodeURIComponent(q)}`);
+    state.wikiPane = "articles";
+    state.wikiArticles = (data.results || []).map((r) => ({
+      slug: r.slug,
+      title: r.title,
+    }));
+    document.querySelectorAll(".wiki-tab").forEach((el) => {
+      el.classList.toggle("active", el.dataset.wikiPane === "articles");
+    });
+    renderWikiItems();
+    if (state.wikiArticles[0]) loadWikiArticle(state.wikiArticles[0].slug);
+  } catch (err) {
+    toast(err.message);
+  }
+});
+
+$("wiki-body")?.addEventListener("click", (e) => {
   const link = e.target.closest("[data-wikilink]");
   if (!link) return;
   e.preventDefault();
   const slug = link.dataset.wikilink.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  loadArticle(slug);
+  loadWikiArticle(slug);
 });
 
-refresh().catch((err) => {
-  els.contentBody.innerHTML = `<p class="muted">Could not connect to backend. Start it with <code>python3 main.py</code> then open <code>http://127.0.0.1:8765/app/</code></p><p>${escapeHtml(err.message)}</p>`;
+const initialView = (location.hash || "#home").slice(1) || "home";
+switchView(VIEW_META[initialView] ? initialView : "home");
+loadHome();
+
+window.addEventListener("hashchange", () => {
+  const view = (location.hash || "#home").slice(1);
+  if (VIEW_META[view]) switchView(view);
 });
