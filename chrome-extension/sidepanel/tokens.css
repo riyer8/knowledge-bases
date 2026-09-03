@@ -14,35 +14,13 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-/* Explicit dark */
-[data-theme-preference="dark"] {
-  color-scheme: dark;
-  --bg: #0b0d12;
-  --panel: #141820;
-  --panel-2: #1c2230;
-  --sidebar: #141820;
-  --text: #f3f4f6;
-  --muted: #9ca3af;
-  --accent: #7c9cff;
-  --accent-soft: rgba(124, 156, 255, 0.12);
-  --accent-strong: #9eb4ff;
-  --border: #2a3140;
-  --scrollbar-hover: #3d4658;
-  --danger: #f87171;
-  --danger-soft: rgba(248, 113, 113, 0.12);
-  --danger-border: rgba(248, 113, 113, 0.35);
-  --success: #34d399;
-  --success-soft: rgba(52, 211, 153, 0.08);
-  --warning: #fbbf24;
-  --on-accent: #0b1020;
-  --graph-node-fill: rgba(124, 156, 255, 0.22);
-  --graph-node-fill-hover: rgba(124, 156, 255, 0.34);
-  --graph-dot: rgba(148, 163, 184, 0.12);
-  --focus-ring: rgba(124, 156, 255, 0.55);
-  --shadow: rgba(0, 0, 0, 0.35);
-}
-
-/* Explicit light */
+/*
+ * Light tokens live on :root so the first paint always has accents.
+ * Chrome's side panel often misses prefers-color-scheme on first open,
+ * which left system theme with no color variables (white + black text).
+ */
+:root,
+[data-theme="light"],
 [data-theme-preference="light"] {
   color-scheme: light;
   --bg: #f4f6fb;
@@ -70,7 +48,35 @@
   --shadow: rgba(15, 23, 42, 0.08);
 }
 
-/* System — follow OS via media queries (no :root dark leak) */
+[data-theme="dark"],
+[data-theme-preference="dark"] {
+  color-scheme: dark;
+  --bg: #0b0d12;
+  --panel: #141820;
+  --panel-2: #1c2230;
+  --sidebar: #141820;
+  --text: #f3f4f6;
+  --muted: #9ca3af;
+  --accent: #7c9cff;
+  --accent-soft: rgba(124, 156, 255, 0.12);
+  --accent-strong: #9eb4ff;
+  --border: #2a3140;
+  --scrollbar-hover: #3d4658;
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --danger-border: rgba(248, 113, 113, 0.35);
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.08);
+  --warning: #fbbf24;
+  --on-accent: #0b1020;
+  --graph-node-fill: rgba(124, 156, 255, 0.22);
+  --graph-node-fill-hover: rgba(124, 156, 255, 0.34);
+  --graph-dot: rgba(148, 163, 184, 0.12);
+  --focus-ring: rgba(124, 156, 255, 0.55);
+  --shadow: rgba(0, 0, 0, 0.35);
+}
+
+/* System — follow OS when media queries are available */
 @media (prefers-color-scheme: dark) {
   [data-theme-preference="system"] {
     color-scheme: dark;

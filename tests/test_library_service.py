@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from importlib import reload
 
 import pytest
@@ -12,6 +13,10 @@ def library_env(tmp_path, monkeypatch):
     monkeypatch.setenv("KB_ROOT", str(tmp_path))
     import core.config as cfg_mod
     reload(cfg_mod)
+    import core.memory.bucket_classifier as bc_mod
+    import core.memory.buckets_service as bs_mod
+    reload(bc_mod)
+    reload(bs_mod)
     import core.library_service as lib
     reload(lib)
     return lib
@@ -32,6 +37,36 @@ def test_save_and_list_pages(library_env, monkeypatch):
     pages = library_env.list_saved_pages()
     assert len(pages) == 1
     assert pages[0]["title"] == "Article A"
+
+
+def test_save_page_returns_before_llm(library_env, monkeypatch):
+    release = threading.Event()
+
+    def slow_summary(page):
+        release.wait(timeout=2)
+        return "LLM summary"
+
+    monkeypatch.setattr(library_env, "_generate_summary", slow_summary)
+    monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    page = library_env.save_page({
+        "url": "https://example.com/fast",
+        "title": "Fast Save",
+        "headings": ["Alpha", "Beta"],
+        "visible_text": "Hello",
+    }, background=True)
+
+    assert page["summary"] == "- Alpha\n- Beta"
+    listed = library_env.list_saved_pages()
+    assert listed[0]["id"] == page["id"]
+    release.set()
+    for _ in range(50):
+        loaded = library_env.get_saved_page(page["id"])
+        if loaded and loaded.get("summary") == "LLM summary":
+            break
+        threading.Event().wait(0.02)
+    else:
+        raise AssertionError("background summary never landed")
 
 
 def test_save_quote(library_env, monkeypatch):
@@ -172,6 +207,18 @@ def test_list_quotes_by_url(library_env, monkeypatch):
     )
     quotes = library_env.list_quotes(page_url="https://example.com/x")
     assert len(quotes) == 1
+
+
+def test_list_quotes_matches_canonical_url(library_env, monkeypatch):
+    monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
+    library_env.save_quote(
+        text="hashed quote text",
+        page_url="https://example.com/article/#section",
+        page_title="Article",
+    )
+    quotes = library_env.list_quotes(page_url="https://example.com/article")
+    assert len(quotes) == 1
+    assert quotes[0]["text"] == "hashed quote text"
 
 
 def test_clear_library(library_env, monkeypatch):

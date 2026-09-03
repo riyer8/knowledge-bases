@@ -9,12 +9,16 @@ const state = {
   history: [],
   quotes: [],
   busy: false,
+  saving: false,
   view: "chat",
   pageTab: "quotes",
   savedPages: [],
   selectedSavedId: null,
   pendingQuoteText: "",
   bucketLeaves: [],
+  bucketTree: {},
+  lifeCategory: "all",
+  lifeSummary: [],
   lifeEvents: [],
   wikiSelectedSlug: null,
   wikiArticles: [],
@@ -185,8 +189,28 @@ if (document.readyState === "loading") {
   init();
 }
 
+let panelUnloading = false;
+window.addEventListener("pagehide", () => {
+  panelUnloading = true;
+});
+
+function connectSidePanelPort() {
+  if (panelUnloading) return;
+  try {
+    const port = chrome.runtime.connect({ name: "sidepanel" });
+    port.onDisconnect.addListener(() => {
+      if (panelUnloading || document.visibilityState === "hidden") return;
+      window.setTimeout(connectSidePanelPort, 200);
+    });
+  } catch {
+    if (panelUnloading) return;
+    window.setTimeout(connectSidePanelPort, 500);
+  }
+}
+
 async function init() {
   try {
+    connectSidePanelPort();
     bindEvents();
   } catch (err) {
     console.error("Failed to bind extension UI events", err);
@@ -719,6 +743,20 @@ async function syncHighlightsToPage() {
   }
 }
 
+async function revealQuoteOnPage(quote) {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+    await chrome.tabs.sendMessage(tab.id, {
+      type: "SCROLL_TO_QUOTE",
+      quoteId: quote?.id || "",
+      text: quote?.text || "",
+    });
+  } catch {
+    setStatus("Could not find that quote on the page", true);
+  }
+}
+
 function sendRuntimeMessage(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, (response) => {
@@ -953,6 +991,7 @@ function renderPageQuotes() {
     `;
     card.dataset.quoteId = quoteId;
     card.dataset.quoteIndex = String(index);
+    card.title = "Show this quote on the page";
     els.pageQuotes.appendChild(card);
   });
 }
@@ -989,6 +1028,13 @@ function handlePageQuoteAction(event) {
   }
 
   handleQuoteEditAction(event);
+  if (event.defaultPrevented) return;
+
+  const card = event.target.closest(".quote-card");
+  if (!card || card.classList.contains("editing")) return;
+  if (event.target.closest("button, a, textarea, input")) return;
+  const quote = findQuoteById(card.dataset.quoteId, Number(card.dataset.quoteIndex));
+  if (quote) void revealQuoteOnPage(quote);
 }
 
 function findQuoteById(quoteId, quoteIndex) {
@@ -1156,6 +1202,7 @@ async function unsaveCurrentPage() {
     await loadPageQuotes();
     setStatus("Removed from saved pages");
     if (state.view === "graph") renderGraph();
+    if (state.view === "life") loadLifeView();
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -1193,12 +1240,15 @@ async function saveCurrentPage() {
     setStatus("Can't save this page — try a normal website (not chrome:// or the new tab page)", true);
     return;
   }
-  const ready = await ensureBackendReady();
+  if (state.saving) return;
+  const ready = await ensureBackendReady({ quiet: true });
   if (!ready) {
     setStatus("Backend not connected — check Settings", true);
     showSetupHelp();
     return;
   }
+  state.saving = true;
+  if (els.savePageBtn) els.savePageBtn.disabled = true;
   setStatus("Saving page…");
   try {
     state.page.title = getDisplayTitle();
@@ -1212,10 +1262,13 @@ async function saveCurrentPage() {
     if (!res.ok) throw new Error(data.error || "Save failed");
     state.savedPageId = data.page.id;
     markPageSaved(true);
-    await loadPageQuotes();
     setStatus("Page saved");
+    void loadPageQuotes();
   } catch (err) {
     setStatus(formatUserError(err.message), true);
+  } finally {
+    state.saving = false;
+    if (els.savePageBtn) els.savePageBtn.disabled = false;
   }
 }
 
@@ -1449,6 +1502,7 @@ async function deleteSavedPage(pageId) {
     showSavedList();
     loadSavedPages();
     if (state.view === "graph") renderGraph();
+    if (state.view === "life") loadLifeView();
   } catch (err) {
     setStatus(err.message, true);
   }
@@ -1548,7 +1602,7 @@ async function clearSavedLibrary() {
   const confirmed = await showConfirmDialog({
     title: "Clear saved pages?",
     message:
-      "Removes saved pages, quotes, and per-page chats.\n\nCaptured events, Life buckets, and integrations will stay.",
+      "Removes saved pages, quotes, per-page chats, and those items from Life.\n\nCalendar, messages, and other captured events stay.",
     confirmText: "Clear saved pages",
     cancelText: "Cancel",
   });
@@ -1567,6 +1621,7 @@ async function clearSavedLibrary() {
     if (state.view === "chat") void loadPageQuotes();
     if (state.view === "saved") loadSavedPages();
     if (state.view === "graph") renderGraph();
+    if (state.view === "life") loadLifeView();
     if (state.view === "settings") loadSettingsView();
   } catch (err) {
     setStatus(err.message, true);
@@ -1717,14 +1772,17 @@ function resetExtensionClientState() {
   state.savedPages = [];
   state.selectedSavedId = null;
   state.lifeEvents = [];
+  state.lifeSummary = [];
+  state.lifeCategory = "all";
   state.bucketLeaves = [];
+  state.bucketTree = {};
   renderChatHistory([]);
   markPageSaved(false);
   renderPageQuotes();
   if (els.lifeSummary) els.lifeSummary.innerHTML = "";
   if (els.lifeEvents) {
     els.lifeEvents.innerHTML =
-      '<p class="muted empty-hint">Captured events will appear here for bucket review.</p>';
+      '<p class="muted empty-hint">Save a page to see it here.</p>';
   }
 }
 
@@ -1748,6 +1806,90 @@ function removeChatEmptyHint() {
   if (hint) hint.remove();
 }
 
+function parentBucket(bucket) {
+  return String(bucket || "Other").split("/")[0];
+}
+
+function lifeSourceLabel(source) {
+  const labels = {
+    saved_page: "Saved page",
+    saved_quote: "Quote",
+    browser_remember: "Quote",
+    gcal: "Calendar",
+    gmail: "Email",
+    imessage: "Messages",
+    screen_capture: "Capture",
+    manual_text: "Note",
+  };
+  return labels[source] || source || "unknown";
+}
+
+function fillBucketSelect(select, selected) {
+  const tree = state.bucketTree || {};
+  select.innerHTML = "";
+  const parents = Object.keys(tree);
+  const leaves = state.bucketLeaves || [];
+  if (!parents.length) {
+    for (const leaf of leaves) {
+      const option = document.createElement("option");
+      option.value = leaf;
+      option.textContent = leaf;
+      option.selected = leaf === selected;
+      select.appendChild(option);
+    }
+    return;
+  }
+  for (const parent of parents) {
+    const children = tree[parent] || [];
+    if (!children.length) {
+      const option = document.createElement("option");
+      option.value = parent;
+      option.textContent = parent;
+      option.selected = parent === selected;
+      select.appendChild(option);
+      continue;
+    }
+    const group = document.createElement("optgroup");
+    group.label = parent;
+    for (const child of children) {
+      const option = document.createElement("option");
+      option.value = `${parent}/${child}`;
+      option.textContent = child;
+      option.selected = `${parent}/${child}` === selected;
+      group.appendChild(option);
+    }
+    select.appendChild(group);
+  }
+}
+
+function renderLifeChips() {
+  if (!els.lifeSummary) return;
+  els.lifeSummary.innerHTML = "";
+  const topLevel = state.lifeSummary || [];
+  const allBtn = document.createElement("button");
+  allBtn.type = "button";
+  allBtn.className = `life-chip${state.lifeCategory === "all" ? " active" : ""}`;
+  allBtn.textContent = "All";
+  allBtn.addEventListener("click", () => {
+    state.lifeCategory = "all";
+    renderLifeChips();
+    renderLifeEvents();
+  });
+  els.lifeSummary.appendChild(allBtn);
+  for (const item of topLevel) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `life-chip${state.lifeCategory === item.category ? " active" : ""}`;
+    chip.innerHTML = `<strong>${escapeHtml(item.category)}</strong> ${escapeHtml(String(item.percent))}%`;
+    chip.addEventListener("click", () => {
+      state.lifeCategory = item.category;
+      renderLifeChips();
+      renderLifeEvents();
+    });
+    els.lifeSummary.appendChild(chip);
+  }
+}
+
 async function loadLifeView() {
   if (!els.lifeSummary || !els.lifeEvents) return;
   els.lifeSummary.innerHTML = '<span class="muted">Loading…</span>';
@@ -1769,21 +1911,14 @@ async function loadLifeView() {
     if (!taxonomyRes.ok) throw new Error(taxonomy.error || "Failed to load taxonomy");
 
     state.bucketLeaves = taxonomy.leaves || [];
+    state.bucketTree = taxonomy.tree || {};
     state.lifeEvents = eventsData.events || [];
-
-    els.lifeSummary.innerHTML = "";
-    const topLevel = summary.by_top_level || [];
-    if (!topLevel.length) {
-      els.lifeSummary.innerHTML = '<span class="muted">No classified activity yet.</span>';
-    } else {
-      for (const item of topLevel) {
-        const chip = document.createElement("span");
-        chip.className = "life-chip";
-        chip.innerHTML = `<strong>${escapeHtml(item.category)}</strong> ${escapeHtml(String(item.percent))}%`;
-        els.lifeSummary.appendChild(chip);
-      }
+    state.lifeSummary = summary.by_top_level || [];
+    if (state.lifeCategory !== "all" && !state.lifeSummary.some((item) => item.category === state.lifeCategory)) {
+      state.lifeCategory = "all";
     }
 
+    renderLifeChips();
     renderLifeEvents();
     setStatus("Life view updated");
   } catch (err) {
@@ -1797,53 +1932,79 @@ function renderLifeEvents() {
   if (!els.lifeEvents) return;
   els.lifeEvents.innerHTML = "";
 
-  if (!state.lifeEvents.length) {
+  const filter = state.lifeCategory || "all";
+  const events = (state.lifeEvents || []).filter(
+    (event) => filter === "all" || parentBucket(event.bucket) === filter
+  );
+
+  if (!events.length) {
     els.lifeEvents.innerHTML =
-      '<p class="muted empty-hint">Captured events will appear here for bucket review.</p>';
+      '<p class="muted empty-hint">Save a page to see it categorized here.</p>';
     return;
   }
 
-  for (const event of state.lifeEvents) {
-    const card = document.createElement("article");
-    card.className = "life-event";
-    if (event.user_overridden) card.classList.add("user-overridden");
-
-    const meta = document.createElement("div");
-    meta.className = "life-event-meta";
-    meta.innerHTML = `
-      <span>${escapeHtml(event.source || "unknown")}</span>
-      <span class="muted">${escapeHtml(formatTimestamp(event.timestamp))}</span>
-    `;
-
-    const preview = document.createElement("p");
-    preview.className = "life-event-preview";
-    preview.textContent = event.text_preview || "(no preview)";
-
-    const actions = document.createElement("div");
-    actions.className = "life-event-actions";
-
-    const select = document.createElement("select");
-    select.dataset.eventId = event.event_id;
-    for (const leaf of state.bucketLeaves) {
-      const option = document.createElement("option");
-      option.value = leaf;
-      option.textContent = leaf;
-      option.selected = leaf === event.bucket;
-      select.appendChild(option);
+  const groups = [];
+  const byParent = {};
+  for (const event of events) {
+    const parent = parentBucket(event.bucket);
+    if (!byParent[parent]) {
+      byParent[parent] = [];
+      groups.push(parent);
     }
+    byParent[parent].push(event);
+  }
 
-    const saveBtn = document.createElement("button");
-    saveBtn.type = "button";
-    saveBtn.textContent = "Save";
-    saveBtn.disabled = select.value === event.bucket;
-    select.addEventListener("change", () => {
+  for (const parent of groups) {
+    const heading = document.createElement("h3");
+    heading.className = "life-group-title";
+    heading.textContent = parent;
+    els.lifeEvents.appendChild(heading);
+
+    for (const event of byParent[parent]) {
+      const card = document.createElement("article");
+      card.className = "life-event";
+      if (event.user_overridden) card.classList.add("user-overridden");
+
+      const meta = document.createElement("div");
+      meta.className = "life-event-meta";
+      meta.innerHTML = `
+        <span>${escapeHtml(lifeSourceLabel(event.source))}</span>
+        <span class="muted">${escapeHtml(formatTimestamp(event.timestamp))}</span>
+      `;
+
+      if (event.title) {
+        const title = document.createElement("h4");
+        title.className = "life-event-title";
+        title.textContent = event.title;
+        card.append(meta, title);
+      } else {
+        card.append(meta);
+      }
+
+      const preview = document.createElement("p");
+      preview.className = "life-event-preview";
+      preview.textContent = event.text_preview || "(no preview)";
+
+      const actions = document.createElement("div");
+      actions.className = "life-event-actions";
+
+      const select = document.createElement("select");
+      select.dataset.eventId = event.event_id;
+      fillBucketSelect(select, event.bucket);
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.textContent = "Save";
       saveBtn.disabled = select.value === event.bucket;
-    });
-    saveBtn.addEventListener("click", () => overrideEventBucket(event.event_id, select.value, saveBtn));
+      select.addEventListener("change", () => {
+        saveBtn.disabled = select.value === event.bucket;
+      });
+      saveBtn.addEventListener("click", () => overrideEventBucket(event.event_id, select.value, saveBtn));
 
-    actions.append(select, saveBtn);
-    card.append(meta, preview, actions);
-    els.lifeEvents.appendChild(card);
+      actions.append(select, saveBtn);
+      card.append(preview, actions);
+      els.lifeEvents.appendChild(card);
+    }
   }
 }
 

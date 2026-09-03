@@ -136,7 +136,7 @@ class LibraryRoutesMixin:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "page is required"})
                     return
                 history = payload.get("history") or []
-                record = library_save_page(page_data, chat_history=history)
+                record = library_save_page(page_data, chat_history=history, background=True)
                 self._send_json(HTTPStatus.OK, {"ok": True, "page": record})
                 return
             if path == "/library/quotes":

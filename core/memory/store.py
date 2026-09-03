@@ -22,8 +22,12 @@ def ingest(event: dict) -> None:
     if not text.strip():
         return
 
+    capture = event.get("capture_context") or {}
+    meta = (event.get("content") or {}).get("metadata") or {}
+    url = str(capture.get("url") or meta.get("url") or "")
+
     # 1. Bucket classification
-    bucket = classify_event(event_id, text, source)
+    bucket = classify_event(event_id, text, source, url=url)
     event["bucket"] = bucket
 
     # 2. Chunking + embedding

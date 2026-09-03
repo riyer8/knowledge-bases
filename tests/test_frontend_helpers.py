@@ -79,4 +79,7 @@ def test_design_tokens_present(token: str):
     content = WEB_TOKENS.read_text(encoding="utf-8")
     assert token in content
     assert '[data-theme-preference="light"]' in content
-    assert '@media (prefers-color-scheme: light)' in content
+    assert '[data-theme="light"]' in content
+    assert "@media (prefers-color-scheme: light)" in content
+    root_block = content.split("[data-theme-preference=\"dark\"]")[0]
+    assert "--accent:" in root_block

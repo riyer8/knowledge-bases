@@ -242,7 +242,8 @@ def test_buckets_taxonomy(backend_url):
     assert status == 200
     assert "leaves" in body
     assert "tree" in body
-    assert "Work/Deep Work" in body["leaves"]
+    assert "Work/Projects" in body["leaves"]
+    assert "News" in body["leaves"]
 
 
 def test_buckets_recent(backend_url):

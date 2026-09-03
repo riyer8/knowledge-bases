@@ -61,6 +61,12 @@ mark.ctx-highlight.ctx-has-note {
   border-bottom: 2px solid #7c9cff;
 }
 
+mark.ctx-highlight.ctx-highlight-focus {
+  background: rgba(124, 156, 255, 0.55);
+  outline: 2px solid #7c9cff;
+  outline-offset: 1px;
+}
+
 .ctx-highlight-note {
   position: absolute;
   z-index: 2147483645;

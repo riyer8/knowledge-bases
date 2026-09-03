@@ -9,7 +9,15 @@
       var k = "context-theme";
       var p = localStorage.getItem(k);
       if (p !== "light" && p !== "dark") p = "system";
+      var resolved = p;
+      if (p === "system") {
+        resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
+          ? "dark"
+          : "light";
+      }
       document.documentElement.dataset.themePreference = p;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
     })();
   </script>
   <link rel="icon" type="image/png" href="../icons/icon-32.png" />
@@ -27,7 +35,7 @@
       <nav class="nav" id="nav" aria-label="Main">
         <button class="nav-btn active" data-view="chat" title="Current browser tab — save quotes and chat">Page</button>
         <button class="nav-btn" data-view="saved" title="Saved pages with summaries and history">Saved</button>
-        <button class="nav-btn" data-view="life" title="Review how your activity is categorized">Life</button>
+        <button class="nav-btn" data-view="life" title="Saved reading grouped by category">Life</button>
         <button class="nav-btn" data-view="graph" title="Connections between pages and ideas">Graph</button>
         <button class="nav-btn" data-view="wiki" title="LLM-compiled wiki from your reading">Wiki</button>
         <button class="nav-btn" data-view="settings" title="Provider, appearance, and data">Settings</button>
@@ -150,14 +158,14 @@
 
   <!-- Life / buckets view -->
   <section class="view" id="view-life">
-    <p class="view-intro muted">Review and correct auto-sorted activity buckets.</p>
+    <p class="view-intro muted">Saved pages and quotes, grouped by category. Unsaved reading stays out — same as Saved and Graph.</p>
     <div class="life-toolbar">
-      <span class="muted">Review auto-classifications</span>
+      <span class="muted">Filter by category</span>
       <button type="button" id="refresh-life-btn" class="text-btn">Refresh</button>
     </div>
     <div id="life-summary" class="life-summary"></div>
     <div id="life-events" class="life-events">
-      <p class="muted empty-hint">Captured events will appear here for bucket review.</p>
+      <p class="muted empty-hint">Save a page to see it here.</p>
     </div>
   </section>
 
@@ -297,7 +305,7 @@
         <div class="data-action">
           <div class="data-action-copy">
             <strong>Clear saved pages</strong>
-            <p class="muted">Removes saved pages, quotes, and per-page chats only. Captured events, Life buckets, and integrations stay.</p>
+            <p class="muted">Removes saved pages, quotes, per-page chats, and those items from Life. Calendar, messages, and other captured events stay.</p>
           </div>
           <button type="button" id="clear-library-btn" class="toolbar-btn">Clear saved pages</button>
         </div>

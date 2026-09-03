@@ -36,11 +36,11 @@ def life_balance_insights(days: int = 7) -> list[dict]:
                 "action_url": "/buckets",
                 "urgency": 1,
             })
-        if category == "Relationships" and percent <= 5 and summary["event_count"] >= 10:
+        if category == "People" and percent <= 5 and summary["event_count"] >= 10:
             insights.append({
                 "type": "balance",
                 "title": "Light on relationships",
-                "body": f"Relationships were {percent}% of activity — consider reaching out.",
+                "body": f"People were {percent}% of activity — consider reaching out.",
                 "action_label": "View people",
                 "action_url": "/relationships",
                 "urgency": 1,

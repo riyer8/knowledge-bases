@@ -11,11 +11,28 @@ chrome.runtime.onStartup.addListener(() => {
   ensureBackend().catch(() => {});
 });
 
+const panelPorts = new Set();
+
 if (chrome.sidePanel?.onOpened) {
   chrome.sidePanel.onOpened.addListener(() => {
     ensureBackend().catch(() => {});
   });
 }
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "sidepanel") return;
+  const wasOpen = panelPorts.size > 0;
+  panelPorts.add(port);
+  if (!wasOpen) {
+    void setPanelOpen(true);
+  }
+  port.onDisconnect.addListener(() => {
+    panelPorts.delete(port);
+    if (panelPorts.size === 0) {
+      void setPanelOpen(false);
+    }
+  });
+});
 
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (!tab.url || info.status !== "complete") return;
@@ -47,6 +64,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
+  if (message?.type === "GET_PANEL_STATE") {
+    sendResponse({ open: panelPorts.size > 0 });
+    return false;
+  }
+
   if (message?.type === "GET_PAGE_CONTEXT") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       const tab = tabs[0];
@@ -72,7 +94,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ ok: false, error: "page_url required" });
           return;
         }
+        const savedMeta = await lookupSavedPage(pageUrl);
         const params = new URLSearchParams({ page_url: pageUrl });
+        if (savedMeta?.id) params.set("page_id", savedMeta.id);
         const res = await fetch(`${BACKEND}/library/quotes?${params}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load quotes");
@@ -132,6 +156,18 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   return false;
 });
+
+async function setPanelOpen(open) {
+  await chrome.storage.session.set({ panelOpen: open });
+  const tabs = await chrome.tabs.query({});
+  const type = open ? "PANEL_OPENED" : "PANEL_CLOSED";
+  await Promise.all(tabs.map((tab) => {
+    if (!tab.id || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) {
+      return Promise.resolve();
+    }
+    return chrome.tabs.sendMessage(tab.id, { type }).catch(() => {});
+  }));
+}
 
 async function broadcastActiveTab(tab) {
   const url = tab?.url || "";

@@ -91,7 +91,7 @@ def test_keyword_rule_classifies_exercise():
     from core.memory.bucket_classifier import classify_event
     event_id = str(uuid.uuid4())
     bucket = classify_event(event_id, "Went for a morning run, 5km", "screen_capture")
-    assert bucket == "Health/Exercise"
+    assert bucket == "Health/Fitness"
 
 
 def test_gcal_source_classifies_as_work():
@@ -99,6 +99,30 @@ def test_gcal_source_classifies_as_work():
     event_id = str(uuid.uuid4())
     bucket = classify_event(event_id, "Q3 Planning Review", "gcal")
     assert bucket.startswith("Work")
+
+
+def test_url_classifies_github_as_work_projects():
+    from core.memory.bucket_classifier import classify_event
+    event_id = str(uuid.uuid4())
+    bucket = classify_event(
+        event_id,
+        "Saved page: Cool repo\nURL: https://github.com/org/repo",
+        "saved_page",
+        url="https://github.com/org/repo",
+    )
+    assert bucket == "Work/Projects"
+
+
+def test_url_classifies_news_site():
+    from core.memory.bucket_classifier import classify_event
+    event_id = str(uuid.uuid4())
+    bucket = classify_event(
+        event_id,
+        "Saved page: Headline",
+        "saved_page",
+        url="https://www.nytimes.com/2026/01/01/world/story.html",
+    )
+    assert bucket == "News"
 
 
 def test_classification_is_persisted(tmp_path):
@@ -123,10 +147,10 @@ def test_user_override_persists():
     from core.memory.bucket_classifier import classify_event, override_bucket
     event_id = str(uuid.uuid4())
     classify_event(event_id, "watched netflix", "screen_capture")
-    override_bucket(event_id, "Creativity/Exploration")
+    override_bucket(event_id, "Creative")
     # Re-classify should return the override
     result = classify_event(event_id, "watched netflix", "screen_capture")
-    assert result == "Creativity/Exploration"
+    assert result == "Creative"
 
 
 # --- Graph ---
@@ -151,7 +175,7 @@ def test_index_event_creates_person_edge():
     from core.memory.graph import index_event, get_neighbors
     event = _make_event("coffee with Alice")
     event["entities"] = [{"type": "PERSON", "hash": "a3f9b72c"}]
-    event["bucket"] = "Relationships/Friends"
+    event["bucket"] = "People/Friends"
     index_event(event)
     neighbors = get_neighbors(event["id"])
     assert any("person:a3f9b72c" in n["node"] for n in neighbors)
@@ -161,7 +185,7 @@ def test_get_person_events():
     from core.memory.graph import index_event, get_person_events
     event = _make_event("dinner with Bob")
     event["entities"] = [{"type": "PERSON", "hash": "b00b1234"}]
-    event["bucket"] = "Relationships/Friends"
+    event["bucket"] = "People/Friends"
     index_event(event)
     events = get_person_events("b00b1234")
     assert event["id"] in events

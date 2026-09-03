@@ -120,7 +120,7 @@ def test_ingest_text_classifies_into_bucket(tmp_path, monkeypatch):
     data = json.loads(classifications_path.read_text())
     assert len(data) == 1
     bucket = list(data.values())[0]["bucket"]
-    assert bucket == "Health/Exercise"
+    assert bucket == "Health/Fitness"
 
 
 # --- ingest_screenshot ---

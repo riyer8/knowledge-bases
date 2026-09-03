@@ -15,17 +15,17 @@
     return global.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
 
-  function syncColorScheme(preference) {
-    const scheme =
-      preference === "system" ? resolvedTheme("system") : preference;
-    document.documentElement.style.colorScheme = scheme;
+  function syncColorScheme(resolved) {
+    document.documentElement.style.colorScheme = resolved;
   }
 
   function applyTheme(mode) {
     const preference = MODES.includes(mode) ? mode : getTheme();
+    const resolved = resolvedTheme(preference);
     document.documentElement.dataset.themePreference = preference;
-    syncColorScheme(preference);
-    return resolvedTheme(preference);
+    document.documentElement.dataset.theme = resolved;
+    syncColorScheme(resolved);
+    return resolved;
   }
 
   function setTheme(mode) {
@@ -38,7 +38,7 @@
     applyTheme(getTheme());
     if (typeof global.matchMedia === "function") {
       global.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
-        if (getTheme() === "system") syncColorScheme("system");
+        if (getTheme() === "system") applyTheme("system");
       });
     }
   }

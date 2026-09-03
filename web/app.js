@@ -4,7 +4,7 @@ const VIEW_META = {
   home: { title: "Overview", subtitle: "Everything in your knowledge base at a glance." },
   library: { title: "Library", subtitle: "Saved pages with summaries, quotes, and chat history." },
   graph: { title: "Graph", subtitle: "How your saved pages connect through shared topics." },
-  life: { title: "Life", subtitle: "Review and correct auto-classified activity." },
+  life: { title: "Life", subtitle: "Saved reading, grouped by category." },
   wiki: { title: "Wiki", subtitle: "LLM-compiled articles from your reading." },
   settings: { title: "Settings", subtitle: "Backend status and connected clients." },
 };
@@ -14,6 +14,10 @@ const state = {
   pages: [],
   selectedPageId: null,
   bucketLeaves: [],
+  bucketTree: {},
+  lifeCategory: "all",
+  lifeEvents: [],
+  lifeSummary: [],
   wikiPane: "index",
   wikiArticles: [],
   wikiRaw: [],
@@ -349,6 +353,90 @@ async function renderGraph() {
 
 // --- Life ---
 
+function parentBucket(bucket) {
+  return String(bucket || "Other").split("/")[0];
+}
+
+function lifeSourceLabel(source) {
+  const labels = {
+    saved_page: "Saved page",
+    saved_quote: "Quote",
+    browser_remember: "Quote",
+    gcal: "Calendar",
+    gmail: "Email",
+    imessage: "Messages",
+    screen_capture: "Capture",
+    manual_text: "Note",
+  };
+  return labels[source] || source || "unknown";
+}
+
+function fillBucketSelect(select, selected) {
+  const tree = state.bucketTree || {};
+  select.innerHTML = "";
+  const parents = Object.keys(tree);
+  const leaves = state.bucketLeaves || [];
+  if (!parents.length) {
+    for (const leaf of leaves) {
+      const opt = document.createElement("option");
+      opt.value = leaf;
+      opt.textContent = leaf;
+      opt.selected = leaf === selected;
+      select.appendChild(opt);
+    }
+    return;
+  }
+  for (const parent of parents) {
+    const children = tree[parent] || [];
+    if (!children.length) {
+      const opt = document.createElement("option");
+      opt.value = parent;
+      opt.textContent = parent;
+      opt.selected = parent === selected;
+      select.appendChild(opt);
+      continue;
+    }
+    const group = document.createElement("optgroup");
+    group.label = parent;
+    for (const child of children) {
+      const opt = document.createElement("option");
+      opt.value = `${parent}/${child}`;
+      opt.textContent = child;
+      opt.selected = `${parent}/${child}` === selected;
+      group.appendChild(opt);
+    }
+    select.appendChild(group);
+  }
+}
+
+function renderLifeChips() {
+  const chips = $("life-chips");
+  chips.innerHTML = "";
+  const topLevel = state.lifeSummary || [];
+  const allBtn = document.createElement("button");
+  allBtn.type = "button";
+  allBtn.className = `chip${state.lifeCategory === "all" ? " active" : ""}`;
+  allBtn.textContent = "All";
+  allBtn.addEventListener("click", () => {
+    state.lifeCategory = "all";
+    renderLifeChips();
+    renderLifeEvents();
+  });
+  chips.appendChild(allBtn);
+  for (const item of topLevel) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `chip${state.lifeCategory === item.category ? " active" : ""}`;
+    chip.innerHTML = `<strong>${escapeHtml(item.category)}</strong> ${escapeHtml(String(item.percent))}%`;
+    chip.addEventListener("click", () => {
+      state.lifeCategory = item.category;
+      renderLifeChips();
+      renderLifeEvents();
+    });
+    chips.appendChild(chip);
+  }
+}
+
 async function loadLife() {
   $("life-chips").innerHTML = "<span class='muted'>Loading…</span>";
   $("life-events").innerHTML = "";
@@ -359,71 +447,81 @@ async function loadLife() {
       apiGet("/buckets/taxonomy"),
     ]);
     state.bucketLeaves = taxonomy.leaves || [];
-    const chips = $("life-chips");
-    chips.innerHTML = "";
-    const topLevel = summary.by_top_level || [];
-    if (!topLevel.length) {
-      chips.innerHTML = "<span class='muted'>No classified activity yet.</span>";
-    } else {
-      for (const item of topLevel) {
-        const chip = document.createElement("span");
-        chip.className = "chip";
-        chip.innerHTML = `<strong>${escapeHtml(item.category)}</strong> ${escapeHtml(String(item.percent))}%`;
-        chips.appendChild(chip);
-      }
+    state.bucketTree = taxonomy.tree || {};
+    state.lifeEvents = events.events || [];
+    state.lifeSummary = summary.by_top_level || [];
+    if (state.lifeCategory !== "all" && !state.lifeSummary.some((item) => item.category === state.lifeCategory)) {
+      state.lifeCategory = "all";
     }
-    renderLifeEvents(events.events || []);
+    renderLifeChips();
+    renderLifeEvents();
   } catch (err) {
     $("life-events").innerHTML = `<p class='empty-state'>${escapeHtml(err.message)}</p>`;
   }
 }
 
-function renderLifeEvents(events) {
+function renderLifeEvents() {
   const container = $("life-events");
   container.innerHTML = "";
+  const filter = state.lifeCategory || "all";
+  const events = (state.lifeEvents || []).filter(
+    (event) => filter === "all" || parentBucket(event.bucket) === filter
+  );
   if (!events.length) {
-    container.innerHTML = "<p class='empty-state'>Captured events will appear here for review.</p>";
+    container.innerHTML = "<p class='empty-state'>Save a page to see it categorized here.</p>";
     return;
   }
+  const groups = [];
+  const byParent = {};
   for (const event of events) {
-    const card = document.createElement("article");
-    card.className = "event-card";
-    card.innerHTML = `
-      <div class="event-meta">
-        <span>${escapeHtml(event.source || "unknown")}</span>
-        <span>${escapeHtml(event.timestamp || "")}</span>
-      </div>
-      <p class="event-preview">${escapeHtml(event.text_preview || "(no preview)")}</p>
-      <div class="event-actions">
-        <select data-event-id="${escapeHtml(event.event_id)}"></select>
-        <button type="button" class="btn ghost save-bucket">Save</button>
-      </div>
-    `;
-    const select = card.querySelector("select");
-    for (const leaf of state.bucketLeaves) {
-      const opt = document.createElement("option");
-      opt.value = leaf;
-      opt.textContent = leaf;
-      opt.selected = leaf === event.bucket;
-      select.appendChild(opt);
+    const parent = parentBucket(event.bucket);
+    if (!byParent[parent]) {
+      byParent[parent] = [];
+      groups.push(parent);
     }
-    const saveBtn = card.querySelector(".save-bucket");
-    saveBtn.disabled = true;
-    select.addEventListener("change", () => {
-      saveBtn.disabled = select.value === event.bucket;
-    });
-    saveBtn.addEventListener("click", async () => {
+    byParent[parent].push(event);
+  }
+  for (const parent of groups) {
+    const heading = document.createElement("h3");
+    heading.className = "life-group-title";
+    heading.textContent = parent;
+    container.appendChild(heading);
+    for (const event of byParent[parent]) {
+      const card = document.createElement("article");
+      card.className = "event-card";
+      const title = event.title ? `<h4 class="event-title">${escapeHtml(event.title)}</h4>` : "";
+      card.innerHTML = `
+        <div class="event-meta">
+          <span>${escapeHtml(lifeSourceLabel(event.source))}</span>
+          <span>${escapeHtml(formatShortDate(event.timestamp) || event.timestamp || "")}</span>
+        </div>
+        ${title}
+        <p class="event-preview">${escapeHtml(event.text_preview || "(no preview)")}</p>
+        <div class="event-actions">
+          <select data-event-id="${escapeHtml(event.event_id)}"></select>
+          <button type="button" class="btn ghost save-bucket">Save</button>
+        </div>
+      `;
+      const select = card.querySelector("select");
+      fillBucketSelect(select, event.bucket);
+      const saveBtn = card.querySelector(".save-bucket");
       saveBtn.disabled = true;
-      try {
-        await apiPost("/buckets/override", { event_id: event.event_id, bucket: select.value });
-        toast(`Moved to ${select.value}`);
-        loadLife();
-      } catch (err) {
-        toast(err.message);
-        saveBtn.disabled = false;
-      }
-    });
-    container.appendChild(card);
+      select.addEventListener("change", () => {
+        saveBtn.disabled = select.value === event.bucket;
+      });
+      saveBtn.addEventListener("click", async () => {
+        saveBtn.disabled = true;
+        try {
+          await apiPost("/buckets/override", { event_id: event.event_id, bucket: select.value });
+          toast(`Moved to ${select.value}`);
+          loadLife();
+        } catch (err) {
+          toast(err.message);
+          saveBtn.disabled = false;
+        }
+      });
+      container.appendChild(card);
+    }
   }
 }
 

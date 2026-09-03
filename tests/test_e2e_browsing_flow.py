@@ -174,7 +174,8 @@ def test_e2e_browse_highlight_quote_chat_save_graph(
     })
     assert status == 200
     page_id = saved["page"]["id"]
-    assert saved["page"]["summary"].startswith("Summary:")
+    assert saved["page"]["title"] == page_a["title"]
+    assert saved["page"]["summary"]
 
     # 6. by-url lookup (syncPageLibraryState)
     status, by_url = _request(

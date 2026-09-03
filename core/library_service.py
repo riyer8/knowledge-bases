@@ -116,30 +116,109 @@ def _site_from_url(url: str) -> str:
         return ""
 
 
+def _canonical_page_url(url: str) -> str:
+    value = str(url or "").strip()
+    if not value:
+        return ""
+    value = value.split("#", 1)[0]
+    if value.endswith("/") and value.count("/") > 2:
+        value = value.rstrip("/")
+    return value
+
+
+def _urls_match(left: str, right: str) -> bool:
+    if not left or not right:
+        return False
+    if left == right:
+        return True
+    return _canonical_page_url(left) == _canonical_page_url(right)
+
+
 def _generate_summary(page: dict[str, Any]) -> str:
     block = render_page_context(page)
+    if len(block) > 4500:
+        block = block[:4500]
     messages = [
         {
             "role": "user",
             "content": (
-                "Summarize this page in 3-5 bullet points for future reference. "
+                "Summarize this page in 3-5 short bullet points for future reference. "
                 "Focus on what matters and what the reader should remember.\n\n"
                 f"{block}"
             ),
         }
     ]
     try:
-        return str(provider_chat(messages, stream=False)).strip()
+        return str(provider_chat(messages, stream=False, max_tokens=400)).strip()
     except Exception:
         title = page.get("title", "Untitled")
         return f"Saved page: {title}"
 
 
+def _instant_summary(page: dict[str, Any]) -> str:
+    bullets: list[str] = []
+    for heading in page.get("headings") or []:
+        text = str(heading or "").strip()
+        if text:
+            bullets.append(f"- {text}")
+        if len(bullets) >= 4:
+            break
+    if not bullets:
+        for para in page.get("paragraphs") or []:
+            text = str(para or "").strip()
+            if len(text) < 40:
+                continue
+            clipped = text[:180].rstrip()
+            bullets.append(f"- {clipped}{'…' if len(text) > 180 else ''}")
+            if len(bullets) >= 3:
+                break
+    if bullets:
+        return "\n".join(bullets)
+    return f"Saved page: {page.get('title', 'Untitled')}"
+
+
+def _persist_summary(page_id: str, summary: str) -> None:
+    path = _page_path(page_id)
+    if not path.exists():
+        return
+    page = json.loads(path.read_text(encoding="utf-8"))
+    page["summary"] = summary
+    path.write_text(json.dumps(page, indent=2), encoding="utf-8")
+    index = _load_saved_index()
+    for entry in index:
+        if entry.get("id") == page_id:
+            entry["summary"] = summary
+            break
+    _save_saved_index(index)
+
+
+def _enrich_saved_page(page_id: str, record: dict[str, Any]) -> None:
+    try:
+        summary = _generate_summary(record)
+        if not _page_path(page_id).exists():
+            return
+        _persist_summary(page_id, summary)
+        ingest_text(
+            text=f"Saved page: {record.get('title', '')}\nURL: {record.get('url', '')}\n\n{summary}",
+            source="saved_page",
+            metadata={
+                "page_id": page_id,
+                "url": record.get("url", ""),
+                "title": record.get("title", ""),
+            },
+            flagged_important=True,
+        )
+    except Exception:
+        pass
+
+
 def save_page(
     page_data: dict[str, Any],
     chat_history: list[dict[str, str]] | None = None,
+    *,
+    background: bool = False,
 ) -> dict[str, Any]:
-    """Explicitly save a page with summary and optional chat history."""
+    """Explicitly save a page. LLM summary and memory ingest can run in the background."""
     _ensure_dirs()
     url = str(page_data.get("url", "")).strip()
     title = str(page_data.get("title", "")).strip() or "Untitled page"
@@ -149,10 +228,12 @@ def save_page(
     page_id = existing["id"] if existing else str(uuid.uuid4())
     saved_at = _now_iso()
     prior_meta: dict[str, Any] = {}
+    prior_summary = ""
     if existing:
         prior = get_saved_page(page_id)
         if prior:
             prior_meta = prior.get("metadata") or {}
+            prior_summary = str(prior.get("summary") or "").strip()
 
     record = {
         "id": page_id,
@@ -169,13 +250,28 @@ def save_page(
         "metadata": _normalize_metadata(page_data.get("metadata") or prior_meta),
         "saved_at": saved_at,
         "updated_at": saved_at,
+        "summary": prior_summary or _instant_summary(
+            {
+                "title": title,
+                "headings": page_data.get("headings", []),
+                "paragraphs": page_data.get("paragraphs", []),
+            }
+        ),
     }
-    record["summary"] = _generate_summary(record)
 
     _page_path(page_id).write_text(json.dumps(record, indent=2), encoding="utf-8")
 
     if chat_history:
         save_chat_history(page_id, chat_history)
+
+    quotes = _load_quotes()
+    quotes_changed = False
+    for quote in quotes:
+        if _urls_match(quote.get("page_url", ""), url) and not quote.get("page_id"):
+            quote["page_id"] = page_id
+            quotes_changed = True
+    if quotes_changed:
+        _save_quotes(quotes)
 
     summary_entry = {
         "id": page_id,
@@ -185,27 +281,25 @@ def save_page(
         "summary": record["summary"],
         "saved_at": saved_at,
         "updated_at": saved_at,
-        "quote_count": len([q for q in _load_quotes() if q.get("page_id") == page_id]),
+        "quote_count": len([q for q in quotes if q.get("page_id") == page_id]),
     }
     index = [e for e in index if e.get("id") != page_id]
     index.insert(0, summary_entry)
     _save_saved_index(index)
 
-    quotes = _load_quotes()
-    quotes_changed = False
-    for quote in quotes:
-        if quote.get("page_url") == url and not quote.get("page_id"):
-            quote["page_id"] = page_id
-            quotes_changed = True
-    if quotes_changed:
-        _save_quotes(quotes)
-
-    ingest_text(
-        text=f"Saved page: {title}\nURL: {url}\n\n{record['summary']}",
-        source="saved_page",
-        metadata={"page_id": page_id, "url": url, "title": title},
-        flagged_important=True,
-    )
+    if background:
+        threading.Thread(
+            target=_enrich_saved_page,
+            args=(page_id, dict(record)),
+            daemon=True,
+        ).start()
+    else:
+        _enrich_saved_page(page_id, record)
+        path = _page_path(page_id)
+        if path.exists():
+            record["summary"] = json.loads(path.read_text(encoding="utf-8")).get(
+                "summary", record["summary"]
+            )
     return record
 
 
@@ -227,6 +321,9 @@ def delete_saved_page(page_id: str) -> bool:
     page = get_saved_page(page_id)
     if not page:
         return False
+
+    from core.memory.buckets_service import forget_library_page
+    forget_library_page(page_id)
 
     for path in (_page_path(page_id), _chat_path(page_id)):
         if path.exists():
@@ -507,14 +604,22 @@ def delete_quote(quote_id: str) -> bool:
         return False
     _save_quotes(kept)
 
-    page_ids = {q.get("page_id") for q in kept if q.get("page_id")}
     index = _load_saved_index()
     for entry in index:
         pid = entry.get("id")
         if pid:
             entry["quote_count"] = len([q for q in kept if q.get("page_id") == pid])
     _save_saved_index(index)
+    from core.memory.buckets_service import forget_library_quote
+    forget_library_quote(quote_id)
     return True
+
+
+def get_quote(quote_id: str) -> dict[str, Any] | None:
+    quote_id = (quote_id or "").strip()
+    if not quote_id:
+        return None
+    return next((q for q in _load_quotes() if str(q.get("id", "")).strip() == quote_id), None)
 
 
 def list_quotes(page_id: str = "", page_url: str = "", limit: int = 100) -> list[dict[str, Any]]:
@@ -522,12 +627,12 @@ def list_quotes(page_id: str = "", page_url: str = "", limit: int = 100) -> list
     if page_id and page_url:
         quotes = [
             q for q in quotes
-            if q.get("page_id") == page_id or q.get("page_url") == page_url
+            if q.get("page_id") == page_id or _urls_match(q.get("page_url", ""), page_url)
         ]
     elif page_id:
         quotes = [q for q in quotes if q.get("page_id") == page_id]
     elif page_url:
-        quotes = [q for q in quotes if q.get("page_url") == page_url]
+        quotes = [q for q in quotes if _urls_match(q.get("page_url", ""), page_url)]
     return quotes[:limit]
 
 
@@ -612,10 +717,22 @@ def clear_library() -> None:
     if lib.exists():
         import shutil
         shutil.rmtree(lib)
+    from core.memory.buckets_service import forget_all_library_events
+    forget_all_library_events()
 
 
 def find_saved_page_by_url(url: str) -> dict[str, Any] | None:
+    exact = None
+    canonical = None
+    needle = _canonical_page_url(url)
     for entry in _load_saved_index():
-        if entry.get("url") == url:
-            return get_saved_page(entry["id"])
-    return None
+        entry_url = str(entry.get("url", "")).strip()
+        if entry_url == url:
+            exact = entry
+            break
+        if needle and not canonical and _canonical_page_url(entry_url) == needle:
+            canonical = entry
+    match = exact or canonical
+    if not match:
+        return None
+    return get_saved_page(match["id"])

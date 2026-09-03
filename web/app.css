@@ -420,10 +420,36 @@ body {
   border-radius: 999px;
   padding: 6px 12px;
   font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+button.chip {
+  font: inherit;
+}
+
+.chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .chip strong {
   color: var(--accent);
+  font-weight: 600;
+}
+
+.life-group-title {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.event-title {
+  margin: 0 0 6px;
+  font-size: 14px;
   font-weight: 600;
 }
 

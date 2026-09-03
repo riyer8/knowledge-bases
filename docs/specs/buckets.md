@@ -9,36 +9,35 @@ view of how the user actually spends their time, not just screen time — real l
 
 ## Default Bucket Taxonomy
 
+Reading-first categories. Saved pages and quotes only appear in Life while
+the page is still in the library — unsaved browsing stays out, same as Saved and Graph.
+
 ```
 Life
 ├── Work
-│   ├── Deep Work (coding, writing, analysis)
+│   ├── Projects (coding, design, shipping)
 │   ├── Meetings
-│   ├── Admin (email, scheduling)
-│   └── Learning (courses, docs, tutorials)
-├── Relationships
+│   └── Admin (email, scheduling)
+├── Learning
+│   ├── Research
+│   ├── Tutorials
+│   └── Reference
+├── News
+├── People
 │   ├── Family
 │   ├── Friends
 │   └── Colleagues
 ├── Health
-│   ├── Exercise
+│   ├── Fitness
 │   ├── Medical
-│   ├── Sleep
 │   └── Food
-├── Finances
-│   ├── Transactions
-│   ├── Investments
+├── Money
+│   ├── Spending
+│   ├── Investing
 │   └── Planning
 ├── Home
-│   ├── Errands
-│   ├── Purchases
-│   └── Maintenance
-├── Creativity
-│   ├── Projects
-│   └── Exploration
+├── Creative
 ├── Entertainment
-│   ├── Media
-│   └── Social
 └── Other
 ```
 
@@ -47,15 +46,20 @@ Life
 ## Classification
 
 Each clean event receives a bucket classification:
-- Primary bucket (e.g., "Work/Deep Work")
+- Primary bucket (e.g., "Work/Projects")
 - Confidence score (0.0–1.0)
-- Classification source: "keyword" | "llm" | "user_override"
+- Classification source: "url_rule" | "keyword" | "llm" | "user_override"
 
 Classification methods (in order of preference):
-1. **Source-based rules**: gcal events → Work or Relationships based on title
-2. **Keyword matching**: fast, no LLM needed for obvious cases
-3. **LLM classification**: for ambiguous events (use local model via Ollama)
-4. **User override**: user can drag events between buckets in UI
+1. **URL / site rules**: saved article host (github → Work/Projects, nytimes → News)
+2. **Source-based rules**: gcal events → Work or People based on title
+3. **Keyword matching**: specific phrases only (generic words like "reading" are ignored)
+4. **LLM classification**: for ambiguous events (use local model via Ollama)
+5. **User override**: user can move events between buckets in the Life tab
+
+Library-backed sources (`saved_page`, `saved_quote`, `browser_remember`) are hidden
+from Life unless the related page is still saved. Unsaving or deleting a page
+drops it from Life immediately.
 
 ---
 
@@ -81,7 +85,7 @@ Bucket classifications stored in `~/.kb/buckets/classifications.json`:
 ```json
 {
   "event_id": {
-    "bucket": "Work/Deep Work",
+    "bucket": "Work/Projects",
     "confidence": 0.92,
     "source": "llm",
     "user_overridden": false

@@ -75,8 +75,8 @@ body {
 
 #page-title:focus,
 .page-title-input:focus {
-  background: rgba(124, 156, 255, 0.12);
-  border-color: rgba(124, 156, 255, 0.35);
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .metadata-panel {
@@ -367,6 +367,16 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   background: var(--panel);
   font-size: 13px;
   line-height: 1.45;
+  cursor: pointer;
+}
+
+.quote-card:hover:not(.editing) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.quote-card.editing {
+  cursor: default;
 }
 
 .quote-card-head {
@@ -557,7 +567,7 @@ a.toolbar-btn {
 .explore-panel {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-  background: rgba(124, 156, 255, 0.05);
+  background: var(--accent-soft);
 }
 
 .suggestion-list { display: flex; flex-direction: column; gap: 6px; }
@@ -1002,6 +1012,7 @@ a.toolbar-btn {
 }
 
 .life-chip {
+  font: inherit;
   font-size: 11px;
   font-weight: 500;
   padding: 5px 10px;
@@ -1009,10 +1020,31 @@ a.toolbar-btn {
   background: var(--panel);
   border: 1px solid var(--border);
   color: var(--text);
+  cursor: pointer;
+}
+
+.life-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .life-chip strong {
   color: var(--accent);
+  font-weight: 600;
+}
+
+.life-group-title {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.life-event-title {
+  margin: 0 0 6px;
+  font-size: 13px;
   font-weight: 600;
 }
 

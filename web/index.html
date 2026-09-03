@@ -9,7 +9,15 @@
       var k = "context-theme";
       var p = localStorage.getItem(k);
       if (p !== "light" && p !== "dark") p = "system";
+      var resolved = p;
+      if (p === "system") {
+        resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
+          ? "dark"
+          : "light";
+      }
       document.documentElement.dataset.themePreference = p;
+      document.documentElement.dataset.theme = resolved;
+      document.documentElement.style.colorScheme = resolved;
     })();
   </script>
   <link rel="stylesheet" href="tokens.css" />
@@ -90,7 +98,7 @@
       <!-- Life -->
       <section class="view" id="view-life">
         <div class="toolbar">
-          <span class="muted">Auto-classified activity — correct buckets as needed</span>
+          <span class="muted">Saved pages and quotes only — unsaved reading stays off this list</span>
           <button type="button" class="btn text" id="life-refresh">Refresh</button>
         </div>
         <div class="chip-row" id="life-chips"></div>
