@@ -71,6 +71,8 @@ function setConn(ok, label) {
 }
 
 function switchView(view) {
+  // Life and Wiki are archived from the nav; keep their views in the DOM for a later revival.
+  if (view === "life" || view === "wiki") view = "home";
   state.view = view;
   document.querySelectorAll(".side-link").forEach((el) => {
     el.classList.toggle("active", el.dataset.view === view);
@@ -93,19 +95,15 @@ function switchView(view) {
 
 async function loadHome() {
   try {
-    const [health, pages, wiki] = await Promise.all([
+    const [health, pages] = await Promise.all([
       apiGet("/health"),
       apiGet("/library/pages?limit=20"),
-      apiGet("/wiki/status").catch(() => ({ raw_count: 0, article_count: 0, uncompiled_count: 0 })),
     ]);
 
     const pageList = pages.pages || [];
-    const events = await apiGet("/buckets/recent?days=7&limit=1").catch(() => ({ events: [] }));
 
     $("home-stats").innerHTML = `
       <div class="stat-card"><strong>${pageList.length}</strong><span>Saved pages</span></div>
-      <div class="stat-card"><strong>${wiki.article_count || 0}</strong><span>Wiki articles</span></div>
-      <div class="stat-card"><strong>${wiki.raw_count || 0}</strong><span>Raw sources</span></div>
       <div class="stat-card"><strong>${health.llm_provider || "—"}</strong><span>LLM provider</span></div>
     `;
 
@@ -127,8 +125,6 @@ async function loadHome() {
       }
     }
 
-    $("home-wiki-summary").textContent =
-      `${wiki.article_count || 0} articles · ${wiki.uncompiled_count || 0} pending compile`;
     setConn(true, health.llm_provider ? `Ready · ${health.llm_provider}` : "Connected");
   } catch (err) {
     setConn(false, "Backend offline");

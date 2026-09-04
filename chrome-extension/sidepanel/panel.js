@@ -8,6 +8,8 @@ const state = {
   lastSavedSelection: "",
   history: [],
   quotes: [],
+  exportQuoteKeys: new Set(),
+  tags: [],
   busy: false,
   saving: false,
   view: "chat",
@@ -70,8 +72,17 @@ const els = {
   pageTypeHint: document.getElementById("page-type-hint"),
   metaAuthor: document.getElementById("meta-author"),
   metaDate: document.getElementById("meta-date"),
+  metaCategory: document.getElementById("meta-category"),
+  metaMedium: document.getElementById("meta-medium"),
+  metaTldr: document.getElementById("meta-tldr"),
+  metaThoughts: document.getElementById("meta-thoughts"),
+  metaTagEditor: document.getElementById("meta-tag-editor"),
+  metaTagChips: document.getElementById("meta-tag-chips"),
+  metaTagInput: document.getElementById("meta-tag-input"),
   metaCustomFields: document.getElementById("meta-custom-fields"),
   metaAddField: document.getElementById("meta-add-field"),
+  copyExportJsonBtn: document.getElementById("copy-export-json"),
+  exportJsonPreview: document.getElementById("export-json-preview"),
   header: document.querySelector(".header"),
   settingsBackendStatus: document.getElementById("settings-backend-status"),
   settingsProviderSummary: document.getElementById("settings-provider-summary"),
@@ -308,9 +319,8 @@ function bindEvents() {
       setStatus(err.message || (state.savedPageId ? "Remove failed" : "Save failed"), true);
     });
   });
-  on(els.saveQuoteBtn, "click", openQuoteCompose);
   on(els.saveQuoteConfirm, "click", confirmSaveQuote);
-  on(els.saveQuoteCancel, "click", () => closeQuoteCompose({ keepSelection: true }));
+  on(els.saveQuoteCancel, "click", () => closeQuoteCompose({ keepSelection: false }));
   on(els.exploreBtn, "click", loadExploreSuggestions);
   on(els.savedBack, "click", showSavedList);
   on(els.deletePageBtn, "click", () => deleteSavedPage(state.selectedSavedId));
@@ -351,6 +361,7 @@ function bindEvents() {
   els.title?.addEventListener("input", () => {
     resizeTitleField();
     schedulePageDraftSave();
+    refreshExportJsonPreview();
   });
   els.title?.addEventListener("blur", savePageDetails);
   els.title?.addEventListener("keydown", (event) => {
@@ -361,8 +372,47 @@ function bindEvents() {
   });
   els.metaAuthor?.addEventListener("blur", savePageDetails);
   els.metaDate?.addEventListener("blur", savePageDetails);
-  els.metaAuthor?.addEventListener("input", schedulePageDraftSave);
+  els.metaCategory?.addEventListener("change", () => {
+    schedulePageDraftSave();
+    refreshExportJsonPreview();
+    savePageDetails();
+  });
+  els.metaMedium?.addEventListener("change", () => {
+    schedulePageDraftSave();
+    refreshExportJsonPreview();
+    savePageDetails();
+  });
+  els.metaAuthor?.addEventListener("input", () => {
+    schedulePageDraftSave();
+    refreshExportJsonPreview();
+  });
   els.metaDate?.addEventListener("input", schedulePageDraftSave);
+  els.metaTldr?.addEventListener("input", () => {
+    schedulePageDraftSave();
+    refreshExportJsonPreview();
+  });
+  els.metaThoughts?.addEventListener("input", () => {
+    schedulePageDraftSave();
+    refreshExportJsonPreview();
+  });
+  els.metaTldr?.addEventListener("blur", savePageDetails);
+  els.metaThoughts?.addEventListener("blur", savePageDetails);
+  els.metaTagInput?.addEventListener("keydown", handleTagInputKeydown);
+  els.metaTagInput?.addEventListener("blur", () => {
+    commitTagFromInput();
+    savePageDetails();
+  });
+  els.metaTagChips?.addEventListener("click", (event) => {
+    const removeBtn = event.target.closest("[data-remove-tag]");
+    if (!removeBtn) return;
+    event.preventDefault();
+    removeTag(removeBtn.dataset.removeTag);
+  });
+  els.metaTagEditor?.addEventListener("click", (event) => {
+    if (event.target.closest("button, input")) return;
+    els.metaTagInput?.focus();
+  });
+  on(els.copyExportJsonBtn, "click", copyBookshelfJson);
   els.metaAddField?.addEventListener("click", () => {
     addCustomMetaField("", "");
     schedulePageDraftSave();
@@ -376,6 +426,7 @@ function bindEvents() {
     savePageDetails();
   });
   els.pageQuotes?.addEventListener("click", handlePageQuoteAction);
+  els.pageQuotes?.addEventListener("change", handleQuoteExportToggle);
 
   on(els.nav, "click", (event) => {
     const button = event.target.closest(".nav-btn");
@@ -419,6 +470,8 @@ function switchPageTab(tab) {
 }
 
 function switchView(view) {
+  // Life and Wiki are archived from the nav; keep their views in the DOM for a later revival.
+  if (view === "life" || view === "wiki") return;
   state.view = view;
   document.querySelectorAll(".nav-btn").forEach((el) => {
     el.classList.toggle("active", el.dataset.view === view);
@@ -465,20 +518,18 @@ function updateSelection(selected) {
   const selectionChanged = normalized !== normalizeSelection(previous);
 
   if (!isSaveableSelection(normalized)) {
-    els.saveQuoteBtn.hidden = true;
-    closeQuoteCompose({ keepSelection: true });
+    setQuoteComposeIdle();
     return;
   }
 
   const alreadySaved = normalized === state.lastSavedSelection;
   if (alreadySaved) {
-    els.saveQuoteBtn.hidden = true;
-    closeQuoteCompose({ keepSelection: true });
+    setQuoteComposeIdle();
     return;
   }
 
-  els.saveQuoteBtn.hidden = false;
-  closeQuoteCompose({ keepSelection: true });
+  openQuoteCompose({ auto: true, resetNote: selectionChanged });
+  if (state.view === "chat") switchPageTab("quotes");
 }
 
 async function refreshSelectionFromPage() {
@@ -488,10 +539,25 @@ async function refreshSelectionFromPage() {
   }
 }
 
-function openQuoteCompose({ auto = false } = {}) {
+function setQuoteComposeIdle() {
+  state.pendingQuoteText = "";
+  if (!els.quoteCompose) return;
+  els.quoteCompose.hidden = false;
+  els.quoteCompose.classList.remove("ready");
+  if (els.quotePreview) {
+    els.quotePreview.textContent = "Highlight text on this page to save it as a quote.";
+    els.quotePreview.classList.add("empty");
+  }
+  if (els.quoteNote) els.quoteNote.value = "";
+  if (els.saveQuoteConfirm) els.saveQuoteConfirm.disabled = true;
+  if (els.saveQuoteBtn) els.saveQuoteBtn.hidden = true;
+}
+
+function openQuoteCompose({ auto = false, resetNote = true } = {}) {
   const text = normalizeSelection(state.selection);
   if (!isSaveableSelection(text)) {
-    setStatus("Highlight text on the page first", true);
+    setQuoteComposeIdle();
+    if (!auto) setStatus("Highlight text on the page first", true);
     return;
   }
   if (text === state.lastSavedSelection) {
@@ -499,26 +565,24 @@ function openQuoteCompose({ auto = false } = {}) {
   }
 
   state.pendingQuoteText = text;
-  els.quotePreview.textContent = text;
-  els.quoteNote.value = "";
   els.quoteCompose.hidden = false;
-  els.saveQuoteBtn.hidden = true;
+  els.quoteCompose.classList.add("ready");
+  els.quotePreview.textContent = text;
+  els.quotePreview.classList.remove("empty");
+  if (resetNote) els.quoteNote.value = "";
+  els.saveQuoteConfirm.disabled = false;
+  if (els.saveQuoteBtn) els.saveQuoteBtn.hidden = true;
   if (!auto) {
     els.quoteNote.focus();
   }
 }
 
 function closeQuoteCompose({ keepSelection = false } = {}) {
-  state.pendingQuoteText = "";
-  els.quoteCompose.hidden = true;
   if (!keepSelection) {
     state.selection = "";
     state.lastSavedSelection = "";
   }
-  const canPromptAgain =
-    isSaveableSelection(state.selection) &&
-    normalizeSelection(state.selection) !== state.lastSavedSelection;
-  els.saveQuoteBtn.hidden = !canPromptAgain;
+  setQuoteComposeIdle();
 }
 
 async function confirmSaveQuote() {
@@ -539,16 +603,16 @@ async function confirmSaveQuote() {
     const saved = await saveQuote(text, els.quoteNote.value.trim());
     if (saved) {
       state.lastSavedSelection = text;
-      closeQuoteCompose({ keepSelection: true });
-      els.saveQuoteBtn.hidden = true;
+      setQuoteComposeIdle();
+      if (els.saveQuoteBtn) els.saveQuoteBtn.hidden = true;
       setStatus("Quote saved");
       hideSetupHelp();
       switchPageTab("quotes");
       await syncHighlightsToPage();
     }
   } finally {
-    els.saveQuoteConfirm.disabled = false;
     els.saveQuoteConfirm.textContent = "Save quote";
+    els.saveQuoteConfirm.disabled = !state.pendingQuoteText;
   }
 }
 
@@ -604,7 +668,28 @@ function resizeTitleField() {
 }
 
 function emptyMetadata() {
-  return { author: "", date: "", custom: [] };
+  return {
+    author: "",
+    date: "",
+    category: "",
+    medium: "",
+    tldr: "",
+    thoughts: "",
+    tags: [],
+    custom: [],
+  };
+}
+
+function normalizeTags(raw) {
+  const tags = [];
+  const source = Array.isArray(raw) ? raw : [];
+  for (const item of source) {
+    const tag = String(item || "").trim();
+    if (tag && !tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
+      tags.push(tag);
+    }
+  }
+  return tags.slice(0, 40);
 }
 
 function normalizeMetadata(raw) {
@@ -612,6 +697,11 @@ function normalizeMetadata(raw) {
   if (!raw) return meta;
   meta.author = String(raw.author || "").trim();
   meta.date = String(raw.date || "").trim();
+  meta.category = String(raw.category || "").trim();
+  meta.medium = String(raw.medium || "").trim();
+  meta.tldr = String(raw.tldr || "").trim();
+  meta.thoughts = String(raw.thoughts || "").trim();
+  meta.tags = normalizeTags(raw.tags);
   meta.custom = Array.isArray(raw.custom)
     ? raw.custom
         .map((item) => ({
@@ -630,6 +720,11 @@ function mergeMetadata(preferred, fallback) {
   return {
     author: chosen.author || base.author,
     date: chosen.date || base.date,
+    category: chosen.category || base.category,
+    medium: chosen.medium || base.medium,
+    tldr: chosen.tldr || base.tldr,
+    thoughts: chosen.thoughts || base.thoughts,
+    tags: chosen.tags.length ? chosen.tags : base.tags,
     custom: chosen.custom.length ? chosen.custom : base.custom,
   };
 }
@@ -644,15 +739,257 @@ function collectMetadataFromForm() {
   return normalizeMetadata({
     author: els.metaAuthor?.value || "",
     date: els.metaDate?.value || "",
+    category: els.metaCategory?.value || "",
+    medium: els.metaMedium?.value || "",
+    tldr: els.metaTldr?.value || "",
+    thoughts: els.metaThoughts?.value || "",
+    tags: state.tags,
     custom,
   });
+}
+
+function setSelectValue(select, value) {
+  if (!select) return;
+  const next = String(value || "");
+  if (next && !Array.from(select.options).some((option) => option.value === next)) {
+    const option = document.createElement("option");
+    option.value = next;
+    option.textContent = next;
+    select.appendChild(option);
+  }
+  select.value = next;
 }
 
 function applyMetadataToForm(metadata) {
   const meta = normalizeMetadata(metadata);
   if (els.metaAuthor) els.metaAuthor.value = meta.author;
   if (els.metaDate) els.metaDate.value = meta.date;
+  setSelectValue(els.metaCategory, meta.category);
+  setSelectValue(els.metaMedium, meta.medium || suggestMedium(state.page));
+  if (els.metaTldr) els.metaTldr.value = meta.tldr;
+  if (els.metaThoughts) els.metaThoughts.value = meta.thoughts;
+  state.tags = meta.tags.slice();
+  renderTagChips();
   renderCustomMetaFields(meta.custom);
+  refreshExportJsonPreview();
+}
+
+function renderTagChips() {
+  if (!els.metaTagChips) return;
+  els.metaTagChips.innerHTML = "";
+  for (const tag of state.tags) {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    chip.innerHTML = `
+      <span>${escapeHtml(tag)}</span>
+      <button type="button" class="tag-chip-remove" data-remove-tag="${escapeAttr(tag)}" title="Remove tag" aria-label="Remove ${escapeAttr(tag)}">×</button>
+    `;
+    els.metaTagChips.appendChild(chip);
+  }
+}
+
+function addTag(raw) {
+  const tag = String(raw || "").trim().replace(/^,|,$/g, "");
+  if (!tag) return false;
+  if (state.tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
+    if (els.metaTagInput) els.metaTagInput.value = "";
+    return false;
+  }
+  state.tags.push(tag);
+  if (els.metaTagInput) els.metaTagInput.value = "";
+  renderTagChips();
+  schedulePageDraftSave();
+  refreshExportJsonPreview();
+  return true;
+}
+
+function removeTag(tag) {
+  const target = String(tag || "").trim().toLowerCase();
+  state.tags = state.tags.filter((item) => item.toLowerCase() !== target);
+  renderTagChips();
+  schedulePageDraftSave();
+  refreshExportJsonPreview();
+  savePageDetails();
+}
+
+function commitTagFromInput() {
+  const value = els.metaTagInput?.value || "";
+  if (!value.trim()) return;
+  addTag(value);
+}
+
+function handleTagInputKeydown(event) {
+  if (event.key === "Enter" || event.key === ",") {
+    event.preventDefault();
+    commitTagFromInput();
+    return;
+  }
+  if (event.key === "Backspace" && !(els.metaTagInput?.value || "") && state.tags.length) {
+    event.preventDefault();
+    removeTag(state.tags[state.tags.length - 1]);
+  }
+}
+
+function suggestMedium(page) {
+  const url = String(page?.url || "").toLowerCase();
+  const type = String(page?.page_type || "").toLowerCase();
+  if (/\byoutube\.com|\byoutu\.be|\bvimeo\.com|\bted\.com\b/.test(url) || type === "video") {
+    return "video";
+  }
+  if (/\barxiv\.org\b|\bpubmed\b|\bnih\.gov\b/.test(url) || type === "research_paper") {
+    return "research paper";
+  }
+  if (/\bgoodreads\.com\b/.test(url) || type === "book") {
+    return "book";
+  }
+  return "essay";
+}
+
+function todayDateAdded() {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildBookshelfEntry() {
+  return {
+    title: getDisplayTitle(),
+    url: state.page?.url || "",
+    author: (els.metaAuthor?.value || "").trim(),
+    dateAdded: todayDateAdded(),
+    category: (els.metaCategory?.value || "").trim(),
+    medium: (els.metaMedium?.value || "").trim(),
+    tldr: (els.metaTldr?.value || "").trim(),
+    thoughts: (els.metaThoughts?.value || "").trim(),
+    tags: state.tags.slice(),
+    notes: formatQuoteNotes(quotesSelectedForExport()),
+  };
+}
+
+function quoteExportKey(quote) {
+  return normalizeSelection(quote?.text || "");
+}
+
+function quotesSelectedForExport() {
+  const selected = (state.quotes || []).filter((quote) =>
+    state.exportQuoteKeys.has(quoteExportKey(quote))
+  );
+  return sortQuotesByPageOrder(selected);
+}
+
+function sortQuotesByPageOrder(quotes) {
+  const pageText = normalizeSelection(state.page?.visible_text || "");
+  return quotes.slice().sort((a, b) => {
+    const aPos = pageText.indexOf(quoteExportKey(a));
+    const bPos = pageText.indexOf(quoteExportKey(b));
+    const aRank = aPos < 0 ? Number.MAX_SAFE_INTEGER : aPos;
+    const bRank = bPos < 0 ? Number.MAX_SAFE_INTEGER : bPos;
+    if (aRank !== bRank) return aRank - bRank;
+    return String(a.saved_at || "").localeCompare(String(b.saved_at || ""));
+  });
+}
+
+function formatQuoteNotes(quotes) {
+  if (!quotes.length) return "";
+  return quotes
+    .map((quote) => {
+      const text = String(quote.text || "").trim();
+      const note = String(quote.note || "").trim();
+      const inner = note ? `**${note}:** ${text}` : text;
+      return `:::quote\n${inner}\n:::`;
+    })
+    .join("\n\n");
+}
+
+function escapeTemplateLiteral(text) {
+  return String(text || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$\{/g, "\\${");
+}
+
+function formatNotesLiteral(notes) {
+  if (!notes) return "``";
+  return `\`${escapeTemplateLiteral(notes)}\``;
+}
+
+function formatTagsLiteral(tags) {
+  const list = normalizeTags(tags);
+  if (!list.length) return "['']";
+  return `[${list
+    .map((tag) => `'${String(tag).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`)
+    .join(", ")}]`;
+}
+
+function formatBookshelfJson(entry) {
+  return `{
+    title: ${JSON.stringify(entry.title || "")},
+    url: ${JSON.stringify(entry.url || "")},
+    author: ${JSON.stringify(entry.author || "")},
+    dateAdded: ${JSON.stringify(entry.dateAdded || todayDateAdded())},
+    category: ${JSON.stringify(entry.category || "")},
+    medium: ${JSON.stringify(entry.medium || "")},
+    tldr: ${JSON.stringify(entry.tldr || "")},
+    thoughts: ${JSON.stringify(entry.thoughts || "")},
+    tags: ${formatTagsLiteral(entry.tags || [])},
+    notes: ${formatNotesLiteral(entry.notes || "")}
+  }`;
+}
+
+function refreshExportJsonPreview() {
+  if (!els.exportJsonPreview) return;
+  els.exportJsonPreview.textContent = formatBookshelfJson(buildBookshelfEntry());
+}
+
+async function copyBookshelfJson() {
+  const text = formatBookshelfJson(buildBookshelfEntry());
+  refreshExportJsonPreview();
+  const copied = await copyTextToClipboard(text);
+  if (copied) {
+    const button = els.copyExportJsonBtn;
+    if (button) {
+      const previous = button.textContent;
+      button.textContent = "Copied";
+      window.setTimeout(() => {
+        if (button.textContent === "Copied") button.textContent = previous;
+      }, 1600);
+    }
+    setStatus("JSON copied");
+    return;
+  }
+  const preview = els.exportJsonPreview;
+  if (preview) {
+    const range = document.createRange();
+    range.selectNodeContents(preview);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+  setStatus("Select the JSON and copy it", true);
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      return document.execCommand("copy");
+    } catch {
+      return false;
+    } finally {
+      textarea.remove();
+    }
+  }
 }
 
 function renderCustomMetaFields(custom) {
@@ -702,6 +1039,7 @@ async function persistPageDraft() {
   const draft = {
     title: getDisplayTitle(),
     metadata: collectMetadataFromForm(),
+    exportQuoteKeys: Array.from(state.exportQuoteKeys),
   };
   await chrome.storage.local.set({ [`pageDraft:${state.page.url}`]: draft });
 }
@@ -861,6 +1199,7 @@ async function refreshPageContext() {
   if (isNewPage) {
     state.history = [];
     state.quotes = [];
+    state.exportQuoteKeys = new Set();
     els.messages.innerHTML = "";
     removeChatEmptyHint();
     els.question.value = "";
@@ -873,6 +1212,7 @@ async function refreshPageContext() {
   const suggestedTitle = page.title || "Untitled page";
   const suggestedMetadata = normalizeMetadata(page.metadata);
   const draft = await loadPageDraft(page.url);
+  applyExportQuoteKeys(draft);
 
   els.site.textContent = page.site || page.url || "";
   if (els.pageTypeHint) {
@@ -902,6 +1242,7 @@ async function syncPageLibraryState() {
   const suggestedTitle = state.page.title || "Untitled page";
   const suggestedMetadata = normalizeMetadata(state.page.metadata);
   const draft = await loadPageDraft(previousUrl);
+  applyExportQuoteKeys(draft);
 
   try {
     const res = await fetch(`${BACKEND}/library/by-url?url=${encodeURIComponent(previousUrl)}`);
@@ -965,11 +1306,19 @@ function formatQuoteTime(savedAt) {
   });
 }
 
+function applyExportQuoteKeys(draft) {
+  if (!Array.isArray(draft?.exportQuoteKeys)) return;
+  state.exportQuoteKeys = new Set(
+    draft.exportQuoteKeys.map((key) => normalizeSelection(key)).filter(Boolean)
+  );
+}
+
 function renderPageQuotes() {
   els.pageQuotes.innerHTML = "";
   if (!state.quotes.length) {
     els.pageQuotes.innerHTML =
-      '<p class="muted empty-hint">Highlight text on the page, then save it as a quote here.</p>';
+      '<p class="muted empty-hint">Saved quotes from this page appear here.</p>';
+    refreshExportJsonPreview();
     return;
   }
   state.quotes.forEach((quote, index) => {
@@ -977,6 +1326,7 @@ function renderPageQuotes() {
     card.className = "quote-card";
     const quoteId = quote.id || "";
     const when = formatQuoteTime(quote.saved_at);
+    const checked = state.exportQuoteKeys.has(quoteExportKey(quote));
     card.innerHTML = `
       <div class="quote-card-head">
         <span class="quote-index">Quote ${state.quotes.length - index}</span>
@@ -988,12 +1338,17 @@ function renderPageQuotes() {
         <button type="button" class="text-btn" data-quote-edit data-quote-id="${escapeAttr(quoteId)}">Edit</button>
         <button type="button" class="text-btn danger-text" data-quote-delete data-quote-id="${escapeAttr(quoteId)}">Delete</button>
       </div>
+      <label class="quote-export">
+        <input type="checkbox" data-quote-export ${checked ? "checked" : ""} />
+        Add to metadata
+      </label>
     `;
     card.dataset.quoteId = quoteId;
     card.dataset.quoteIndex = String(index);
     card.title = "Show this quote on the page";
     els.pageQuotes.appendChild(card);
   });
+  refreshExportJsonPreview();
 }
 
 function quoteApiPath(quoteId) {
@@ -1030,9 +1385,11 @@ function handlePageQuoteAction(event) {
   handleQuoteEditAction(event);
   if (event.defaultPrevented) return;
 
+  if (event.target.closest(".quote-export, [data-quote-export]")) return;
+
   const card = event.target.closest(".quote-card");
   if (!card || card.classList.contains("editing")) return;
-  if (event.target.closest("button, a, textarea, input")) return;
+  if (event.target.closest("button, a, textarea, input, label")) return;
   const quote = findQuoteById(card.dataset.quoteId, Number(card.dataset.quoteIndex));
   if (quote) void revealQuoteOnPage(quote);
 }
@@ -1047,6 +1404,31 @@ function findQuoteById(quoteId, quoteIndex) {
     return state.quotes[quoteIndex];
   }
   return null;
+}
+
+function handleQuoteExportToggle(event) {
+  const input = event.target.closest("[data-quote-export]");
+  if (!input) return;
+  const card = input.closest(".quote-card");
+  const quote = findQuoteById(
+    card?.dataset.quoteId,
+    Number(card?.dataset.quoteIndex)
+  );
+  if (!quote) return;
+  const key = quoteExportKey(quote);
+  if (input.checked) state.exportQuoteKeys.add(key);
+  else state.exportQuoteKeys.delete(key);
+  void persistPageDraft();
+  refreshExportJsonPreview();
+}
+
+function rememberQuoteExportKey(previousText, nextText) {
+  const oldKey = normalizeSelection(previousText);
+  const newKey = normalizeSelection(nextText);
+  if (!oldKey || oldKey === newKey) return;
+  if (!state.exportQuoteKeys.has(oldKey)) return;
+  state.exportQuoteKeys.delete(oldKey);
+  if (newKey) state.exportQuoteKeys.add(newKey);
 }
 
 function handleQuoteEditAction(event) {
@@ -1099,6 +1481,8 @@ async function saveQuoteEdit(card, quote) {
     setStatus("Quote text cannot be empty", true);
     return;
   }
+  rememberQuoteExportKey(quote.text, text);
+  void persistPageDraft();
   if (!quote.id || quote.id.startsWith("local-")) {
     quote.text = text;
     quote.note = note;
@@ -1136,6 +1520,8 @@ async function deleteQuote(quote) {
 
   const current = findQuoteById(quoteId, -1) || quote;
   const id = String(current?.id || quoteId).trim();
+  state.exportQuoteKeys.delete(quoteExportKey(current));
+  void persistPageDraft();
 
   if (!id || id.startsWith("local-")) {
     state.quotes = state.quotes.filter((q) => String(q.id || "").trim() !== id);
@@ -1769,6 +2155,8 @@ function resetExtensionClientState() {
   state.savedPageId = null;
   state.history = [];
   state.quotes = [];
+  state.exportQuoteKeys = new Set();
+  state.tags = [];
   state.savedPages = [];
   state.selectedSavedId = null;
   state.lifeEvents = [];

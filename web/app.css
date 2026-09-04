@@ -84,6 +84,13 @@ body {
   color: var(--accent);
 }
 
+.side-link-icon {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sidebar-footer {
   display: flex;
   align-items: center;

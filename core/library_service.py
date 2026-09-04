@@ -63,7 +63,16 @@ def _save_saved_index(entries: list[dict[str, Any]]) -> None:
 
 
 def _empty_metadata() -> dict[str, Any]:
-    return {"author": "", "date": "", "custom": []}
+    return {
+        "author": "",
+        "date": "",
+        "category": "",
+        "medium": "",
+        "tldr": "",
+        "thoughts": "",
+        "tags": [],
+        "custom": [],
+    }
 
 
 def _normalize_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
@@ -72,6 +81,16 @@ def _normalize_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
         return meta
     meta["author"] = str(raw.get("author", "") or "").strip()
     meta["date"] = str(raw.get("date", "") or "").strip()
+    meta["category"] = str(raw.get("category", "") or "").strip()
+    meta["medium"] = str(raw.get("medium", "") or "").strip()
+    meta["tldr"] = str(raw.get("tldr", "") or "").strip()
+    meta["thoughts"] = str(raw.get("thoughts", "") or "").strip()
+    tags: list[str] = []
+    for item in raw.get("tags") or []:
+        tag = str(item or "").strip()
+        if tag and tag not in tags:
+            tags.append(tag)
+    meta["tags"] = tags[:40]
     custom: list[dict[str, str]] = []
     for item in raw.get("custom") or []:
         if not isinstance(item, dict):

@@ -39,9 +39,14 @@
         <a href="#home" class="side-link active" data-view="home">Overview</a>
         <a href="#library" class="side-link" data-view="library">Library</a>
         <a href="#graph" class="side-link" data-view="graph">Graph</a>
-        <a href="#life" class="side-link" data-view="life">Life</a>
-        <a href="#wiki" class="side-link" data-view="wiki">Wiki</a>
-        <a href="#settings" class="side-link" data-view="settings">Settings</a>
+        <!-- Archived from nav: Life and Wiki. Views remain below; restore by adding data-view="life" / data-view="wiki" links. -->
+        <a href="#settings" class="side-link side-link-icon" data-view="settings" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Settings
+        </a>
       </nav>
       <footer class="sidebar-footer">
         <span id="conn-dot" class="conn-dot"></span>
@@ -62,11 +67,6 @@
           <article class="panel-card">
             <h3>Recent saved pages</h3>
             <ul class="link-list" id="home-recent-pages"></ul>
-          </article>
-          <article class="panel-card">
-            <h3>Wiki</h3>
-            <p id="home-wiki-summary" class="muted">Loading…</p>
-            <button type="button" class="btn ghost" data-goto="wiki">Open wiki</button>
           </article>
         </div>
       </section>
@@ -95,7 +95,7 @@
         </div>
       </section>
 
-      <!-- Life -->
+      <!-- Archived: Life (category grouping). Hidden from nav until revived. -->
       <section class="view" id="view-life">
         <div class="toolbar">
           <span class="muted">Saved pages and quotes only — unsaved reading stays off this list</span>
@@ -105,7 +105,7 @@
         <div class="event-list" id="life-events"></div>
       </section>
 
-      <!-- Wiki -->
+      <!-- Archived: Wiki (compiled articles from reading). Hidden from nav until revived. -->
       <section class="view" id="view-wiki">
         <div class="wiki-layout">
           <aside class="wiki-sidebar">
@@ -169,12 +169,15 @@
             <p class="muted small">Change provider and API keys in the Chrome extension Settings tab or desktop app.</p>
           </article>
           <article class="panel-card">
+            <h3>Archived</h3>
+            <p class="muted small">Life (category grouping) and Wiki are archived for now and hidden from the nav. The views and backend still exist if we revive them.</p>
+          </article>
+          <article class="panel-card">
             <h3>Clients</h3>
             <ul class="bullets muted">
               <li>Chrome extension — save quotes and chat while browsing</li>
-              <li>This dashboard — browse library, graph, life, and wiki</li>
+              <li>This dashboard — browse library and graph</li>
               <li>Desktop app — full macOS experience</li>
-              <li>Obsidian — open <code>~/.kb/wiki/</code> as a vault</li>
             </ul>
           </article>
         </div>

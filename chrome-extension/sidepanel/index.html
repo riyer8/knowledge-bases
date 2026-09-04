@@ -33,12 +33,16 @@
         <img src="../icons/icon-32.png" alt="" class="brand-logo" width="22" height="22" />
       </button>
       <nav class="nav" id="nav" aria-label="Main">
-        <button class="nav-btn active" data-view="chat" title="Current browser tab — save quotes and chat">Page</button>
-        <button class="nav-btn" data-view="saved" title="Saved pages with summaries and history">Saved</button>
-        <button class="nav-btn" data-view="life" title="Saved reading grouped by category">Life</button>
-        <button class="nav-btn" data-view="graph" title="Connections between pages and ideas">Graph</button>
-        <button class="nav-btn" data-view="wiki" title="LLM-compiled wiki from your reading">Wiki</button>
-        <button class="nav-btn" data-view="settings" title="Provider, appearance, and data">Settings</button>
+        <button type="button" class="nav-btn active" data-view="chat" title="Current browser tab — save quotes and chat">Page</button>
+        <button type="button" class="nav-btn" data-view="saved" title="Saved pages with summaries and history">Saved</button>
+        <button type="button" class="nav-btn" data-view="graph" title="Connections between pages and ideas">Graph</button>
+        <!-- Archived from nav: Life (category grouping) and Wiki. Views remain below; restore by adding data-view="life" / data-view="wiki" buttons. -->
+        <button type="button" class="nav-btn nav-icon" data-view="settings" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
       </nav>
     </div>
     <textarea
@@ -52,33 +56,88 @@
     <p id="page-site" class="muted page-context-only"></p>
     <p id="page-type-hint" class="muted page-type-hint page-context-only" hidden></p>
     <details class="metadata-panel page-context-only" id="metadata-panel">
-      <summary class="metadata-summary">Details</summary>
+      <summary class="metadata-summary">
+        <span class="metadata-chevron" aria-hidden="true"></span>
+        <span>Details</span>
+      </summary>
       <div class="metadata-panel-body">
         <div class="metadata-fields">
           <label class="meta-field">
-            <span>Author</span>
+            <span class="meta-label">Author</span>
             <input type="text" id="meta-author" placeholder="Author" autocomplete="off" />
           </label>
           <label class="meta-field">
-            <span>Date</span>
+            <span class="meta-label">Date</span>
             <input type="text" id="meta-date" placeholder="Date" autocomplete="off" />
           </label>
+          <div class="metadata-fields-row">
+            <label class="meta-field">
+              <span class="meta-label">Category</span>
+              <div class="meta-select">
+                <select id="meta-category">
+                  <option value="">Choose…</option>
+                  <option value="life">Life</option>
+                  <option value="advice">Advice</option>
+                  <option value="science">Science</option>
+                  <option value="career">Career</option>
+                  <option value="psychology">Psychology</option>
+                  <option value="creativity">Creativity</option>
+                  <option value="perspective">Perspective</option>
+                </select>
+              </div>
+            </label>
+            <label class="meta-field">
+              <span class="meta-label">Medium</span>
+              <div class="meta-select">
+                <select id="meta-medium">
+                  <option value="">Choose…</option>
+                  <option value="essay">Essay</option>
+                  <option value="book">Book</option>
+                  <option value="research paper">Research paper</option>
+                  <option value="video">Video</option>
+                </select>
+              </div>
+            </label>
+          </div>
+          <label class="meta-field">
+            <span class="meta-label">TLDR</span>
+            <textarea id="meta-tldr" rows="2" placeholder="One-line takeaway"></textarea>
+          </label>
+          <label class="meta-field">
+            <span class="meta-label">Thoughts</span>
+            <textarea id="meta-thoughts" rows="3" placeholder="What you think about this"></textarea>
+          </label>
+          <div class="meta-field">
+            <span class="meta-label">Tags</span>
+            <div class="tag-editor" id="meta-tag-editor">
+              <div class="tag-chips" id="meta-tag-chips"></div>
+              <input type="text" id="meta-tag-input" placeholder="Add a tag" autocomplete="off" />
+            </div>
+          </div>
         </div>
         <div id="meta-custom-fields" class="meta-custom-fields"></div>
         <button type="button" id="meta-add-field" class="text-btn meta-add-btn">+ Add field</button>
-        <p class="muted metadata-hint">Auto-filled when possible. Add your own labels below.</p>
+        <div class="bookshelf-export">
+          <div class="bookshelf-export-head">
+            <span class="bookshelf-export-label">Bookshelf JSON</span>
+            <button type="button" id="copy-export-json" class="toolbar-btn">Copy JSON</button>
+          </div>
+          <pre id="export-json-preview" class="export-json-preview" tabindex="0"></pre>
+        </div>
+        <p class="muted metadata-hint">Title, URL, author, and today’s date are filled in. Quotes you check as “Add to metadata” go into notes in page order.</p>
       </div>
     </details>
     <div class="header-actions page-context-only">
       <button type="button" id="save-page-btn" class="toolbar-btn primary" title="Save this page with summary and quotes">+ Save</button>
-      <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn" title="Add current page to wiki raw sources">+ Wiki</button>
+      <!-- Archived with Wiki: <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn">+ Wiki</button> -->
+      <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn" title="Add current page to wiki raw sources" hidden>+ Wiki</button>
       <button type="button" id="explore-btn" class="toolbar-btn sparkles" title="Things to explore">✨ Explore</button>
     </div>
   </header>
 
   <!-- Page view: quotes + chat tabs -->
   <section class="view active" id="view-chat">
-    <p class="view-intro muted">Highlight text to save quotes, or chat about this page.</p>
+    <p class="view-intro muted">Highlight text on the page to save a quote — from the popup on the page, or here in the sidebar.</p>
     <section class="explore-panel" id="explore-panel" hidden>
       <h2>Explore next</h2>
       <div id="explore-suggestions" class="suggestion-list"></div>
@@ -90,22 +149,18 @@
     </nav>
 
     <div class="page-panel active" id="page-panel-quotes">
-      <div class="quote-compose" id="quote-compose" hidden>
-        <p class="compose-label">Save selection</p>
-        <blockquote id="quote-preview" class="quote-preview"></blockquote>
+      <div class="quote-compose" id="quote-compose">
+        <p class="compose-label">Save a quote</p>
+        <blockquote id="quote-preview" class="quote-preview empty">Highlight text on this page to save it as a quote.</blockquote>
         <input type="text" id="quote-note" class="quote-note" placeholder="Optional note…" />
         <div class="quote-actions">
-          <button type="button" id="save-quote-confirm" class="toolbar-btn primary">Save quote</button>
-          <button type="button" id="save-quote-cancel" class="text-btn">Close</button>
+          <button type="button" id="save-quote-confirm" class="toolbar-btn primary" disabled>Save quote</button>
+          <button type="button" id="save-quote-cancel" class="text-btn">Clear</button>
         </div>
       </div>
 
-      <button type="button" id="save-quote-btn" class="toolbar-btn full-width" hidden>
-        Save selection as quote
-      </button>
-
       <div id="page-quotes" class="page-quotes">
-        <p class="muted empty-hint">Highlight text on the page to save a quote here.</p>
+        <p class="muted empty-hint">Saved quotes from this page appear here.</p>
       </div>
     </div>
 
@@ -152,11 +207,11 @@
         <h3>Chat history</h3>
         <div id="saved-chat" class="messages compact"></div>
       </section>
-      <button type="button" id="add-to-wiki-btn" class="toolbar-btn">Add to wiki</button>
+      <button type="button" id="add-to-wiki-btn" class="toolbar-btn" hidden>Add to wiki</button>
     </div>
   </section>
 
-  <!-- Life / buckets view -->
+  <!-- Archived: Life (category grouping). Hidden from nav until revived. -->
   <section class="view" id="view-life">
     <p class="view-intro muted">Saved pages and quotes, grouped by category. Unsaved reading stays out — same as Saved and Graph.</p>
     <div class="life-toolbar">
@@ -182,7 +237,7 @@
     </div>
   </section>
 
-  <!-- Wiki view -->
+  <!-- Archived: Wiki (compiled articles from reading). Hidden from nav until revived. -->
   <section class="view" id="view-wiki">
     <div class="view-scroll wiki-shell">
       <div class="wiki-stats-row" id="wiki-stats-row" hidden></div>
@@ -232,8 +287,13 @@
     <div class="settings-content">
       <section class="settings-block">
         <h2 class="settings-heading">Dashboard</h2>
-        <p class="muted settings-lead">Browse library, graph, life, and wiki in a full local UI.</p>
+        <p class="muted settings-lead">Browse saved pages and the graph in a full local UI.</p>
         <a href="http://127.0.0.1:8765/app/" target="_blank" rel="noopener" class="toolbar-btn dashboard-link">Open dashboard</a>
+      </section>
+
+      <section class="settings-block">
+        <h2 class="settings-heading">Archived</h2>
+        <p class="muted settings-lead">Life (category grouping) and Wiki are archived for now and hidden from the nav. The views and backend still exist if we revive them.</p>
       </section>
 
       <section class="settings-block">

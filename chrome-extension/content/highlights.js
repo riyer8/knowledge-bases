@@ -15,12 +15,22 @@ let paintObserver = null;
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "PANEL_OPENED") {
     panelOpen = true;
+    const selected = normalizeSelection(window.getSelection()?.toString() || "");
+    if (isSaveableSelection(selected)) {
+      pendingText = selected;
+      chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected });
+      try {
+        const range = window.getSelection().getRangeAt(0);
+        showToolbar(range.getBoundingClientRect());
+      } catch {
+        // Selection may not have a range on this frame.
+      }
+    }
     sendResponse({ ok: true });
     return false;
   }
   if (message?.type === "PANEL_CLOSED") {
     panelOpen = false;
-    hideToolbar();
     sendResponse({ ok: true });
     return false;
   }
@@ -44,7 +54,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.runtime.sendMessage({ type: "GET_PANEL_STATE" }, (response) => {
   if (chrome.runtime.lastError) return;
   panelOpen = Boolean(response?.open);
-  if (!panelOpen) hideToolbar();
 });
 
 document.addEventListener("mouseup", onPointerUp, true);
@@ -76,13 +85,12 @@ function onPointerUp(event) {
     }
     pendingText = text;
     chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: text });
-    if (!panelOpen) {
+    const range = selection.rangeCount ? selection.getRangeAt(0) : null;
+    if (!range) {
       hideToolbar();
       return;
     }
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    showToolbar(rect);
+    showToolbar(range.getBoundingClientRect());
   }, 12);
 }
 
@@ -130,7 +138,6 @@ function ensureToolbar() {
 }
 
 function showToolbar(rect) {
-  if (!panelOpen) return;
   const bar = ensureToolbar();
   const top = window.scrollY + rect.top - 48;
   const left = window.scrollX + rect.left + rect.width / 2;
