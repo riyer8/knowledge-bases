@@ -31,6 +31,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message?.type === "PANEL_CLOSED") {
     panelOpen = false;
+    hideToolbar();
     sendResponse({ ok: true });
     return false;
   }
@@ -54,6 +55,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 chrome.runtime.sendMessage({ type: "GET_PANEL_STATE" }, (response) => {
   if (chrome.runtime.lastError) return;
   panelOpen = Boolean(response?.open);
+  if (!panelOpen) hideToolbar();
 });
 
 document.addEventListener("mouseup", onPointerUp, true);
@@ -85,6 +87,10 @@ function onPointerUp(event) {
     }
     pendingText = text;
     chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: text });
+    if (!panelOpen) {
+      hideToolbar();
+      return;
+    }
     const range = selection.rangeCount ? selection.getRangeAt(0) : null;
     if (!range) {
       hideToolbar();
@@ -138,6 +144,7 @@ function ensureToolbar() {
 }
 
 function showToolbar(rect) {
+  if (!panelOpen) return;
   const bar = ensureToolbar();
   const top = window.scrollY + rect.top - 48;
   const left = window.scrollX + rect.left + rect.width / 2;

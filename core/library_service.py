@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote_plus, urlparse
 
 from core.config import config
 from core.ingestion.pipeline import ingest_text
@@ -655,39 +655,139 @@ def list_quotes(page_id: str = "", page_url: str = "", limit: int = 100) -> list
     return quotes[:limit]
 
 
-def explore_suggestions(page: dict[str, Any]) -> list[str]:
-    title = str(page.get("title", "Untitled")).strip()
+def explore_suggestions(page: dict[str, Any]) -> list[dict[str, str]]:
+    title = str(page.get("title", "Untitled")).strip() or "this topic"
     url = str(page.get("url", "")).strip()
-    headings = ", ".join(str(h) for h in page.get("headings", [])[:4])
-    snippet = str(page.get("visible_text", ""))[:600]
+    headings = ", ".join(str(h) for h in page.get("headings", [])[:6])
+    page_links = _explore_links_from_page(page)
+    link_preview = "\n".join(
+        f"- {item['title']}: {item['url']}" for item in page_links[:8]
+    ) or "(none)"
     messages = [
         {
             "role": "user",
             "content": (
-                f"Title: {title}\nURL: {url}\nTopics: {headings}\nSnippet: {snippet}\n\n"
-                "Suggest exactly 5 lightweight next steps for a curious reader. "
-                "Mix: 2 related articles or sites (include real URLs when confident), "
-                "2 deeper topics to search, and 1 question to ask. "
-                "One suggestion per line, under 18 words each, no numbering."
+                f"Title: {title}\nURL: {url}\nTopics: {headings}\n"
+                f"On-page links:\n{link_preview}\n\n"
+                "Return JSON only: an array of exactly 10 further-reading items "
+                '[{"title":"...","url":"https://..."}].\n'
+                "These are links a curious reader should open next. Prefer real URLs "
+                "(Wikipedia, papers, docs, reputable articles). Reuse strong on-page "
+                "links when useful. No markdown, no numbering."
             ),
         }
     ]
     try:
-        raw = str(provider_chat(messages, stream=False, max_tokens=220)).strip()
-        lines = [line.strip().lstrip("0123456789.-) ") for line in raw.splitlines() if line.strip()]
-        return lines[:5] if lines else _default_explore_suggestions()
+        raw = str(provider_chat(messages, stream=False, max_tokens=700)).strip()
+        items = _parse_explore_items(raw)
     except Exception:
-        return _default_explore_suggestions()
+        items = []
+    merged = _dedupe_explore_items([*items, *page_links, *_fallback_explore_links(title, url)])
+    return merged[:10] or _fallback_explore_links(title, url)[:10]
 
 
-def _default_explore_suggestions() -> list[str]:
-    return [
-        "Search for a recent article on the main topic",
-        "Read the Wikipedia overview for background",
-        "What is the strongest counterargument?",
-        "Quiz me to check my understanding",
-        "What should I read next to go deeper?",
+def _explore_links_from_page(page: dict[str, Any]) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for link in page.get("links") or []:
+        if not isinstance(link, dict):
+            continue
+        href = str(link.get("href") or link.get("url") or "").strip()
+        label = str(link.get("text") or link.get("title") or "").strip()
+        if href.startswith("http"):
+            items.append({"title": label or href, "url": href})
+    return _dedupe_explore_items(items)
+
+
+def _fallback_explore_links(title: str, url: str = "") -> list[dict[str, str]]:
+    query = quote_plus(title or "related reading")
+    host = ""
+    try:
+        host = urlparse(url).netloc
+    except Exception:
+        host = ""
+    items = [
+        {"title": f"Wikipedia: {title}", "url": f"https://en.wikipedia.org/w/index.php?search={query}"},
+        {"title": f"Search the web: {title}", "url": f"https://www.google.com/search?q={query}"},
+        {"title": f"Scholar: {title}", "url": f"https://scholar.google.com/scholar?q={query}"},
+        {"title": f"Videos: {title}", "url": f"https://www.youtube.com/results?search_query={query}"},
+        {"title": f"Discussions: {title}", "url": f"https://www.reddit.com/search/?q={query}"},
+        {"title": f"News: {title}", "url": f"https://news.google.com/search?q={query}"},
     ]
+    if host:
+        items.insert(0, {"title": f"More from {host}", "url": f"https://{host}"})
+    return items
+
+
+def _parse_explore_items(raw: str) -> list[dict[str, str]]:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    start = text.find("[")
+    end = text.rfind("]")
+    payload = text[start : end + 1] if start >= 0 and end > start else text
+    parsed: Any
+    try:
+        parsed = json.loads(payload)
+    except Exception:
+        parsed = None
+    items: list[dict[str, str]] = []
+    if isinstance(parsed, list):
+        for entry in parsed:
+            if isinstance(entry, dict):
+                title = str(entry.get("title") or "").strip()
+                href = str(entry.get("url") or entry.get("href") or "").strip()
+                if href.startswith("http"):
+                    items.append({"title": title or href, "url": href})
+            elif isinstance(entry, str):
+                items.extend(_explore_item_from_line(entry))
+    else:
+        for line in text.splitlines():
+            items.extend(_explore_item_from_line(line))
+    return _dedupe_explore_items(items)
+
+
+def _explore_item_from_line(line: str) -> list[dict[str, str]]:
+    cleaned = str(line or "").strip().lstrip("0123456789.-) ")
+    if not cleaned:
+        return []
+    match = None
+    for token in cleaned.split():
+        if token.startswith("http://") or token.startswith("https://"):
+            match = token.strip("<>),.")
+            break
+    if not match:
+        return []
+    title = cleaned.replace(match, "").replace("—", " ").replace("-", " ").strip(" :|-")
+    return [{"title": title or match, "url": match}]
+
+
+def _dedupe_explore_items(items: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen: set[str] = set()
+    unique: list[dict[str, str]] = []
+    for item in items:
+        href = str(item.get("url") or "").strip()
+        if not href.startswith("http"):
+            continue
+        key = href.split("#", 1)[0].rstrip("/").lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append({
+            "title": str(item.get("title") or href).strip()[:120],
+            "url": href,
+        })
+    return unique
+
+
+def _default_explore_suggestions(page: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    page = page or {}
+    title = str(page.get("title", "this topic")).strip() or "this topic"
+    return _dedupe_explore_items([
+        *_explore_links_from_page(page),
+        *_fallback_explore_links(title, str(page.get("url", "")).strip()),
+    ])[:10]
 
 
 def graph_visual() -> dict[str, Any]:

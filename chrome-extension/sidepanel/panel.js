@@ -24,6 +24,8 @@ const state = {
   lifeEvents: [],
   wikiSelectedSlug: null,
   wikiArticles: [],
+  exploreCache: {},
+  exploreLoadedUrl: "",
 };
 
 const els = {
@@ -45,6 +47,9 @@ const els = {
   exploreBtn: document.getElementById("explore-btn"),
   explorePanel: document.getElementById("explore-panel"),
   exploreSuggestions: document.getElementById("explore-suggestions"),
+  exploreListWrap: document.getElementById("explore-list-wrap"),
+  exploreScroller: document.getElementById("explore-scroller"),
+  exploreScrollHint: document.getElementById("explore-scroll-hint"),
   nav: document.getElementById("nav"),
   savedList: document.getElementById("saved-list"),
   savedDetail: document.getElementById("saved-detail"),
@@ -443,13 +448,22 @@ function bindEvents() {
   });
 
   on(els.exploreSuggestions, "click", (event) => {
-    const chip = event.target.closest(".suggestion");
-    if (!chip) return;
-    switchPageTab("chat");
-    els.question.value = chip.dataset.question || "";
-    els.question.focus();
-    els.explorePanel.hidden = true;
+    const card = event.target.closest("a.explore-card");
+    if (!card?.href) return;
+    event.preventDefault();
+    chrome.tabs.create({ url: card.href });
   });
+  on(els.exploreListWrap, "scroll", updateExploreScrollHint);
+  els.exploreListWrap?.addEventListener("wheel", (event) => {
+    const wrap = els.exploreListWrap;
+    if (!wrap || wrap.scrollHeight <= wrap.clientHeight + 1) return;
+    const scrollingDown = event.deltaY > 0;
+    const atTop = wrap.scrollTop <= 0;
+    const atBottom = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 1;
+    if ((scrollingDown && atBottom) || (!scrollingDown && atTop)) return;
+    event.preventDefault();
+    wrap.scrollTop += event.deltaY;
+  }, { passive: false });
 }
 
 function switchPageTab(tab) {
@@ -1660,11 +1674,29 @@ async function saveCurrentPage() {
 
 async function loadExploreSuggestions() {
   if (!state.page) return;
-  els.explorePanel.hidden = !els.explorePanel.hidden;
-  if (els.explorePanel.hidden) return;
+  const pageUrl = state.page.url || "";
+  if (!els.explorePanel.hidden) {
+    els.explorePanel.hidden = true;
+    return;
+  }
+  els.explorePanel.hidden = false;
 
-  els.exploreSuggestions.innerHTML = '<p class="muted">Loading suggestions…</p>';
+  if (state.exploreLoadedUrl === pageUrl && els.exploreSuggestions.querySelector(".explore-card")) {
+    updateExploreScrollHint();
+    return;
+  }
+
+  const cached = await readExploreCache(pageUrl);
+  if (cached?.length) {
+    renderExploreSuggestions(cached, pageUrl);
+    return;
+  }
+
+  els.exploreSuggestions.innerHTML = '<p class="muted">Finding links…</p>';
+  updateExploreScrollHint();
   try {
+    const ready = await ensureBackendReady({ quiet: true });
+    if (!ready) throw new Error("Backend not connected");
     const res = await fetch(`${BACKEND}/library/explore`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1672,22 +1704,100 @@ async function loadExploreSuggestions() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Explore failed");
-    els.exploreSuggestions.innerHTML = "";
-    const items = data.suggestions || [];
-    if (!items.length) {
-      els.exploreSuggestions.innerHTML = '<p class="muted">No suggestions right now.</p>';
-      return;
-    }
-    for (const suggestion of items) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "suggestion";
-      button.dataset.question = suggestion;
-      button.textContent = suggestion;
-      els.exploreSuggestions.appendChild(button);
-    }
+    const items = normalizeExploreItems(data.suggestions || []);
+    await writeExploreCache(pageUrl, items);
+    renderExploreSuggestions(items, pageUrl);
   } catch (err) {
     els.exploreSuggestions.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+    updateExploreScrollHint();
+  }
+}
+
+function exploreCacheKey(url) {
+  return `explore:${url}`;
+}
+
+async function readExploreCache(url) {
+  if (!url) return null;
+  if (state.exploreCache[url]?.length) return state.exploreCache[url];
+  return new Promise((resolve) => {
+    chrome.storage.session.get(exploreCacheKey(url), (data) => {
+      const items = data[exploreCacheKey(url)] || null;
+      if (items?.length) state.exploreCache[url] = items;
+      resolve(items);
+    });
+  });
+}
+
+async function writeExploreCache(url, items) {
+  if (!url) return;
+  state.exploreCache[url] = items;
+  await chrome.storage.session.set({ [exploreCacheKey(url)]: items });
+}
+
+function normalizeExploreItems(raw) {
+  const items = [];
+  for (const entry of raw || []) {
+    if (typeof entry === "string") {
+      const match = entry.match(/https?:\/\/\S+/);
+      const url = match ? match[0].replace(/[),.:;]+$/, "") : "";
+      if (!url) continue;
+      const title = entry.replace(url, "").replace(/[—-]/g, " ").trim() || url;
+      items.push({ title, url });
+      continue;
+    }
+    const url = String(entry?.url || entry?.href || "").trim();
+    if (!url.startsWith("http")) continue;
+    items.push({
+      title: String(entry?.title || url).trim(),
+      url,
+    });
+  }
+  return items.slice(0, 10);
+}
+
+function hostnameFromUrl(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+function renderExploreSuggestions(items, pageUrl) {
+  state.exploreLoadedUrl = pageUrl || "";
+  els.exploreSuggestions.innerHTML = "";
+  if (!items.length) {
+    els.exploreSuggestions.innerHTML = '<p class="muted">No further reading yet.</p>';
+    updateExploreScrollHint();
+    return;
+  }
+  for (const item of items) {
+    const card = document.createElement("a");
+    card.className = "explore-card";
+    card.href = item.url;
+    card.target = "_blank";
+    card.rel = "noopener noreferrer";
+    card.innerHTML = `
+      <span class="explore-card-title">${escapeHtml(item.title)}</span>
+      <span class="explore-card-url">${escapeHtml(hostnameFromUrl(item.url))}</span>
+    `;
+    els.exploreSuggestions.appendChild(card);
+  }
+  requestAnimationFrame(updateExploreScrollHint);
+}
+
+function updateExploreScrollHint() {
+  const wrap = els.exploreListWrap;
+  const scroller = els.exploreScroller;
+  if (!wrap) return;
+  const canScroll = wrap.scrollHeight - wrap.clientHeight > 8;
+  const atEnd = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 6;
+  wrap.classList.toggle("is-scrollable", canScroll);
+  scroller?.classList.toggle("has-more", canScroll && !atEnd);
+  if (els.exploreScrollHint) {
+    els.exploreScrollHint.hidden = !canScroll || atEnd;
+    els.exploreScrollHint.textContent = "Scroll for more";
   }
 }
 

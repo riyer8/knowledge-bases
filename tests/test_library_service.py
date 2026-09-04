@@ -131,13 +131,21 @@ def test_explore_suggestions(library_env, monkeypatch):
     monkeypatch.setattr(
         library_env,
         "provider_chat",
-        lambda messages, stream=False, max_tokens=None: "Topic A\nTopic B\nTopic C",
+        lambda messages, stream=False, max_tokens=None: json.dumps([
+            {"title": "Topic A", "url": "https://example.com/a"},
+            {"title": "Topic B", "url": "https://example.com/b"},
+            {"title": "Topic C", "url": "https://example.com/c"},
+        ]),
     )
     suggestions = library_env.explore_suggestions({
         "title": "Test",
         "visible_text": "Some page content",
+        "links": [{"text": "On page", "href": "https://example.com/page-link"}],
     })
-    assert suggestions == ["Topic A", "Topic B", "Topic C"]
+    assert len(suggestions) == 10
+    assert suggestions[0]["title"] == "Topic A"
+    assert suggestions[0]["url"] == "https://example.com/a"
+    assert any(item["url"] == "https://example.com/page-link" for item in suggestions)
 
 
 def test_graph_visual(library_env, monkeypatch):

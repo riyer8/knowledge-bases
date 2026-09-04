@@ -131,16 +131,22 @@
       <button type="button" id="save-page-btn" class="toolbar-btn primary" title="Save this page with summary and quotes">+ Save</button>
       <!-- Archived with Wiki: <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn">+ Wiki</button> -->
       <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn" title="Add current page to wiki raw sources" hidden>+ Wiki</button>
-      <button type="button" id="explore-btn" class="toolbar-btn sparkles" title="Things to explore">✨ Explore</button>
+      <button type="button" id="explore-btn" class="toolbar-btn" title="Things to explore">Explore</button>
     </div>
   </header>
 
   <!-- Page view: quotes + chat tabs -->
   <section class="view active" id="view-chat">
-    <p class="view-intro muted">Highlight text on the page to save a quote — from the popup on the page, or here in the sidebar.</p>
     <section class="explore-panel" id="explore-panel" hidden>
-      <h2>Explore next</h2>
-      <div id="explore-suggestions" class="suggestion-list"></div>
+      <div class="explore-head">
+        <h2>Explore next</h2>
+        <span class="explore-scroll-hint muted" id="explore-scroll-hint" hidden>Scroll for more</span>
+      </div>
+      <div class="explore-scroller" id="explore-scroller">
+        <div class="explore-list-wrap" id="explore-list-wrap" tabindex="0" role="region" aria-label="Further reading">
+          <div id="explore-suggestions" class="explore-list"></div>
+        </div>
+      </div>
     </section>
 
     <nav class="page-subnav" id="page-subnav" aria-label="Page panels">
