@@ -448,22 +448,30 @@ function bindEvents() {
   });
 
   on(els.exploreSuggestions, "click", (event) => {
-    const card = event.target.closest("a.explore-card");
-    if (!card?.href) return;
+    const card = event.target.closest(".explore-card");
+    const url = card?.dataset?.url || card?.href;
+    if (!url) return;
     event.preventDefault();
-    chrome.tabs.create({ url: card.href });
+    chrome.tabs.create({ url });
+  });
+  on(els.exploreScrollHint, "click", () => {
+    els.exploreListWrap?.scrollBy({ top: 68, behavior: "smooth" });
   });
   on(els.exploreListWrap, "scroll", updateExploreScrollHint);
-  els.exploreListWrap?.addEventListener("wheel", (event) => {
+  const onExploreWheel = (event) => {
     const wrap = els.exploreListWrap;
-    if (!wrap || wrap.scrollHeight <= wrap.clientHeight + 1) return;
-    const scrollingDown = event.deltaY > 0;
-    const atTop = wrap.scrollTop <= 0;
-    const atBottom = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 1;
-    if ((scrollingDown && atBottom) || (!scrollingDown && atTop)) return;
+    if (!wrap) return;
+    const max = wrap.scrollHeight - wrap.clientHeight;
+    if (max <= 1) return;
+    const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+    const next = Math.max(0, Math.min(max, wrap.scrollTop + delta));
+    if (next === wrap.scrollTop) return;
     event.preventDefault();
-    wrap.scrollTop += event.deltaY;
-  }, { passive: false });
+    event.stopPropagation();
+    wrap.scrollTop = next;
+  };
+  els.exploreListWrap?.addEventListener("wheel", onExploreWheel, { passive: false, capture: true });
+  els.exploreScroller?.addEventListener("wheel", onExploreWheel, { passive: false, capture: true });
 }
 
 function switchPageTab(tab) {
@@ -1773,11 +1781,10 @@ function renderExploreSuggestions(items, pageUrl) {
     return;
   }
   for (const item of items) {
-    const card = document.createElement("a");
+    const card = document.createElement("button");
+    card.type = "button";
     card.className = "explore-card";
-    card.href = item.url;
-    card.target = "_blank";
-    card.rel = "noopener noreferrer";
+    card.dataset.url = item.url;
     card.innerHTML = `
       <span class="explore-card-title">${escapeHtml(item.title)}</span>
       <span class="explore-card-url">${escapeHtml(hostnameFromUrl(item.url))}</span>
@@ -1793,7 +1800,6 @@ function updateExploreScrollHint() {
   if (!wrap) return;
   const canScroll = wrap.scrollHeight - wrap.clientHeight > 8;
   const atEnd = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 6;
-  wrap.classList.toggle("is-scrollable", canScroll);
   scroller?.classList.toggle("has-more", canScroll && !atEnd);
   if (els.exploreScrollHint) {
     els.exploreScrollHint.hidden = !canScroll || atEnd;

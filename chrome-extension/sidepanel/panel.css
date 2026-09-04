@@ -14,17 +14,21 @@
 }
 *::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-.view { display: none; flex: 1; flex-direction: column; min-height: 0; }
+.view { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
 .view.active { display: flex; }
 
 .view-intro {
@@ -812,6 +816,8 @@ a.toolbar-btn {
 }
 
 .explore-panel {
+  flex: 0 0 auto;
+  min-height: 0;
   padding: 10px 12px 8px;
   border-bottom: 1px solid var(--border);
   background: var(--panel);
@@ -838,7 +844,14 @@ a.toolbar-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   font-size: 11px;
+  cursor: pointer;
 }
 
 .explore-scroll-hint::after {
@@ -855,16 +868,13 @@ a.toolbar-btn {
 }
 
 .explore-list-wrap {
+  height: 216px;
   max-height: 216px;
   overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-right: 2px;
-}
-
-.explore-list-wrap.is-scrollable {
   overflow-y: scroll;
   scrollbar-gutter: stable;
+  padding-right: 2px;
+  touch-action: pan-y;
 }
 
 .explore-list-wrap::-webkit-scrollbar {
@@ -904,7 +914,11 @@ a.toolbar-btn {
   align-content: center;
   gap: 2px;
   flex: 0 0 auto;
+  width: 100%;
   height: 62px;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
   text-align: left;
   text-decoration: none;
   border: 1px solid var(--border);
