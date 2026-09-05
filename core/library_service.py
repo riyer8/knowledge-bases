@@ -70,6 +70,7 @@ def _empty_metadata() -> dict[str, Any]:
         "medium": "",
         "tldr": "",
         "thoughts": "",
+        "notes": "",
         "tags": [],
         "custom": [],
     }
@@ -85,6 +86,7 @@ def _normalize_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
     meta["medium"] = str(raw.get("medium", "") or "").strip()
     meta["tldr"] = str(raw.get("tldr", "") or "").strip()
     meta["thoughts"] = str(raw.get("thoughts", "") or "").strip()
+    meta["notes"] = str(raw.get("notes", "") or "").strip()
     tags: list[str] = []
     for item in raw.get("tags") or []:
         tag = str(item or "").strip()
@@ -670,7 +672,7 @@ def explore_suggestions(page: dict[str, Any]) -> list[dict[str, str]]:
                 f"Title: {title}\nURL: {url}\nTopics: {headings}\n"
                 f"On-page links:\n{link_preview}\n\n"
                 "Return JSON only: an array of exactly 10 further-reading items "
-                '[{"title":"...","url":"https://..."}].\n'
+                '[{"title":"...","url":"https://...","why":"one sentence"}].\n'
                 "These are links a curious reader should open next. Prefer real URLs "
                 "(Wikipedia, papers, docs, reputable articles). Reuse strong on-page "
                 "links when useful. No markdown, no numbering."
@@ -706,12 +708,12 @@ def _fallback_explore_links(title: str, url: str = "") -> list[dict[str, str]]:
     except Exception:
         host = ""
     items = [
-        {"title": f"Wikipedia: {title}", "url": f"https://en.wikipedia.org/w/index.php?search={query}"},
-        {"title": f"Search the web: {title}", "url": f"https://www.google.com/search?q={query}"},
-        {"title": f"Scholar: {title}", "url": f"https://scholar.google.com/scholar?q={query}"},
-        {"title": f"Videos: {title}", "url": f"https://www.youtube.com/results?search_query={query}"},
-        {"title": f"Discussions: {title}", "url": f"https://www.reddit.com/search/?q={query}"},
-        {"title": f"News: {title}", "url": f"https://news.google.com/search?q={query}"},
+        {"title": f"Wikipedia: {title}", "url": f"https://en.wikipedia.org/w/index.php?search={query}", "why": "Background and related entries for this topic."},
+        {"title": f"Search the web: {title}", "url": f"https://www.google.com/search?q={query}", "why": "A wider sweep of articles and essays on the same ideas."},
+        {"title": f"Scholar: {title}", "url": f"https://scholar.google.com/scholar?q={query}", "why": "Papers and citations if you want the research trail."},
+        {"title": f"Videos: {title}", "url": f"https://www.youtube.com/results?search_query={query}", "why": "Talks and explainers that unpack the same questions."},
+        {"title": f"Discussions: {title}", "url": f"https://www.reddit.com/search/?q={query}", "why": "How other readers argue with or extend this piece."},
+        {"title": f"News: {title}", "url": f"https://news.google.com/search?q={query}", "why": "Current coverage connected to the topic."},
     ]
     if host:
         items.insert(0, {"title": f"More from {host}", "url": f"https://{host}"})
@@ -739,7 +741,8 @@ def _parse_explore_items(raw: str) -> list[dict[str, str]]:
                 title = str(entry.get("title") or "").strip()
                 href = str(entry.get("url") or entry.get("href") or "").strip()
                 if href.startswith("http"):
-                    items.append({"title": title or href, "url": href})
+                    why = str(entry.get("why") or entry.get("blurb") or "").strip()
+                    items.append({"title": title or href, "url": href, **({"why": why} if why else {})})
             elif isinstance(entry, str):
                 items.extend(_explore_item_from_line(entry))
     else:
@@ -777,6 +780,7 @@ def _dedupe_explore_items(items: list[dict[str, str]]) -> list[dict[str, str]]:
         unique.append({
             "title": str(item.get("title") or href).strip()[:120],
             "url": href,
+            **({"why": str(item.get("why") or "").strip()} if str(item.get("why") or "").strip() else {}),
         })
     return unique
 

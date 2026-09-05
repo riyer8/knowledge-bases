@@ -13,10 +13,9 @@ const state = {
   busy: false,
   saving: false,
   view: "chat",
-  pageTab: "quotes",
+  pageTab: "details",
   savedPages: [],
   selectedSavedId: null,
-  pendingQuoteText: "",
   bucketLeaves: [],
   bucketTree: {},
   lifeCategory: "all",
@@ -25,7 +24,6 @@ const state = {
   wikiSelectedSlug: null,
   wikiArticles: [],
   exploreCache: {},
-  exploreLoadedUrl: "",
 };
 
 const els = {
@@ -37,19 +35,10 @@ const els = {
   question: document.getElementById("question"),
   askBtn: document.getElementById("ask-btn"),
   savePageBtn: document.getElementById("save-page-btn"),
-  saveQuoteBtn: document.getElementById("save-quote-btn"),
-  quoteCompose: document.getElementById("quote-compose"),
-  quotePreview: document.getElementById("quote-preview"),
-  quoteNote: document.getElementById("quote-note"),
-  saveQuoteConfirm: document.getElementById("save-quote-confirm"),
-  saveQuoteCancel: document.getElementById("save-quote-cancel"),
-  pageQuotes: document.getElementById("page-quotes"),
+  notesShell: document.querySelector(".notes-shell"),
+  notesBold: document.getElementById("notes-bold"),
+  notesItalic: document.getElementById("notes-italic"),
   exploreBtn: document.getElementById("explore-btn"),
-  explorePanel: document.getElementById("explore-panel"),
-  exploreSuggestions: document.getElementById("explore-suggestions"),
-  exploreListWrap: document.getElementById("explore-list-wrap"),
-  exploreScroller: document.getElementById("explore-scroller"),
-  exploreScrollHint: document.getElementById("explore-scroll-hint"),
   nav: document.getElementById("nav"),
   savedList: document.getElementById("saved-list"),
   savedDetail: document.getElementById("saved-detail"),
@@ -81,6 +70,7 @@ const els = {
   metaMedium: document.getElementById("meta-medium"),
   metaTldr: document.getElementById("meta-tldr"),
   metaThoughts: document.getElementById("meta-thoughts"),
+  metaNotes: document.getElementById("meta-notes"),
   metaTagEditor: document.getElementById("meta-tag-editor"),
   metaTagChips: document.getElementById("meta-tag-chips"),
   metaTagInput: document.getElementById("meta-tag-input"),
@@ -238,7 +228,7 @@ async function init() {
       updateSelection(changes.latestSelection.newValue || "");
     }
     if (area === "session" && changes.quoteSavedAt) {
-      void Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
+      void handleExternalQuoteSaved();
     }
     if (area === "session" && changes.activeTabUrl) {
       const nextUrl = changes.activeTabUrl.newValue || "";
@@ -255,7 +245,7 @@ async function init() {
   });
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "QUOTE_SAVED") {
-      void Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
+      void handleExternalQuoteSaved(message.quote);
     }
     if (message?.type === "TAB_CHANGED" && message.url && message.url !== state.page?.url) {
       refreshPage();
@@ -324,8 +314,10 @@ function bindEvents() {
       setStatus(err.message || (state.savedPageId ? "Remove failed" : "Save failed"), true);
     });
   });
-  on(els.saveQuoteConfirm, "click", confirmSaveQuote);
-  on(els.saveQuoteCancel, "click", () => closeQuoteCompose({ keepSelection: false }));
+  on(els.notesBold, "mousedown", (event) => event.preventDefault());
+  on(els.notesItalic, "mousedown", (event) => event.preventDefault());
+  on(els.notesBold, "click", () => applyNotesFormat("bold"));
+  on(els.notesItalic, "click", () => applyNotesFormat("italic"));
   on(els.exploreBtn, "click", loadExploreSuggestions);
   on(els.savedBack, "click", showSavedList);
   on(els.deletePageBtn, "click", () => deleteSavedPage(state.selectedSavedId));
@@ -400,8 +392,17 @@ function bindEvents() {
     schedulePageDraftSave();
     refreshExportJsonPreview();
   });
+  els.metaNotes?.addEventListener("input", () => {
+    updateNotesEmptyState();
+    syncExportChecksFromNotes();
+    schedulePageDraftSave();
+    refreshExportJsonPreview();
+  });
+  els.metaNotes?.addEventListener("keydown", handleNotesKeydown);
+  els.metaNotes?.addEventListener("paste", handleNotesPaste);
   els.metaTldr?.addEventListener("blur", savePageDetails);
   els.metaThoughts?.addEventListener("blur", savePageDetails);
+  els.metaNotes?.addEventListener("blur", savePageDetails);
   els.metaTagInput?.addEventListener("keydown", handleTagInputKeydown);
   els.metaTagInput?.addEventListener("blur", () => {
     commitTagFromInput();
@@ -419,6 +420,8 @@ function bindEvents() {
   });
   on(els.copyExportJsonBtn, "click", copyBookshelfJson);
   els.metaAddField?.addEventListener("click", () => {
+    const wrap = document.getElementById("details-custom");
+    if (wrap) wrap.open = true;
     addCustomMetaField("", "");
     schedulePageDraftSave();
   });
@@ -430,8 +433,6 @@ function bindEvents() {
     schedulePageDraftSave();
     savePageDetails();
   });
-  els.pageQuotes?.addEventListener("click", handlePageQuoteAction);
-  els.pageQuotes?.addEventListener("change", handleQuoteExportToggle);
 
   on(els.nav, "click", (event) => {
     const button = event.target.closest(".nav-btn");
@@ -446,32 +447,13 @@ function bindEvents() {
     if (!button) return;
     switchPageTab(button.dataset.pageTab);
   });
-
-  on(els.exploreSuggestions, "click", (event) => {
-    const card = event.target.closest(".explore-card");
-    const url = card?.dataset?.url || card?.href;
+  on(els.messages, "click", (event) => {
+    const card = event.target.closest(".explore-chat-card");
+    const url = card?.dataset?.url;
     if (!url) return;
     event.preventDefault();
     chrome.tabs.create({ url });
   });
-  on(els.exploreScrollHint, "click", () => {
-    els.exploreListWrap?.scrollBy({ top: 68, behavior: "smooth" });
-  });
-  on(els.exploreListWrap, "scroll", updateExploreScrollHint);
-  const onExploreWheel = (event) => {
-    const wrap = els.exploreListWrap;
-    if (!wrap) return;
-    const max = wrap.scrollHeight - wrap.clientHeight;
-    if (max <= 1) return;
-    const delta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-    const next = Math.max(0, Math.min(max, wrap.scrollTop + delta));
-    if (next === wrap.scrollTop) return;
-    event.preventDefault();
-    event.stopPropagation();
-    wrap.scrollTop = next;
-  };
-  els.exploreListWrap?.addEventListener("wheel", onExploreWheel, { passive: false, capture: true });
-  els.exploreScroller?.addEventListener("wheel", onExploreWheel, { passive: false, capture: true });
 }
 
 function switchPageTab(tab) {
@@ -485,6 +467,9 @@ function switchPageTab(tab) {
     document.querySelectorAll(".page-panel").forEach((el) => {
       el.classList.toggle("active", el.id === `page-panel-${tab}`);
     });
+  }
+  if (tab === "quotes") {
+    els.metaNotes?.focus();
   }
   if (tab === "chat") {
     els.question.focus();
@@ -527,31 +512,10 @@ function formatUserError(message) {
   return text;
 }
 
-function isSaveableSelection(text) {
-  return normalizeSelection(text).length >= 8;
-}
-
 function updateSelection(selected) {
   const normalized = normalizeSelection(selected);
-  const previous = state.selection;
   state.selection = normalized;
   if (state.page) state.page.selected_text = normalized;
-
-  const selectionChanged = normalized !== normalizeSelection(previous);
-
-  if (!isSaveableSelection(normalized)) {
-    setQuoteComposeIdle();
-    return;
-  }
-
-  const alreadySaved = normalized === state.lastSavedSelection;
-  if (alreadySaved) {
-    setQuoteComposeIdle();
-    return;
-  }
-
-  openQuoteCompose({ auto: true, resetNote: selectionChanged });
-  if (state.view === "chat") switchPageTab("quotes");
 }
 
 async function refreshSelectionFromPage() {
@@ -561,81 +525,33 @@ async function refreshSelectionFromPage() {
   }
 }
 
-function setQuoteComposeIdle() {
-  state.pendingQuoteText = "";
-  if (!els.quoteCompose) return;
-  els.quoteCompose.hidden = false;
-  els.quoteCompose.classList.remove("ready");
-  if (els.quotePreview) {
-    els.quotePreview.textContent = "Highlight text on this page to save it as a quote.";
-    els.quotePreview.classList.add("empty");
+async function handleExternalQuoteSaved(quoteFromMessage) {
+  let quote = quoteFromMessage;
+  if (!quote?.text) {
+    const data = await chrome.storage.session.get(["lastSavedQuote"]);
+    quote = data.lastSavedQuote;
   }
-  if (els.quoteNote) els.quoteNote.value = "";
-  if (els.saveQuoteConfirm) els.saveQuoteConfirm.disabled = true;
-  if (els.saveQuoteBtn) els.saveQuoteBtn.hidden = true;
+  await Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
+  if (quote?.page_url && state.page?.url && quote.page_url !== state.page.url) return;
+  if (quote?.text) addQuoteToNotes(quote);
+  switchPageTab("quotes");
+  els.metaNotes?.focus();
 }
 
-function openQuoteCompose({ auto = false, resetNote = true } = {}) {
-  const text = normalizeSelection(state.selection);
-  if (!isSaveableSelection(text)) {
-    setQuoteComposeIdle();
-    if (!auto) setStatus("Highlight text on the page first", true);
-    return;
-  }
-  if (text === state.lastSavedSelection) {
-    return;
-  }
-
-  state.pendingQuoteText = text;
-  els.quoteCompose.hidden = false;
-  els.quoteCompose.classList.add("ready");
-  els.quotePreview.textContent = text;
-  els.quotePreview.classList.remove("empty");
-  if (resetNote) els.quoteNote.value = "";
-  els.saveQuoteConfirm.disabled = false;
-  if (els.saveQuoteBtn) els.saveQuoteBtn.hidden = true;
-  if (!auto) {
-    els.quoteNote.focus();
-  }
-}
-
-function closeQuoteCompose({ keepSelection = false } = {}) {
-  if (!keepSelection) {
-    state.selection = "";
-    state.lastSavedSelection = "";
-  }
-  setQuoteComposeIdle();
-}
-
-async function confirmSaveQuote() {
-  const text = normalizeSelection(state.pendingQuoteText || state.selection);
-  if (!text) {
-    closeQuoteCompose({ keepSelection: true });
-    return;
-  }
-  els.saveQuoteConfirm.disabled = true;
-  els.saveQuoteConfirm.textContent = "Saving…";
-  try {
-    const ready = await ensureBackendReady();
-    if (!ready) {
-      setStatus("Backend not connected — fix setup below, then retry", true);
-      showSetupHelp();
-      return;
-    }
-    const saved = await saveQuote(text, els.quoteNote.value.trim());
-    if (saved) {
-      state.lastSavedSelection = text;
-      setQuoteComposeIdle();
-      if (els.saveQuoteBtn) els.saveQuoteBtn.hidden = true;
-      setStatus("Quote saved");
-      hideSetupHelp();
-      switchPageTab("quotes");
-      await syncHighlightsToPage();
-    }
-  } finally {
-    els.saveQuoteConfirm.textContent = "Save quote";
-    els.saveQuoteConfirm.disabled = !state.pendingQuoteText;
-  }
+function addQuoteToNotes(quote, { switchTab = true } = {}) {
+  const text = normalizeSelection(quote?.text);
+  if (!text) return false;
+  const current = getNotesMarkdown();
+  const next = appendQuoteToNotes(current, quote);
+  if (next === current) return false;
+  setNotesMarkdown(next);
+  if (els.metaNotes) els.metaNotes.scrollTop = els.metaNotes.scrollHeight;
+  state.exportQuoteKeys.add(quoteExportKey(quote));
+  state.lastSavedSelection = text;
+  if (switchTab) switchPageTab("quotes");
+  void savePageDetails();
+  setStatus("Quote added to notes");
+  return true;
 }
 
 async function saveQuote(text, note = "") {
@@ -697,6 +613,7 @@ function emptyMetadata() {
     medium: "",
     tldr: "",
     thoughts: "",
+    notes: "",
     tags: [],
     custom: [],
   };
@@ -723,6 +640,7 @@ function normalizeMetadata(raw) {
   meta.medium = String(raw.medium || "").trim();
   meta.tldr = String(raw.tldr || "").trim();
   meta.thoughts = String(raw.thoughts || "").trim();
+  meta.notes = String(raw.notes || "").trim();
   meta.tags = normalizeTags(raw.tags);
   meta.custom = Array.isArray(raw.custom)
     ? raw.custom
@@ -746,6 +664,7 @@ function mergeMetadata(preferred, fallback) {
     medium: chosen.medium || base.medium,
     tldr: chosen.tldr || base.tldr,
     thoughts: chosen.thoughts || base.thoughts,
+    notes: chosen.notes || base.notes,
     tags: chosen.tags.length ? chosen.tags : base.tags,
     custom: chosen.custom.length ? chosen.custom : base.custom,
   };
@@ -765,6 +684,7 @@ function collectMetadataFromForm() {
     medium: els.metaMedium?.value || "",
     tldr: els.metaTldr?.value || "",
     thoughts: els.metaThoughts?.value || "",
+    notes: getNotesMarkdown(),
     tags: state.tags,
     custom,
   });
@@ -790,6 +710,7 @@ function applyMetadataToForm(metadata) {
   setSelectValue(els.metaMedium, meta.medium || suggestMedium(state.page));
   if (els.metaTldr) els.metaTldr.value = meta.tldr;
   if (els.metaThoughts) els.metaThoughts.value = meta.thoughts;
+  setNotesMarkdown(meta.notes);
   state.tags = meta.tags.slice();
   renderTagChips();
   renderCustomMetaFields(meta.custom);
@@ -886,12 +807,337 @@ function buildBookshelfEntry() {
     tldr: (els.metaTldr?.value || "").trim(),
     thoughts: (els.metaThoughts?.value || "").trim(),
     tags: state.tags.slice(),
-    notes: formatQuoteNotes(quotesSelectedForExport()),
+    notes: markdownBlockquotesToFences(getNotesMarkdown().trim()),
   };
 }
 
 function quoteExportKey(quote) {
   return normalizeSelection(quote?.text || "");
+}
+
+function toMarkdownBlockquote(text) {
+  const body = String(text || "").trim();
+  if (!body) return "";
+  return body.split("\n").map((line) => (line.length ? `> ${line}` : ">")).join("\n");
+}
+
+function fencesToMarkdown(notes) {
+  return String(notes || "").replace(
+    /:::(quote|sidenote)\s*\n?([\s\S]*?)\s*:::/g,
+    (_, _kind, body) => toMarkdownBlockquote(body)
+  );
+}
+
+function markdownBlockquotesToFences(notes) {
+  const lines = String(notes || "").split("\n");
+  const out = [];
+  let quote = [];
+  const flush = () => {
+    if (!quote.length) return;
+    const body = quote.map((line) => line.replace(/^>\s?/, "")).join("\n").trim();
+    out.push(`:::quote\n${body}\n:::`);
+    quote = [];
+  };
+  for (const line of lines) {
+    if (/^>/.test(line)) quote.push(line);
+    else {
+      flush();
+      out.push(line);
+    }
+  }
+  flush();
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function quoteNotesSnippet(quote) {
+  const block = toMarkdownBlockquote(quote?.text);
+  const note = String(quote?.note || "").trim();
+  return note ? `${block}\n\n${note}` : block;
+}
+
+function renderNotesInline(text) {
+  let html = escapeHtml(String(text || ""));
+  html = html.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+    '<a href="$2">$1</a>'
+  );
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  return html.replace(/\n/g, "<br>");
+}
+
+function markdownToNotesHtml(markdown) {
+  const source = fencesToMarkdown(String(markdown || "")).replace(/\r\n/g, "\n");
+  if (!source.trim()) return "";
+  const parts = [];
+  let paragraph = [];
+  let quote = [];
+  const flushParagraph = () => {
+    const text = paragraph.join("\n").trim();
+    paragraph = [];
+    if (text) parts.push(`<p>${renderNotesInline(text)}</p>`);
+  };
+  const flushQuote = () => {
+    const text = quote.join("\n").trim();
+    quote = [];
+    if (text) {
+      parts.push(`<blockquote class="custom-quote"><p>${renderNotesInline(text)}</p></blockquote>`);
+    }
+  };
+  for (const line of source.split("\n")) {
+    if (/^>/.test(line)) {
+      flushParagraph();
+      quote.push(line.replace(/^>\s?/, ""));
+      continue;
+    }
+    if (!line.trim()) {
+      flushQuote();
+      flushParagraph();
+      continue;
+    }
+    flushQuote();
+    paragraph.push(line);
+  }
+  flushQuote();
+  flushParagraph();
+  return parts.join("");
+}
+
+function serializeNotesInline(node) {
+  if (!node) return "";
+  if (node.nodeType === Node.TEXT_NODE) {
+    return String(node.nodeValue || "").replace(/\u00a0/g, " ");
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return "";
+  const tag = node.tagName.toLowerCase();
+  if (tag === "br") return "\n";
+  const inner = Array.from(node.childNodes).map(serializeNotesInline).join("");
+  if (tag === "strong" || tag === "b") return inner ? `**${inner}**` : "";
+  if (tag === "em" || tag === "i") return inner ? `*${inner}*` : "";
+  if (tag === "code") return inner ? `\`${inner}\`` : "";
+  if (tag === "a") {
+    const href = node.getAttribute("href") || "";
+    return href && inner ? `[${inner}](${href})` : inner;
+  }
+  return inner;
+}
+
+function notesHtmlToMarkdown(root) {
+  if (!root) return "";
+  const blocks = [];
+  const walk = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = String(node.nodeValue || "").replace(/\u00a0/g, " ").trim();
+      if (text) blocks.push(text);
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === "blockquote") {
+      const text = serializeNotesInline(node).replace(/\n{2,}/g, "\n").trim();
+      if (text) blocks.push(toMarkdownBlockquote(text));
+      return;
+    }
+    if (tag === "ul" || tag === "ol") {
+      const items = Array.from(node.children)
+        .filter((el) => el.tagName.toLowerCase() === "li")
+        .map((li) => `- ${serializeNotesInline(li).trim()}`)
+        .filter((item) => item !== "-");
+      if (items.length) blocks.push(items.join("\n"));
+      return;
+    }
+    if (/^h[1-3]$/.test(tag)) {
+      const text = serializeNotesInline(node).trim();
+      if (text) blocks.push(`${"#".repeat(Number(tag[1]))} ${text}`);
+      return;
+    }
+    if (tag === "p") {
+      const text = serializeNotesInline(node).trim();
+      if (text) blocks.push(text);
+      return;
+    }
+    if (tag === "div") {
+      const hasBlock = Array.from(node.children).some((el) =>
+        /^(p|div|blockquote|ul|ol|h1|h2|h3|pre)$/i.test(el.tagName)
+      );
+      if (hasBlock) Array.from(node.childNodes).forEach(walk);
+      else {
+        const text = serializeNotesInline(node).trim();
+        if (text) blocks.push(text);
+      }
+      return;
+    }
+    Array.from(node.childNodes).forEach(walk);
+  };
+  Array.from(root.childNodes).forEach(walk);
+  return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function getNotesMarkdown() {
+  return notesHtmlToMarkdown(els.metaNotes);
+}
+
+function setNotesMarkdown(value) {
+  if (!els.metaNotes) return;
+  els.metaNotes.innerHTML = markdownToNotesHtml(value);
+  updateNotesEmptyState();
+  syncExportChecksFromNotes();
+  refreshExportJsonPreview();
+}
+
+function notesEditorIsEmpty() {
+  return !(els.metaNotes?.innerText || "").replace(/\u00a0/g, " ").trim();
+}
+
+function updateNotesEmptyState() {
+  els.metaNotes?.classList.toggle("is-empty", notesEditorIsEmpty());
+}
+
+function applyNotesFormat(command) {
+  els.metaNotes?.focus();
+  document.execCommand(command, false, null);
+  updateNotesEmptyState();
+  syncExportChecksFromNotes();
+  schedulePageDraftSave();
+  refreshExportJsonPreview();
+}
+
+function handleNotesKeydown(event) {
+  if (!(event.metaKey || event.ctrlKey)) return;
+  const key = event.key.toLowerCase();
+  if (key === "b") {
+    event.preventDefault();
+    applyNotesFormat("bold");
+  } else if (key === "i") {
+    event.preventDefault();
+    applyNotesFormat("italic");
+  }
+}
+
+function handleNotesPaste(event) {
+  event.preventDefault();
+  const text = event.clipboardData?.getData("text/plain") || "";
+  document.execCommand("insertText", false, text);
+}
+
+function markdownQuoteBodies(notes) {
+  const bodies = [];
+  const lines = String(notes || "").split("\n");
+  let body = [];
+  const flush = () => {
+    if (!body.length) return;
+    bodies.push(body.join("\n"));
+    body = [];
+  };
+  for (const line of lines) {
+    if (/^>/.test(line)) body.push(line.replace(/^>\s?/, ""));
+    else flush();
+  }
+  flush();
+  return bodies;
+}
+
+function notesContainsQuote(notes, text) {
+  const needle = normalizeSelection(text);
+  if (!needle) return false;
+  const re = /:::(?:quote|sidenote)\s*\n?([\s\S]*?)\s*:::/g;
+  let match;
+  while ((match = re.exec(notes))) {
+    if (normalizeSelection(match[1]) === needle) return true;
+  }
+  return markdownQuoteBodies(notes).some((body) => normalizeSelection(body) === needle);
+}
+
+function quoteBlockRange(notes, text) {
+  const needle = normalizeSelection(text);
+  if (!needle) return null;
+  const re = /:::(?:quote|sidenote)\s*\n?([\s\S]*?)\s*:::/g;
+  let match;
+  while ((match = re.exec(notes))) {
+    if (normalizeSelection(match[1]) !== needle) continue;
+    return { start: match.index, end: match.index + match[0].length };
+  }
+  const source = String(notes || "");
+  const lines = source.split("\n");
+  let idx = 0;
+  let startIdx = -1;
+  let body = [];
+  for (let i = 0; i <= lines.length; i += 1) {
+    const line = i < lines.length ? lines[i] : null;
+    const isQuote = line !== null && /^>/.test(line);
+    if (isQuote) {
+      if (startIdx < 0) startIdx = idx;
+      body.push(line.replace(/^>\s?/, ""));
+    } else if (startIdx >= 0) {
+      if (normalizeSelection(body.join("\n")) === needle) {
+        return { start: startIdx, end: idx };
+      }
+      startIdx = -1;
+      body = [];
+    }
+    if (line !== null) idx += line.length + 1;
+  }
+  return null;
+}
+
+function consumeFollowingNote(notes, fenceEnd, note) {
+  const trimmedNote = String(note || "").trim();
+  if (!trimmedNote) return fenceEnd;
+  const after = notes.slice(fenceEnd);
+  const lead = after.match(/^\s*/)?.[0].length || 0;
+  const rest = after.slice(lead);
+  if (!rest.startsWith(trimmedNote)) return fenceEnd;
+  const trailing = rest.slice(trimmedNote.length);
+  if (trailing && !trailing.startsWith("\n")) return fenceEnd;
+  return fenceEnd + lead + trimmedNote.length;
+}
+
+function appendQuoteToNotes(notes, quote) {
+  if (notesContainsQuote(notes, quote?.text)) return notes;
+  const snippet = quoteNotesSnippet(quote);
+  return notes.trim() ? `${notes.trim()}\n\n${snippet}` : snippet;
+}
+
+function removeQuoteFromNotes(notes, quote) {
+  const range = quoteBlockRange(notes, quote?.text);
+  if (!range) return notes;
+  const end = consumeFollowingNote(notes, range.end, quote?.note);
+  return `${notes.slice(0, range.start)}${notes.slice(end)}`
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function replaceQuoteInNotes(notes, previous, next) {
+  const range = quoteBlockRange(notes, previous?.text);
+  if (!range) return next ? appendQuoteToNotes(notes, next) : notes;
+  const end = consumeFollowingNote(notes, range.end, previous?.note);
+  const replacement = next ? quoteNotesSnippet(next) : "";
+  const before = notes.slice(0, range.start).trimEnd();
+  const after = notes.slice(end).trimStart();
+  return [before, replacement, after].filter(Boolean).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function syncExportChecksFromNotes() {
+  const notes = getNotesMarkdown();
+  const next = new Set();
+  for (const quote of state.quotes || []) {
+    if (notesContainsQuote(notes, quote.text)) next.add(quoteExportKey(quote));
+  }
+  state.exportQuoteKeys = next;
+}
+
+function seedNotesFromSelectedQuotes() {
+  if (getNotesMarkdown().trim()) {
+    syncExportChecksFromNotes();
+    refreshExportJsonPreview();
+    return;
+  }
+  const quotes = sortQuotesByPageOrder(state.quotes || []);
+  if (!quotes.length) return;
+  setNotesMarkdown(formatQuoteNotes(quotes));
+  quotes.forEach((quote) => state.exportQuoteKeys.add(quoteExportKey(quote)));
+  void savePageDetails();
 }
 
 function quotesSelectedForExport() {
@@ -915,14 +1161,7 @@ function sortQuotesByPageOrder(quotes) {
 
 function formatQuoteNotes(quotes) {
   if (!quotes.length) return "";
-  return quotes
-    .map((quote) => {
-      const text = String(quote.text || "").trim();
-      const note = String(quote.note || "").trim();
-      const inner = note ? `**${note}:** ${text}` : text;
-      return `:::quote\n${inner}\n:::`;
-    })
-    .join("\n\n");
+  return quotes.map((quote) => quoteNotesSnippet(quote)).join("\n\n");
 }
 
 function escapeTemplateLiteral(text) {
@@ -1018,6 +1257,8 @@ function renderCustomMetaFields(custom) {
   if (!els.metaCustomFields) return;
   els.metaCustomFields.innerHTML = "";
   (custom || []).forEach((field) => addCustomMetaField(field.key, field.value));
+  const wrap = document.getElementById("details-custom");
+  if (wrap) wrap.open = Boolean(custom?.length);
 }
 
 function addCustomMetaField(key = "", value = "") {
@@ -1064,6 +1305,48 @@ async function persistPageDraft() {
     exportQuoteKeys: Array.from(state.exportQuoteKeys),
   };
   await chrome.storage.local.set({ [`pageDraft:${state.page.url}`]: draft });
+}
+
+async function clearLocalPageDrafts() {
+  clearTimeout(pageDraftTimer);
+  pageDraftTimer = null;
+  const local = await chrome.storage.local.get(null);
+  const localKeys = Object.keys(local).filter(
+    (key) => key.startsWith("pageDraft:") || key.startsWith("customTitle:")
+  );
+  if (localKeys.length) await chrome.storage.local.remove(localKeys);
+
+  const session = await chrome.storage.session.get(null);
+  const sessionKeys = Object.keys(session).filter(
+    (key) =>
+      key.startsWith("explore:") ||
+      key === "lastSavedQuote" ||
+      key === "latestSelection" ||
+      key === "quoteSavedAt"
+  );
+  if (sessionKeys.length) await chrome.storage.session.remove(sessionKeys);
+
+  state.exploreCache = {};
+  state.quotes = [];
+  state.exportQuoteKeys = new Set();
+  state.tags = [];
+  state.lastSavedSelection = "";
+  applyMetadataToForm(emptyMetadata());
+  await clearAllPageHighlights();
+}
+
+async function clearAllPageHighlights() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    await Promise.all(
+      tabs.map((tab) => {
+        if (!tab.id) return Promise.resolve();
+        return chrome.tabs.sendMessage(tab.id, { type: "CLEAR_HIGHLIGHTS" }).catch(() => {});
+      })
+    );
+  } catch {
+    // Restricted pages cannot host highlights.
+  }
 }
 
 async function savePageDetails() {
@@ -1225,8 +1508,6 @@ async function refreshPageContext() {
     els.messages.innerHTML = "";
     removeChatEmptyHint();
     els.question.value = "";
-    closeQuoteCompose({ keepSelection: true });
-    els.explorePanel.hidden = true;
   }
   state.lastSavedSelection = "";
   updateSelection(page.selected_text || state.selection);
@@ -1297,7 +1578,7 @@ async function syncPageLibraryState() {
 
 async function loadPageQuotes() {
   if (!state.page?.url) {
-    els.pageQuotes.innerHTML = '<p class="muted empty-hint">Quotes you save from this page appear here.</p>';
+    state.quotes = [];
     return;
   }
   try {
@@ -1311,8 +1592,9 @@ async function loadPageQuotes() {
       (a, b) => String(b.saved_at || "").localeCompare(String(a.saved_at || ""))
     );
     renderPageQuotes();
+    seedNotesFromSelectedQuotes();
   } catch (err) {
-    els.pageQuotes.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
+    setStatus(err.message, true);
   }
 }
 
@@ -1336,40 +1618,6 @@ function applyExportQuoteKeys(draft) {
 }
 
 function renderPageQuotes() {
-  els.pageQuotes.innerHTML = "";
-  if (!state.quotes.length) {
-    els.pageQuotes.innerHTML =
-      '<p class="muted empty-hint">Saved quotes from this page appear here.</p>';
-    refreshExportJsonPreview();
-    return;
-  }
-  state.quotes.forEach((quote, index) => {
-    const card = document.createElement("article");
-    card.className = "quote-card";
-    const quoteId = quote.id || "";
-    const when = formatQuoteTime(quote.saved_at);
-    const checked = state.exportQuoteKeys.has(quoteExportKey(quote));
-    card.innerHTML = `
-      <div class="quote-card-head">
-        <span class="quote-index">Quote ${state.quotes.length - index}</span>
-        ${when ? `<time class="quote-time muted">${escapeHtml(when)}</time>` : ""}
-      </div>
-      <blockquote>${escapeHtml(quote.text)}</blockquote>
-      ${quote.note ? `<div class="quote-note-text">${escapeHtml(quote.note)}</div>` : ""}
-      <div class="quote-card-actions">
-        <button type="button" class="text-btn" data-quote-edit data-quote-id="${escapeAttr(quoteId)}">Edit</button>
-        <button type="button" class="text-btn danger-text" data-quote-delete data-quote-id="${escapeAttr(quoteId)}">Delete</button>
-      </div>
-      <label class="quote-export">
-        <input type="checkbox" data-quote-export ${checked ? "checked" : ""} />
-        Add to metadata
-      </label>
-    `;
-    card.dataset.quoteId = quoteId;
-    card.dataset.quoteIndex = String(index);
-    card.title = "Show this quote on the page";
-    els.pageQuotes.appendChild(card);
-  });
   refreshExportJsonPreview();
 }
 
@@ -1438,10 +1686,14 @@ function handleQuoteExportToggle(event) {
   );
   if (!quote) return;
   const key = quoteExportKey(quote);
-  if (input.checked) state.exportQuoteKeys.add(key);
-  else state.exportQuoteKeys.delete(key);
+  if (input.checked) {
+    state.exportQuoteKeys.add(key);
+    setNotesMarkdown(appendQuoteToNotes(getNotesMarkdown(), quote));
+  } else {
+    state.exportQuoteKeys.delete(key);
+    setNotesMarkdown(removeQuoteFromNotes(getNotesMarkdown(), quote));
+  }
   void persistPageDraft();
-  refreshExportJsonPreview();
 }
 
 function rememberQuoteExportKey(previousText, nextText) {
@@ -1504,6 +1756,9 @@ async function saveQuoteEdit(card, quote) {
     return;
   }
   rememberQuoteExportKey(quote.text, text);
+  if (notesContainsQuote(getNotesMarkdown(), quote.text) || state.exportQuoteKeys.has(quoteExportKey(quote))) {
+    setNotesMarkdown(replaceQuoteInNotes(getNotesMarkdown(), quote, { text, note }));
+  }
   void persistPageDraft();
   if (!quote.id || quote.id.startsWith("local-")) {
     quote.text = text;
@@ -1543,6 +1798,7 @@ async function deleteQuote(quote) {
   const current = findQuoteById(quoteId, -1) || quote;
   const id = String(current?.id || quoteId).trim();
   state.exportQuoteKeys.delete(quoteExportKey(current));
+  setNotesMarkdown(removeQuoteFromNotes(getNotesMarkdown(), current));
   void persistPageDraft();
 
   if (!id || id.startsWith("local-")) {
@@ -1626,7 +1882,19 @@ function renderChatHistory(history) {
     els.messages.appendChild(hint);
     return;
   }
-  for (const turn of history) {
+  for (let i = 0; i < history.length; i += 1) {
+    const turn = history[i];
+    const prev = history[i - 1];
+    if (turn.role === "assistant" && prev && isExploreQuestion(prev.content)) {
+      const node = appendMessage("assistant", turn.content);
+      const items = parseExploreItemsFromMarkdown(turn.content);
+      if (items.length) {
+        const intro = String(turn.content).split("### Articles to open next")[0].trim();
+        node.classList.add("explore-answer");
+        node.innerHTML = `${intro ? renderMarkdown(intro) : ""}${renderExploreCardsHtml(items)}`;
+      }
+      continue;
+    }
     appendMessage(turn.role, turn.content);
   }
 }
@@ -1681,44 +1949,44 @@ async function saveCurrentPage() {
 }
 
 async function loadExploreSuggestions() {
-  if (!state.page) return;
-  const pageUrl = state.page.url || "";
-  if (!els.explorePanel.hidden) {
-    els.explorePanel.hidden = true;
-    return;
+  if (!state.page || state.busy) return;
+  const title = getDisplayTitle();
+  const question = `Explore more articles related to ${title}`;
+  const itemsPromise = fetchExploreItems();
+  const result = await askQuestion(question);
+  const items = await itemsPromise.catch(() => []);
+  if (!result?.assistantNode) return;
+  const extras = items.filter((item) => !String(result.answer || "").includes(item.url));
+  if (!extras.length) return;
+  const extraMd = formatExploreMarkdown(extras);
+  const introHtml = result.answer
+    ? renderMarkdown(result.answer)
+    : `<p>Here are more specific articles related to <strong>${escapeHtml(title)}</strong>.</p>`;
+  result.assistantNode.classList.add("markdown-body", "explore-answer");
+  result.assistantNode.classList.remove("error");
+  result.assistantNode.innerHTML = `${introHtml}${renderExploreCardsHtml(extras)}`;
+  const last = state.history[state.history.length - 1];
+  if (last?.role === "assistant") {
+    last.content = [result.answer, extraMd].filter(Boolean).join("\n\n").trim();
   }
-  els.explorePanel.hidden = false;
+}
 
-  if (state.exploreLoadedUrl === pageUrl && els.exploreSuggestions.querySelector(".explore-card")) {
-    updateExploreScrollHint();
-    return;
-  }
-
+async function fetchExploreItems() {
+  const pageUrl = state.page?.url || "";
   const cached = await readExploreCache(pageUrl);
-  if (cached?.length) {
-    renderExploreSuggestions(cached, pageUrl);
-    return;
-  }
-
-  els.exploreSuggestions.innerHTML = '<p class="muted">Finding links…</p>';
-  updateExploreScrollHint();
-  try {
-    const ready = await ensureBackendReady({ quiet: true });
-    if (!ready) throw new Error("Backend not connected");
-    const res = await fetch(`${BACKEND}/library/explore`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ page: state.page }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Explore failed");
-    const items = normalizeExploreItems(data.suggestions || []);
-    await writeExploreCache(pageUrl, items);
-    renderExploreSuggestions(items, pageUrl);
-  } catch (err) {
-    els.exploreSuggestions.innerHTML = `<p class="error">${escapeHtml(err.message)}</p>`;
-    updateExploreScrollHint();
-  }
+  if (cached?.length) return cached;
+  const ready = await ensureBackendReady({ quiet: true });
+  if (!ready) throw new Error("Backend not connected");
+  const res = await fetch(`${BACKEND}/library/explore`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ page: state.page }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Explore failed");
+  const items = normalizeExploreItems(data.suggestions || []);
+  await writeExploreCache(pageUrl, items);
+  return items;
 }
 
 function exploreCacheKey(url) {
@@ -1756,9 +2024,11 @@ function normalizeExploreItems(raw) {
     }
     const url = String(entry?.url || entry?.href || "").trim();
     if (!url.startsWith("http")) continue;
+    const why = String(entry?.why || entry?.blurb || "").trim();
     items.push({
       title: String(entry?.title || url).trim(),
       url,
+      ...(why ? { why } : {}),
     });
   }
   return items.slice(0, 10);
@@ -1772,51 +2042,60 @@ function hostnameFromUrl(url) {
   }
 }
 
-function renderExploreSuggestions(items, pageUrl) {
-  state.exploreLoadedUrl = pageUrl || "";
-  els.exploreSuggestions.innerHTML = "";
-  if (!items.length) {
-    els.exploreSuggestions.innerHTML = '<p class="muted">No further reading yet.</p>';
-    updateExploreScrollHint();
-    return;
-  }
-  for (const item of items) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "explore-card";
-    card.dataset.url = item.url;
-    card.innerHTML = `
-      <span class="explore-card-title">${escapeHtml(item.title)}</span>
-      <span class="explore-card-url">${escapeHtml(hostnameFromUrl(item.url))}</span>
-    `;
-    els.exploreSuggestions.appendChild(card);
-  }
-  requestAnimationFrame(updateExploreScrollHint);
+function isExploreQuestion(text) {
+  return /^Explore more articles related to /i.test(String(text || "").trim());
 }
 
-function updateExploreScrollHint() {
-  const wrap = els.exploreListWrap;
-  const scroller = els.exploreScroller;
-  if (!wrap) return;
-  const canScroll = wrap.scrollHeight - wrap.clientHeight > 8;
-  const atEnd = wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 6;
-  scroller?.classList.toggle("has-more", canScroll && !atEnd);
-  if (els.exploreScrollHint) {
-    els.exploreScrollHint.hidden = !canScroll || atEnd;
-    els.exploreScrollHint.textContent = "Scroll for more";
-  }
+function formatExploreMarkdown(items) {
+  if (!items?.length) return "";
+  const lines = items.map((item) => {
+    const why = String(item.why || "").trim();
+    const host = hostnameFromUrl(item.url);
+    return why
+      ? `- **[${item.title}](${item.url})** — ${host}\n  ${why}`
+      : `- **[${item.title}](${item.url})** — ${host}`;
+  });
+  return `### Articles to open next\n\n${lines.join("\n")}`;
 }
 
-async function askQuestion() {
-  const question = els.question.value.trim();
-  if (!question || state.busy || !state.page) return;
+function renderExploreCardsHtml(items) {
+  if (!items?.length) return "";
+  const cards = items.map((item) => {
+    const why = String(item.why || "").trim();
+    return `<button type="button" class="explore-chat-card" data-url="${escapeAttr(item.url)}">
+      <span class="explore-chat-title">${escapeHtml(item.title)}</span>
+      <span class="explore-chat-url">${escapeHtml(hostnameFromUrl(item.url))}</span>
+      ${why ? `<span class="explore-chat-why">${escapeHtml(why)}</span>` : ""}
+    </button>`;
+  }).join("");
+  return `<div class="explore-chat-list">${cards}</div>`;
+}
+
+function parseExploreItemsFromMarkdown(text) {
+  const items = [];
+  const re = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)(?:[^\n]*—\s*([^\n]+))?(?:\n\s+([^\n-].+))?/g;
+  let match;
+  while ((match = re.exec(String(text || "")))) {
+    items.push({
+      title: match[1].trim(),
+      url: match[2].trim(),
+      ...(match[4] ? { why: match[4].trim() } : {}),
+    });
+  }
+  return items;
+}
+
+async function askQuestion(presetQuestion) {
+  const fromInput = presetQuestion == null;
+  const question = String(presetQuestion ?? els.question.value).trim();
+  if (!question || state.busy || !state.page) return null;
 
   switchPageTab("chat");
   state.busy = true;
   els.askBtn.disabled = true;
   removeChatEmptyHint();
   appendMessage("user", question);
-  els.question.value = "";
+  if (fromInput) els.question.value = "";
 
   const assistantNode = appendMessage("assistant", "");
   try {
@@ -1871,10 +2150,12 @@ async function askQuestion() {
     assistantNode.classList.add("markdown-body");
     assistantNode.innerHTML = renderMarkdown(answer);
     setStatus("Answer ready");
+    return { answer, assistantNode };
   } catch (err) {
     assistantNode.textContent = formatUserError(err.message);
     assistantNode.classList.add("error");
     setStatus(formatUserError(err.message), true);
+    return { answer: "", assistantNode };
   } finally {
     state.busy = false;
     els.askBtn.disabled = false;
@@ -2104,7 +2385,7 @@ async function clearSavedLibrary() {
   const confirmed = await showConfirmDialog({
     title: "Clear saved pages?",
     message:
-      "Removes saved pages, quotes, per-page chats, and those items from Life.\n\nCalendar, messages, and other captured events stay.",
+      "Removes saved pages, quotes, notes drafts, per-page chats, and those items from Life.\n\nCalendar, messages, and other captured events stay.",
     confirmText: "Clear saved pages",
     cancelText: "Cancel",
   });
@@ -2113,6 +2394,7 @@ async function clearSavedLibrary() {
     const res = await fetch(`${BACKEND}/library/clear`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Clear failed");
+    await clearLocalPageDrafts();
     state.savedPageId = null;
     state.savedPages = [];
     state.selectedSavedId = null;
@@ -2120,7 +2402,7 @@ async function clearSavedLibrary() {
     markPageSaved(false);
     renderPageQuotes();
     setStatus("Saved pages cleared");
-    if (state.view === "chat") void loadPageQuotes();
+    if (state.view === "chat") void refreshPage();
     if (state.view === "saved") loadSavedPages();
     if (state.view === "graph") renderGraph();
     if (state.view === "life") loadLifeView();
@@ -2134,7 +2416,7 @@ async function clearAllData() {
   const confirmed = await showConfirmDialog({
     title: "Delete all data?",
     message:
-      "Wipes everything in ~/.kb/ — events, memory, relationships, integrations, and your saved library.\n\nThis cannot be undone.",
+      "Wipes everything in ~/.kb/ and local notes drafts in the extension — events, memory, relationships, integrations, saved library, and Quotes notes.\n\nThis cannot be undone.",
     confirmText: "Delete everything",
     cancelText: "Cancel",
     danger: true,
@@ -2144,8 +2426,10 @@ async function clearAllData() {
     const res = await fetch(`${BACKEND}/delete-all`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Delete failed");
+    await clearLocalPageDrafts();
     resetExtensionClientState();
     setStatus("All data deleted");
+    if (state.view === "chat") void refreshPage();
     if (state.view === "saved") loadSavedPages();
     if (state.view === "graph") renderGraph();
     if (state.view === "life") loadLifeView();

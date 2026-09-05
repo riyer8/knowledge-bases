@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from urllib import error, request
+from urllib import request
 
 import pytest
 
@@ -243,56 +243,6 @@ def test_e2e_browse_highlight_quote_chat_save_graph(
     assert detail["page"]["title"] == page_a["title"]
     assert len(detail["page"]["chat_history"]) == 4
     assert detail["page"]["quotes"] == []
-
-
-@pytest.mark.network
-def test_e2e_real_webpage_content(backend_url, mock_browsing_llm):
-    """Fetch a live page and run quote + save flow (like visiting example.com)."""
-    from urllib import request as urlrequest
-
-    with urlrequest.urlopen("https://example.com", timeout=15) as resp:
-        html = resp.read().decode("utf-8", errors="replace")
-
-    title = "Example Domain"
-    if "<title>" in html:
-        title = html.split("<title>", 1)[1].split("</title>", 1)[0].strip() or title
-
-    page = {
-        "url": "https://example.com/",
-        "title": title,
-        "site": "example.com",
-        "headings": [],
-        "paragraphs": ["Example Domain This domain is for use in documentation examples."],
-        "visible_text": "Example Domain",
-        "page_type": "webpage",
-        "metadata": {"author": "", "date": "", "custom": []},
-    }
-
-    status, _ = _request("POST", f"{backend_url}/page-context", page)
-    assert status == 200
-
-    status, quote = _request("POST", f"{backend_url}/library/quotes", {
-        "text": "This domain is for use in documentation examples",
-        "page_url": page["url"],
-        "page_title": page["title"],
-    })
-    assert status == 200
-    quote_id = quote["quote"]["id"]
-
-    status, saved = _request("POST", f"{backend_url}/library/save-page", {
-        "page": page,
-        "history": [],
-    })
-    assert status == 200
-
-    status, quotes = _request(
-        "GET",
-        f"{backend_url}/library/quotes?page_id={saved['page']['id']}",
-    )
-    assert any(q["id"] == quote_id for q in quotes["quotes"])
-
-    status, _ = _request("DELETE", f"{backend_url}/library/quotes/{quote_id}")
-    assert status == 200
 
 
 def test_e2e_library_clear_then_quotes_empty(backend_url, mock_browsing_llm):

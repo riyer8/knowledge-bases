@@ -55,78 +55,6 @@
     ></textarea>
     <p id="page-site" class="muted page-context-only"></p>
     <p id="page-type-hint" class="muted page-type-hint page-context-only" hidden></p>
-    <details class="metadata-panel page-context-only" id="metadata-panel">
-      <summary class="metadata-summary">
-        <span class="metadata-chevron" aria-hidden="true"></span>
-        <span>Details</span>
-      </summary>
-      <div class="metadata-panel-body">
-        <div class="metadata-fields">
-          <label class="meta-field">
-            <span class="meta-label">Author</span>
-            <input type="text" id="meta-author" placeholder="Author" autocomplete="off" />
-          </label>
-          <label class="meta-field">
-            <span class="meta-label">Date</span>
-            <input type="text" id="meta-date" placeholder="Date" autocomplete="off" />
-          </label>
-          <div class="metadata-fields-row">
-            <label class="meta-field">
-              <span class="meta-label">Category</span>
-              <div class="meta-select">
-                <select id="meta-category">
-                  <option value="">Choose…</option>
-                  <option value="life">Life</option>
-                  <option value="advice">Advice</option>
-                  <option value="science">Science</option>
-                  <option value="career">Career</option>
-                  <option value="psychology">Psychology</option>
-                  <option value="creativity">Creativity</option>
-                  <option value="perspective">Perspective</option>
-                </select>
-              </div>
-            </label>
-            <label class="meta-field">
-              <span class="meta-label">Medium</span>
-              <div class="meta-select">
-                <select id="meta-medium">
-                  <option value="">Choose…</option>
-                  <option value="essay">Essay</option>
-                  <option value="book">Book</option>
-                  <option value="research paper">Research paper</option>
-                  <option value="video">Video</option>
-                </select>
-              </div>
-            </label>
-          </div>
-          <label class="meta-field">
-            <span class="meta-label">TLDR</span>
-            <textarea id="meta-tldr" rows="2" placeholder="One-line takeaway"></textarea>
-          </label>
-          <label class="meta-field">
-            <span class="meta-label">Thoughts</span>
-            <textarea id="meta-thoughts" rows="3" placeholder="What you think about this"></textarea>
-          </label>
-          <div class="meta-field">
-            <span class="meta-label">Tags</span>
-            <div class="tag-editor" id="meta-tag-editor">
-              <div class="tag-chips" id="meta-tag-chips"></div>
-              <input type="text" id="meta-tag-input" placeholder="Add a tag" autocomplete="off" />
-            </div>
-          </div>
-        </div>
-        <div id="meta-custom-fields" class="meta-custom-fields"></div>
-        <button type="button" id="meta-add-field" class="text-btn meta-add-btn">+ Add field</button>
-        <div class="bookshelf-export">
-          <div class="bookshelf-export-head">
-            <span class="bookshelf-export-label">Bookshelf JSON</span>
-            <button type="button" id="copy-export-json" class="toolbar-btn">Copy JSON</button>
-          </div>
-          <pre id="export-json-preview" class="export-json-preview" tabindex="0"></pre>
-        </div>
-        <p class="muted metadata-hint">Title, URL, author, and today’s date are filled in. Quotes you check as “Add to metadata” go into notes in page order.</p>
-      </div>
-    </details>
     <div class="header-actions page-context-only">
       <button type="button" id="save-page-btn" class="toolbar-btn primary" title="Save this page with summary and quotes">+ Save</button>
       <!-- Archived with Wiki: <button type="button" id="add-page-to-wiki-btn" class="toolbar-btn">+ Wiki</button> -->
@@ -137,36 +65,117 @@
 
   <!-- Page view: quotes + chat tabs -->
   <section class="view active" id="view-chat">
-    <section class="explore-panel" id="explore-panel" hidden>
-      <div class="explore-head">
-        <h2>Explore next</h2>
-        <button type="button" class="explore-scroll-hint muted" id="explore-scroll-hint" hidden>Scroll for more</button>
-      </div>
-      <div class="explore-scroller" id="explore-scroller">
-        <div class="explore-list-wrap" id="explore-list-wrap" tabindex="0" role="region" aria-label="Further reading">
-          <div id="explore-suggestions" class="explore-list"></div>
-        </div>
-      </div>
-    </section>
-
     <nav class="page-subnav" id="page-subnav" aria-label="Page panels">
-      <button type="button" class="page-tab active" data-page-tab="quotes">Quotes</button>
+      <button type="button" class="page-tab active" data-page-tab="details">Details</button>
+      <button type="button" class="page-tab" data-page-tab="quotes">Quotes</button>
       <button type="button" class="page-tab" data-page-tab="chat">Chat</button>
     </nav>
 
-    <div class="page-panel active" id="page-panel-quotes">
-      <div class="quote-compose" id="quote-compose">
-        <p class="compose-label">Save a quote</p>
-        <blockquote id="quote-preview" class="quote-preview empty">Highlight text on this page to save it as a quote.</blockquote>
-        <input type="text" id="quote-note" class="quote-note" placeholder="Optional note…" />
-        <div class="quote-actions">
-          <button type="button" id="save-quote-confirm" class="toolbar-btn primary" disabled>Save quote</button>
-          <button type="button" id="save-quote-cancel" class="text-btn">Clear</button>
-        </div>
-      </div>
+    <div class="page-panel active" id="page-panel-details">
+      <div class="details-panel" id="metadata-panel">
+        <section class="details-section">
+          <h3 class="details-heading">About</h3>
+          <div class="metadata-fields">
+            <div class="metadata-fields-row">
+              <label class="meta-field">
+                <span class="meta-label">Author</span>
+                <input type="text" id="meta-author" placeholder="Author" autocomplete="off" />
+              </label>
+              <label class="meta-field">
+                <span class="meta-label">Date</span>
+                <input type="text" id="meta-date" placeholder="Date" autocomplete="off" />
+              </label>
+            </div>
+            <div class="metadata-fields-row">
+              <label class="meta-field">
+                <span class="meta-label">Category</span>
+                <div class="meta-select">
+                  <select id="meta-category">
+                    <option value="">Choose…</option>
+                    <option value="life">Life</option>
+                    <option value="advice">Advice</option>
+                    <option value="science">Science</option>
+                    <option value="career">Career</option>
+                    <option value="psychology">Psychology</option>
+                    <option value="creativity">Creativity</option>
+                    <option value="perspective">Perspective</option>
+                  </select>
+                </div>
+              </label>
+              <label class="meta-field">
+                <span class="meta-label">Medium</span>
+                <div class="meta-select">
+                  <select id="meta-medium">
+                    <option value="">Choose…</option>
+                    <option value="essay">Essay</option>
+                    <option value="book">Book</option>
+                    <option value="research paper">Research paper</option>
+                    <option value="video">Video</option>
+                  </select>
+                </div>
+              </label>
+            </div>
+          </div>
+        </section>
 
-      <div id="page-quotes" class="page-quotes">
-        <p class="muted empty-hint">Saved quotes from this page appear here.</p>
+        <section class="details-section">
+          <h3 class="details-heading">Reading</h3>
+          <div class="metadata-fields">
+            <label class="meta-field">
+              <span class="meta-label">TLDR</span>
+              <textarea id="meta-tldr" rows="2" placeholder="One-line takeaway"></textarea>
+            </label>
+            <label class="meta-field">
+              <span class="meta-label">Thoughts</span>
+              <textarea id="meta-thoughts" rows="2" placeholder="What you think about this"></textarea>
+            </label>
+            <div class="meta-field">
+              <span class="meta-label">Tags</span>
+              <div class="tag-editor" id="meta-tag-editor">
+                <div class="tag-chips" id="meta-tag-chips"></div>
+                <input type="text" id="meta-tag-input" placeholder="Add a tag" autocomplete="off" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <details class="details-more" id="details-custom">
+          <summary>Custom fields</summary>
+          <div id="meta-custom-fields" class="meta-custom-fields"></div>
+          <button type="button" id="meta-add-field" class="text-btn meta-add-btn">+ Add field</button>
+        </details>
+
+        <details class="details-more" id="details-export">
+          <summary>Bookshelf JSON</summary>
+          <div class="bookshelf-export">
+            <div class="bookshelf-export-head">
+              <span class="bookshelf-export-label">Copy into your site</span>
+              <button type="button" id="copy-export-json" class="toolbar-btn">Copy JSON</button>
+            </div>
+            <pre id="export-json-preview" class="export-json-preview" tabindex="0"></pre>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="page-panel" id="page-panel-quotes">
+      <div class="notes-shell">
+        <div class="notes-toolbar">
+          <span class="notes-toolbar-label">Notes</span>
+          <div class="notes-toolbar-actions">
+            <button type="button" class="text-btn notes-md-btn" id="notes-bold" title="Bold">B</button>
+            <button type="button" class="text-btn notes-md-btn" id="notes-italic" title="Italic"><em>I</em></button>
+          </div>
+        </div>
+        <div
+          id="meta-notes"
+          class="notes-editor markdown-body is-empty"
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          spellcheck="true"
+          data-placeholder="Highlight on the page and tap Save quote, or start writing."
+        ></div>
       </div>
     </div>
 
@@ -371,14 +380,14 @@
         <div class="data-action">
           <div class="data-action-copy">
             <strong>Clear saved pages</strong>
-            <p class="muted">Removes saved pages, quotes, per-page chats, and those items from Life. Calendar, messages, and other captured events stay.</p>
+            <p class="muted">Removes saved pages, quotes, notes drafts, per-page chats, and those items from Life. Calendar, messages, and other captured events stay.</p>
           </div>
           <button type="button" id="clear-library-btn" class="toolbar-btn">Clear saved pages</button>
         </div>
         <div class="data-action">
           <div class="data-action-copy">
             <strong>Delete all data</strong>
-            <p class="muted">Wipes everything in <code>~/.kb/</code> — events, memory, relationships, OAuth tokens, and the saved library. Cannot be undone.</p>
+            <p class="muted">Wipes everything in <code>~/.kb/</code> and local notes drafts in the extension — events, memory, relationships, OAuth tokens, saved library, and Quotes notes. Cannot be undone.</p>
           </div>
           <button type="button" id="clear-all-btn" class="danger-btn">Delete all data</button>
         </div>

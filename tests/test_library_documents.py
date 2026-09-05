@@ -49,12 +49,14 @@ def test_update_page_metadata(library_env, monkeypatch):
             "date": "1843",
             "category": "science",
             "medium": "research paper",
+            "notes": ":::quote\nA line from the paper\n:::\n\nWorth rereading.",
             "custom": [{"key": "Journal", "value": "Notes"}],
         },
     )
     assert updated["metadata"]["author"] == "Ada Lovelace"
     assert updated["metadata"]["category"] == "science"
     assert updated["metadata"]["medium"] == "research paper"
+    assert ":::quote" in updated["metadata"]["notes"]
     assert updated["metadata"]["custom"][0]["key"] == "Journal"
 
 

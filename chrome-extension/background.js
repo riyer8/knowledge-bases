@@ -128,8 +128,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Save quote failed");
-        await chrome.storage.session.set({ quoteSavedAt: Date.now() });
-        sendResponse({ ok: true, quote: data.quote });
+        const quote = data.quote || {
+          text: String(message.text || "").trim(),
+          note: String(message.note || "").trim(),
+        };
+        await chrome.storage.session.set({
+          quoteSavedAt: Date.now(),
+          lastSavedQuote: {
+            text: String(quote.text || message.text || "").trim(),
+            note: String(quote.note || message.note || "").trim(),
+            id: quote.id || "",
+            page_url: pageUrl,
+          },
+        });
+        sendResponse({ ok: true, quote });
       } catch (err) {
         sendResponse({ ok: false, error: String(err) });
       }
