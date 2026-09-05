@@ -329,9 +329,9 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
-  white-space: pre;
+  white-space: pre-wrap;
   overflow: auto;
-  max-height: 200px;
+  max-height: 420px;
   user-select: all;
 }
 
@@ -453,6 +453,17 @@ body {
 .notes-editor .custom-quote p,
 .notes-editor blockquote p {
   margin: 0;
+}
+
+.notes-editor .custom-quote strong,
+.notes-editor .custom-quote b,
+.notes-editor blockquote strong,
+.notes-editor blockquote b,
+.notes-document .custom-quote strong,
+.notes-document .custom-quote b,
+.notes-document blockquote strong,
+.notes-document blockquote b {
+  font-weight: 700;
 }
 
 .notes-editor .custom-quote::after,
@@ -1331,7 +1342,15 @@ a.toolbar-btn {
   padding-left: 1.35em;
 }
 .markdown-body li { margin: 0.35em 0; }
-.markdown-body li strong { font-weight: 650; }
+.markdown-body strong,
+.markdown-body b {
+  font-weight: 700;
+}
+.markdown-body em,
+.markdown-body i {
+  font-style: italic;
+}
+.markdown-body li strong { font-weight: 700; }
 
 .markdown-body blockquote {
   margin: 0.6em 0;

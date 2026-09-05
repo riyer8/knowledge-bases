@@ -11,6 +11,31 @@
     return String(text || "").replace(/\s+/g, " ").trim();
   }
 
+  /** Strip emphasis/code/link markup so notes formatting does not change quote identity. */
+  function stripInlineMarkdown(text) {
+    let s = String(text || "");
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1");
+    s = s.replace(/\*\*([^*]+)\*\*/g, "$1");
+    s = s.replace(/__([^_]+)__/g, "$1");
+    s = s.replace(/(^|[^*])\*([^*]+)\*/g, "$1$2");
+    s = s.replace(/(^|[^_])_([^_]+)_/g, "$1$2");
+    s = s.replace(/`([^`]+)`/g, "$1");
+    return s;
+  }
+
+  function plainQuoteText(text) {
+    return normalizeSelection(stripInlineMarkdown(text));
+  }
+
+  /** Identity key for a quote: ignores markdown, case, and punctuation. */
+  function quoteMatchKey(text) {
+    return plainQuoteText(text)
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]+/gu, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function toMarkdownBlockquote(text) {
     const body = String(text || "").trim();
     if (!body) return "";
@@ -57,8 +82,11 @@
       /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
       '<a href="$2">$1</a>'
     );
+    // Bold before italic so **…** is not eaten by single-star rules.
     html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
     html = html.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+    html = html.replace(/(^|[^_])_([^_]+)_/g, "$1<em>$2</em>");
     html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
     return html.replace(/\n/g, "<br>");
   }
@@ -132,7 +160,21 @@
       if (node.nodeType !== 1) return;
       const tag = node.tagName.toLowerCase();
       if (tag === "blockquote") {
-        const text = serializeNotesInline(node).replace(/\n{2,}/g, "\n").trim();
+        const parts = [];
+        for (const child of Array.from(node.childNodes)) {
+          if (child.nodeType === 1) {
+            const childTag = child.tagName.toLowerCase();
+            if (childTag === "button" || child.hasAttribute("data-delete-quote")) continue;
+            if (childTag === "p") {
+              const text = serializeNotesInline(child).trim();
+              if (text) parts.push(text);
+              continue;
+            }
+          }
+          const text = serializeNotesInline(child).replace(/\n{2,}/g, "\n").trim();
+          if (text) parts.push(text);
+        }
+        const text = parts.join("\n").replace(/\n{2,}/g, "\n").trim();
         if (text) blocks.push(toMarkdownBlockquote(text));
         return;
       }
@@ -189,18 +231,18 @@
   }
 
   function notesContainsQuote(notes, text) {
-    const needle = normalizeSelection(text);
+    const needle = quoteMatchKey(text);
     if (!needle) return false;
-    return markdownQuoteBodies(notes).some((body) => normalizeSelection(body) === needle);
+    return markdownQuoteBodies(notes).some((body) => quoteMatchKey(body) === needle);
   }
 
   function quoteBlockRange(notes, text) {
-    const needle = normalizeSelection(text);
+    const needle = quoteMatchKey(text);
     if (!needle) return null;
     const re = /:::(?:quote|sidenote)\s*\n?([\s\S]*?)\s*:::/g;
     let match;
     while ((match = re.exec(String(notes || "")))) {
-      if (normalizeSelection(match[1]) !== needle) continue;
+      if (quoteMatchKey(match[1]) !== needle) continue;
       return { start: match.index, end: match.index + match[0].length };
     }
     const source = String(notes || "");
@@ -215,7 +257,7 @@
         if (startIdx < 0) startIdx = idx;
         body.push(line.replace(/^>\s?/, ""));
       } else if (startIdx >= 0) {
-        if (normalizeSelection(body.join("\n")) === needle) {
+        if (quoteMatchKey(body.join("\n")) === needle) {
           return { start: startIdx, end: idx };
         }
         startIdx = -1;
@@ -264,34 +306,47 @@
   }
 
   function quotesForHighlights(notes, records) {
-    const byText = new Map();
+    const byKey = new Map();
     for (const quote of records || []) {
-      const text = normalizeSelection(quote?.text);
-      if (!text) continue;
-      byText.set(text, quote);
+      const key = quoteMatchKey(quote?.text);
+      if (!key) continue;
+      byKey.set(key, quote);
     }
     const bodies = markdownQuoteBodies(notes);
-    if (!bodies.length) {
-      return (records || []).map((quote) => ({
+    const seen = new Set();
+    const out = [];
+    for (const body of bodies) {
+      const key = quoteMatchKey(body);
+      const rec = key ? byKey.get(key) : null;
+      if (key) seen.add(key);
+      out.push({
+        id: rec?.id || "",
+        // Prefer the library quote (page selection). Notes may add bold/italic
+        // or punctuation that is not present on the webpage.
+        text: rec?.text || plainQuoteText(body),
+        note: rec?.note || "",
+      });
+    }
+    // Keep page highlights for saved quotes even if the notes editor temporarily
+    // lost the last blockquote wrapper (common contenteditable edge case).
+    for (const quote of records || []) {
+      const key = quoteMatchKey(quote?.text);
+      if (!key || seen.has(key)) continue;
+      out.push({
         id: quote.id || "",
         text: quote.text,
         note: quote.note || "",
-      }));
+      });
     }
-    return bodies.map((body) => {
-      const text = normalizeSelection(body);
-      const rec = byText.get(text);
-      return {
-        id: rec?.id || "",
-        text: rec?.text || body.trim(),
-        note: rec?.note || "",
-      };
-    });
+    return out;
   }
 
   const ContextNotes = {
     escapeHtml,
     normalizeSelection,
+    stripInlineMarkdown,
+    plainQuoteText,
+    quoteMatchKey,
     toMarkdownBlockquote,
     fencesToMarkdown,
     markdownBlockquotesToFences,

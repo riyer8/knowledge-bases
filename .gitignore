@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Cursor local (commands/rules stay machine-local unless force-added)
+.cursor/
+
 # Xcode user/local state
 DerivedData/
 DesktopApp/build/
@@ -12,12 +15,20 @@ DesktopApp/build/
 # Python cache/env
 __pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
 
-# Launcher runtime files
+# Logs / launcher runtime
+*.log
 .kb_backend.pid
 .kb_backend.log
 

@@ -33,6 +33,7 @@ step "Checking Python dependencies..."
 MISSING=""
 "$PYTHON" -c "import spacy" 2>/dev/null        || MISSING="$MISSING spacy"
 "$PYTHON" -c "import dotenv" 2>/dev/null        || MISSING="$MISSING python-dotenv"
+"$PYTHON" -c "import pypdf" 2>/dev/null         || MISSING="$MISSING pypdf"
 
 if [ -n "$MISSING" ]; then
     warn "Installing missing packages:$MISSING"

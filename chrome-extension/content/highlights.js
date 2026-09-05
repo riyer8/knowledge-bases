@@ -19,6 +19,17 @@ let toolbarTimer = 0;
 let pointerSelecting = false;
 let saveInFlight = false;
 
+/** Fire-and-forget; swallows invalidated-context / missing-receiver errors. */
+function runtimeSend(message) {
+  if (!chrome.runtime?.id) return;
+  try {
+    const result = chrome.runtime.sendMessage(message);
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } catch (_) {
+    /* extension context invalidated */
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "PANEL_OPENED") {
     setPanelOpenFlag(true);
@@ -139,7 +150,7 @@ function updateToolbarForSelection() {
   const text = normalizeSelection(selection?.toString() || "");
   if (!isSaveableSelection(text)) {
     hideToolbar();
-    chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: "" });
+    runtimeSend({ type: "SELECTION_CHANGED", selected: "" });
     return;
   }
 
@@ -153,7 +164,7 @@ function updateToolbarForSelection() {
   }
 
   pendingText = text;
-  chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: text });
+  runtimeSend({ type: "SELECTION_CHANGED", selected: text });
   showToolbar(range.getBoundingClientRect());
 }
 
@@ -310,7 +321,7 @@ async function quickSaveQuote(text, note = "") {
     }
     const message = err?.message || "Save failed";
     showToast(message, true);
-    chrome.runtime.sendMessage({ type: "QUOTE_SAVE_FAILED", error: message }).catch(() => {});
+    runtimeSend({ type: "QUOTE_SAVE_FAILED", error: message });
     console.warn("Context quote save failed:", err);
     return false;
   } finally {
@@ -544,7 +555,7 @@ function ensureNotePopover() {
   `;
   notePopover.addEventListener("mousedown", (event) => event.stopPropagation(), true);
   notePopover.querySelector(".ctx-note-open")?.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ type: "OPEN_NOTES_PANEL" }).catch(() => {});
+    runtimeSend({ type: "OPEN_NOTES_PANEL" });
     hideNotePopover();
   });
   document.documentElement.appendChild(notePopover);
@@ -631,7 +642,7 @@ function trackClientNavigation(onNavigate) {
   const notify = () => {
     if (location.href === lastUrl) return;
     lastUrl = location.href;
-    chrome.runtime.sendMessage({
+    runtimeSend({
       type: "PAGE_NAVIGATED",
       url: location.href,
       title: document.title || "",

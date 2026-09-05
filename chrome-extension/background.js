@@ -3,9 +3,9 @@ const LAUNCHER_URL = "http://127.0.0.1:8798";
 const NATIVE_HOST = "com.context.backend";
 
 try {
-  importScripts("sidepanel/notes.js");
+  importScripts("sidepanel/notes.js", "sidepanel/page-drafts.js");
 } catch {
-  // Notes helpers are optional for quote-save fallbacks.
+  // Notes / draft helpers are optional for quote-save fallbacks.
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -185,6 +185,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             page_url: pageUrl,
           },
         });
+        // Always persist into the local draft first so notes survive panel close.
+        await appendQuoteToStoredNotes(pageUrl, quote, savedMeta);
         chrome.runtime.sendMessage({
           type: "QUOTE_SAVED",
           quote: {
@@ -194,9 +196,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
             page_url: pageUrl,
           },
         }).catch(() => {});
-        if (panelPorts.size === 0) {
-          await appendQuoteToStoredNotes(pageUrl, quote, savedMeta);
-        }
         return quote;
       })();
       quickSaveLocks.set(lockKey, savePromise);
@@ -298,16 +297,21 @@ async function lookupSavedPage(url) {
 
 async function appendQuoteToStoredNotes(pageUrl, quote, savedPage) {
   if (typeof ContextNotes === "undefined" || !ContextNotes.appendQuoteToNotes) return;
-  const key = `pageDraft:${pageUrl}`;
-  const data = await chrome.storage.local.get(key);
-  const draft = data[key] || { title: savedPage?.title || "", metadata: savedPage?.metadata || {} };
-  const metadata = { ...(draft.metadata || savedPage?.metadata || {}) };
+  if (typeof ContextPageDrafts === "undefined" || !ContextPageDrafts.savePageDraft) return;
+  const existing = (await ContextPageDrafts.loadPageDraft(pageUrl)) || {
+    title: savedPage?.title || "",
+    metadata: savedPage?.metadata || {},
+  };
+  const metadata = { ...(existing.metadata || savedPage?.metadata || {}) };
   const nextNotes = ContextNotes.appendQuoteToNotes(metadata.notes || "", quote);
   if (nextNotes === (metadata.notes || "")) return;
   metadata.notes = nextNotes;
-  draft.metadata = metadata;
-  if (savedPage?.title && !draft.title) draft.title = savedPage.title;
-  await chrome.storage.local.set({ [key]: draft });
+  const draft = {
+    title: existing.title || savedPage?.title || "",
+    metadata,
+  };
+  await ContextPageDrafts.savePageDraft(pageUrl, draft);
+  // Only mirror into the library after the page has been explicitly saved.
   if (!savedPage?.id) return;
   try {
     await fetch(`${BACKEND}/library/pages/${encodeURIComponent(savedPage.id)}`, {
@@ -316,7 +320,7 @@ async function appendQuoteToStoredNotes(pageUrl, quote, savedPage) {
       body: JSON.stringify({ metadata }),
     });
   } catch {
-    // Draft still holds the quote until the page is saved.
+    // Draft still holds the quote until the next successful promote/save.
   }
 }
 

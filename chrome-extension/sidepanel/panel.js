@@ -83,7 +83,6 @@ const els = {
   copyExportJsonBtn: document.getElementById("copy-export-json"),
   copyNotesJsonBtn: document.getElementById("copy-notes-json"),
   exportJsonPreview: document.getElementById("export-json-preview"),
-  exportNotesPreview: document.getElementById("export-notes-preview"),
   header: document.querySelector(".header"),
   settingsBackendStatus: document.getElementById("settings-backend-status"),
   settingsProviderSummary: document.getElementById("settings-provider-summary"),
@@ -204,6 +203,12 @@ if (document.readyState === "loading") {
 let panelUnloading = false;
 window.addEventListener("pagehide", () => {
   panelUnloading = true;
+  flushPageDraftNow();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    flushPageDraftNow();
+  }
 });
 
 function connectSidePanelPort() {
@@ -411,6 +416,8 @@ function bindEvents() {
     refreshExportJsonPreview();
   });
   els.metaNotes?.addEventListener("input", () => {
+    stabilizeNotesQuotes();
+    repairBrokenNoteQuotes();
     decorateNoteQuoteControls();
     updateNotesEmptyState();
     pruneQuotesRemovedFromNotes();
@@ -527,12 +534,14 @@ function normalizeSelection(text) {
 }
 
 function pageUrlsMatch(left, right) {
+  if (typeof ContextPageDrafts !== "undefined" && ContextPageDrafts.pageUrlsMatch) {
+    return ContextPageDrafts.pageUrlsMatch(left, right);
+  }
   const canon = (url) =>
     String(url || "")
       .trim()
       .replace(/#.*$/, "")
-      .replace(/\/+$/, "")
-      .toLowerCase();
+      .replace(/\/+$/, "");
   const a = canon(left);
   const b = canon(right);
   return Boolean(a && b && a === b);
@@ -589,6 +598,7 @@ async function handleExternalQuoteSaved(quoteFromMessage) {
     }
     addQuoteToNotes(quote);
     rememberNoteQuoteBodies();
+    await flushPageDraft(state.page?.url);
     await syncHighlightsToPage();
     switchPageTab("notes");
     els.metaNotes?.focus();
@@ -646,6 +656,7 @@ function insertQuoteHtmlAtCaret(quote) {
   const paragraph = ensureNotesWritableParagraph();
   placeNotesCaret(paragraph, true);
   if (els.metaNotes) els.metaNotes.scrollTop = els.metaNotes.scrollHeight;
+  stabilizeNotesQuotes();
   decorateNoteQuoteControls();
   updateNotesEmptyState();
   refreshExportJsonPreview();
@@ -701,9 +712,17 @@ function normalizeMetadata(raw) {
   return meta;
 }
 
-function mergeMetadata(preferred, fallback) {
+function mergeMetadata(preferred, fallback, options = {}) {
   const base = normalizeMetadata(fallback);
   const chosen = normalizeMetadata(preferred);
+  const preferredAt = Number(options.preferredUpdatedAt || 0);
+  const fallbackAt = Number(options.fallbackUpdatedAt || 0);
+  // Newer draft wins for notes even when empty (intentional clear).
+  let notes = chosen.notes || base.notes;
+  if (preferred && Object.prototype.hasOwnProperty.call(preferred, "notes")) {
+    if (preferredAt >= fallbackAt) notes = chosen.notes;
+    else notes = base.notes || chosen.notes;
+  }
   return {
     author: chosen.author || base.author,
     date: chosen.date || base.date,
@@ -711,7 +730,7 @@ function mergeMetadata(preferred, fallback) {
     medium: chosen.medium || base.medium,
     tldr: chosen.tldr || base.tldr,
     thoughts: chosen.thoughts || base.thoughts,
-    notes: chosen.notes || base.notes,
+    notes,
     dateAdded: chosen.dateAdded || base.dateAdded,
     tags: chosen.tags.length ? chosen.tags : base.tags,
     custom: chosen.custom.length ? chosen.custom : base.custom,
@@ -845,7 +864,7 @@ function getNotesMarkdown() {
 function setNotesMarkdown(value) {
   if (!els.metaNotes) return;
   els.metaNotes.innerHTML = ContextNotes.markdownToHtml(value);
-  ensureNotesWritableParagraph();
+  stabilizeNotesQuotes();
   decorateNoteQuoteControls();
   rememberNoteQuoteBodies();
   updateNotesEmptyState();
@@ -882,7 +901,7 @@ function removeNoteQuoteBlock(quoteEl) {
   if (!quoteEl || !els.metaNotes?.contains(quoteEl)) return;
   const text = quoteTextFromBlockquote(quoteEl);
   const match = (state.quotes || []).find(
-    (quote) => ContextNotes.normalizeSelection(quote.text) === text
+    (quote) => ContextNotes.quoteMatchKey(quote.text) === ContextNotes.quoteMatchKey(text)
   );
   const next = ContextNotes.removeQuoteFromNotes(
     getNotesMarkdown(),
@@ -899,10 +918,10 @@ function clearAllNotes() {
   if (!els.metaNotes || notesDocumentIsEmpty()) return;
   if (!window.confirm("Clear all notes for this page?")) return;
   const bodies = ContextNotes.markdownQuoteBodies(getNotesMarkdown()).map((body) =>
-    ContextNotes.normalizeSelection(body)
+    ContextNotes.quoteMatchKey(body)
   );
   const toDelete = (state.quotes || []).filter((quote) =>
-    bodies.includes(ContextNotes.normalizeSelection(quote.text))
+    bodies.includes(ContextNotes.quoteMatchKey(quote.text))
   );
   setNotesMarkdown("");
   for (const quote of toDelete) {
@@ -929,22 +948,92 @@ function rememberNoteQuoteBodies() {
 }
 
 function pruneQuotesRemovedFromNotes() {
-  const current = new Set(
-    ContextNotes.markdownQuoteBodies(getNotesMarkdown()).map((body) =>
-      ContextNotes.normalizeSelection(body)
-    )
+  const currentBodies = ContextNotes.markdownQuoteBodies(getNotesMarkdown());
+  const currentKeys = new Set(
+    currentBodies.map((body) => ContextNotes.quoteMatchKey(body)).filter(Boolean)
   );
-  const removed = state.lastNoteQuoteBodies.filter((body) => body && !current.has(body));
-  state.lastNoteQuoteBodies = Array.from(current);
+  // Treat bold/italic/punctuation-only edits as the same quote, not a deletion.
+  const removed = state.lastNoteQuoteBodies.filter((body) => {
+    const key = ContextNotes.quoteMatchKey(body);
+    return key && !currentKeys.has(key);
+  });
+  state.lastNoteQuoteBodies = currentBodies.map((body) =>
+    ContextNotes.normalizeSelection(body)
+  );
   for (const text of removed) {
+    // If the quote text is still visible in the editor (e.g. last blockquote
+    // temporarily unwrapped), keep the library quote and page highlight.
+    if (notesEditorStillHasQuote(text)) continue;
     const quote = (state.quotes || []).find(
-      (item) => ContextNotes.normalizeSelection(item.text) === text
+      (item) => ContextNotes.quoteMatchKey(item.text) === ContextNotes.quoteMatchKey(text)
     );
+    if (!quote) continue;
+    // Drop locally first so a concurrent repaint cannot revive a deleted highlight.
+    state.quotes = state.quotes.filter((item) => item !== quote);
     if (quote?.id && !String(quote.id).startsWith("local-")) {
-      void deleteQuoteRecord(quote, { silent: true });
-    } else if (quote) {
-      state.quotes = state.quotes.filter((item) => item !== quote);
+      void deleteQuoteRecord(quote, { silent: true, skipStateFilter: true });
     }
+  }
+}
+
+function notesEditorStillHasQuote(text) {
+  const key = ContextNotes.quoteMatchKey(text);
+  if (!key || !els.metaNotes) return false;
+  for (const quoteEl of els.metaNotes.querySelectorAll("blockquote")) {
+    if (ContextNotes.quoteMatchKey(quoteTextFromBlockquote(quoteEl)) === key) return true;
+  }
+  for (const paragraph of els.metaNotes.querySelectorAll(":scope > p")) {
+    if (ContextNotes.quoteMatchKey(paragraph.innerText || "") === key) return true;
+  }
+  return false;
+}
+
+function quoteContentParagraphs(quoteEl) {
+  if (!quoteEl) return [];
+  return Array.from(quoteEl.children).filter((el) => {
+    if (el.tagName.toLowerCase() !== "p") return false;
+    if (el.hasAttribute("data-delete-quote")) return false;
+    return true;
+  });
+}
+
+function stabilizeNotesQuotes() {
+  if (!els.metaNotes) return;
+  els.metaNotes.querySelectorAll("blockquote").forEach((quoteEl) => {
+    // Contenteditable often leaves blank trailing paragraphs inside the last quote.
+    let guard = 0;
+    while (guard < 8) {
+      guard += 1;
+      const paragraphs = quoteContentParagraphs(quoteEl);
+      const last = paragraphs[paragraphs.length - 1];
+      if (!last || !isBlankParagraph(last)) break;
+      quoteEl.after(last);
+    }
+    const btn = quoteEl.querySelector("[data-delete-quote]");
+    if (btn) quoteEl.appendChild(btn);
+  });
+  ensureNotesWritableParagraph();
+}
+
+function repairBrokenNoteQuotes() {
+  if (!els.metaNotes) return;
+  const wrappedKeys = new Set(
+    Array.from(els.metaNotes.querySelectorAll("blockquote")).map((quoteEl) =>
+      ContextNotes.quoteMatchKey(quoteTextFromBlockquote(quoteEl))
+    ).filter(Boolean)
+  );
+  for (const quote of state.quotes || []) {
+    const key = ContextNotes.quoteMatchKey(quote?.text);
+    if (!key || wrappedKeys.has(key)) continue;
+    const match = Array.from(els.metaNotes.querySelectorAll(":scope > p")).find(
+      (paragraph) => ContextNotes.quoteMatchKey(paragraph.innerText || "") === key
+    );
+    if (!match) continue;
+    const blockquote = document.createElement("blockquote");
+    blockquote.className = "custom-quote";
+    match.replaceWith(blockquote);
+    blockquote.appendChild(match);
+    wrappedKeys.add(key);
   }
 }
 
@@ -962,7 +1051,7 @@ function handleNotesQuoteClick(event) {
   const text = quoteTextFromBlockquote(quoteEl);
   if (!text) return;
   const match = (state.quotes || []).find(
-    (quote) => ContextNotes.normalizeSelection(quote.text) === text
+    (quote) => ContextNotes.quoteMatchKey(quote.text) === ContextNotes.quoteMatchKey(text)
   );
   void revealQuoteOnPage(match || { text });
 }
@@ -1040,6 +1129,15 @@ function isNotesCaretAtEnd(node) {
   return !tail.toString().replace(/\u00a0/g, " ").trim();
 }
 
+function isNotesCaretAtEndOfQuote(quote) {
+  if (!quote) return false;
+  const block = notesCaretBlock();
+  if (!block || !quote.contains(block) || block.tagName.toLowerCase() !== "p") return false;
+  if (!isNotesCaretAtEnd(block)) return false;
+  const paragraphs = quoteContentParagraphs(quote);
+  return paragraphs.length > 0 && paragraphs[paragraphs.length - 1] === block;
+}
+
 function exitNotesQuote() {
   const quote = notesCaretQuote();
   if (!quote) return false;
@@ -1051,6 +1149,7 @@ function exitNotesQuote() {
   paragraph.appendChild(document.createElement("br"));
   quote.after(paragraph);
   placeNotesCaret(paragraph, true);
+  stabilizeNotesQuotes();
   updateNotesEmptyState();
   schedulePageDraftSave();
   return true;
@@ -1059,15 +1158,20 @@ function exitNotesQuote() {
 function applyNotesFormat(command) {
   els.metaNotes?.focus();
   document.execCommand(command, false, null);
+  stabilizeNotesQuotes();
+  repairBrokenNoteQuotes();
+  decorateNoteQuoteControls();
   updateNotesEmptyState();
+  rememberNoteQuoteBodies();
   schedulePageDraftSave();
   refreshExportJsonPreview();
+  void syncHighlightsToPage();
 }
 
 function handleNotesKeydown(event) {
   if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
     const quote = notesCaretQuote();
-    if (quote && (isBlankParagraph(notesCaretBlock()) || isNotesCaretAtEnd(quote))) {
+    if (quote && (isBlankParagraph(notesCaretBlock()) || isNotesCaretAtEndOfQuote(quote))) {
       event.preventDefault();
       exitNotesQuote();
       return;
@@ -1110,11 +1214,6 @@ function refreshExportJsonPreview() {
   const entry = buildBookshelfEntry();
   if (els.exportJsonPreview) {
     els.exportJsonPreview.textContent = ContextBookshelf.format(entry);
-  }
-  if (els.exportNotesPreview) {
-    els.exportNotesPreview.innerHTML = entry.notes
-      ? ContextNotes.markdownToHtml(entry.notes)
-      : '<p class="muted">Notes will appear here as you write them.</p>';
   }
 }
 
@@ -1195,16 +1294,52 @@ function escapeAttr(text) {
 }
 
 let pageDraftTimer = null;
+
 function schedulePageDraftSave() {
   clearTimeout(pageDraftTimer);
   pageDraftTimer = setTimeout(() => {
-    persistPageDraft();
+    void persistPageDraft();
     if (state.savedPageId) void savePageDetails({ quiet: true });
-  }, 400);
+  }, 150);
+}
+
+/** Fire-and-forget flush for pagehide/visibility (must not await). */
+function flushPageDraftNow(url = state.page?.url) {
+  clearTimeout(pageDraftTimer);
+  pageDraftTimer = null;
+  if (!url || !state.page?.url) return;
+  if (!pageUrlsMatch(url, state.page.url)) return;
+  const key =
+    typeof ContextPageDrafts !== "undefined"
+      ? ContextPageDrafts.pageDraftKey(url)
+      : `pageDraft:${url}`;
+  if (!key) return;
+  const draft = {
+    title: getDisplayTitle(),
+    metadata: collectMetadataFromForm(),
+    updatedAt: Date.now(),
+  };
+  try {
+    chrome.storage.local.set({ [key]: draft });
+  } catch {
+    // Best-effort on unload.
+  }
+}
+
+async function flushPageDraft(url = state.page?.url) {
+  clearTimeout(pageDraftTimer);
+  pageDraftTimer = null;
+  if (!url) return;
+  if (state.page?.url && pageUrlsMatch(url, state.page.url)) {
+    await persistPageDraft(url);
+  }
 }
 
 async function loadPageDraft(url) {
   if (!url) return null;
+  if (typeof ContextPageDrafts !== "undefined") {
+    return ContextPageDrafts.loadPageDraft(url);
+  }
   return new Promise((resolve) => {
     chrome.storage.local.get(`pageDraft:${url}`, (data) => {
       resolve(data[`pageDraft:${url}`] || null);
@@ -1212,21 +1347,31 @@ async function loadPageDraft(url) {
   });
 }
 
-async function persistPageDraft() {
-  if (!state.page?.url) return;
+async function persistPageDraft(url = state.page?.url) {
+  if (!url) return;
   const draft = {
     title: getDisplayTitle(),
     metadata: collectMetadataFromForm(),
   };
-  await chrome.storage.local.set({ [`pageDraft:${state.page.url}`]: draft });
+  if (typeof ContextPageDrafts !== "undefined") {
+    await ContextPageDrafts.savePageDraft(url, draft);
+    return;
+  }
+  await chrome.storage.local.set({
+    [`pageDraft:${url}`]: { ...draft, updatedAt: Date.now() },
+  });
 }
 
 async function clearLocalPageDrafts() {
   clearTimeout(pageDraftTimer);
   pageDraftTimer = null;
   const local = await chrome.storage.local.get(null);
+  const prefix =
+    typeof ContextPageDrafts !== "undefined"
+      ? ContextPageDrafts.DRAFT_PREFIX
+      : "pageDraft:";
   const localKeys = Object.keys(local).filter(
-    (key) => key.startsWith("pageDraft:") || key.startsWith("customTitle:")
+    (key) => key.startsWith(prefix) || key.startsWith("customTitle:")
   );
   if (localKeys.length) await chrome.storage.local.remove(localKeys);
 
@@ -1416,6 +1561,10 @@ async function refreshPage() {
 
 async function refreshPageContext() {
   const previousUrl = state.page?.url || "";
+  // Persist the current editor before swapping pages — do not rely on debounce.
+  if (previousUrl) {
+    await flushPageDraft(previousUrl);
+  }
   setStatus("Reading page…");
   const page = await getActivePageContext();
   if (!page) {
@@ -1423,7 +1572,7 @@ async function refreshPageContext() {
     return;
   }
 
-  const isNewPage = Boolean(previousUrl && page.url !== previousUrl);
+  const isNewPage = Boolean(previousUrl && !pageUrlsMatch(previousUrl, page.url));
   state.page = page;
   if (isNewPage) {
     state.history = [];
@@ -1451,7 +1600,12 @@ async function refreshPageContext() {
   }
 
   els.title.value = draft?.title || suggestedTitle;
-  applyMetadataToForm(mergeMetadata(draft?.metadata, suggestedMetadata));
+  applyMetadataToForm(
+    mergeMetadata(draft?.metadata, suggestedMetadata, {
+      preferredUpdatedAt: Number(draft?.updatedAt || 0),
+      fallbackUpdatedAt: 0,
+    })
+  );
   resizeTitleField();
   state.page.title = getDisplayTitle();
   state.page.metadata = collectMetadataFromForm();
@@ -1467,6 +1621,7 @@ async function syncPageLibraryState() {
   const suggestedTitle = state.page.title || "Untitled page";
   const suggestedMetadata = normalizeMetadata(state.page.metadata);
   const draft = await loadPageDraft(previousUrl);
+  const draftUpdatedAt = Number(draft?.updatedAt || 0);
 
   try {
     const res = await fetch(`${BACKEND}/library/by-url?url=${encodeURIComponent(previousUrl)}`);
@@ -1476,9 +1631,27 @@ async function syncPageLibraryState() {
       state.history = data.page.chat_history || [];
       renderChatHistory(state.history);
       markPageSaved(true);
-      els.title.value = data.page.title || draft?.title || suggestedTitle;
+      els.title.value = draft?.title || data.page.title || suggestedTitle;
+      const libraryUpdatedAt =
+        Date.parse(String(data.page.updated_at || data.page.saved_at || "")) || 0;
+      // Local draft is the working store; prefer it when newer or when library has no stamp.
+      const preferredIsDraft = !libraryUpdatedAt || draftUpdatedAt >= libraryUpdatedAt;
       applyMetadataToForm(
-        mergeMetadata(draft?.metadata || data.page.metadata, suggestedMetadata)
+        mergeMetadata(
+          preferredIsDraft ? draft?.metadata : data.page.metadata,
+          preferredIsDraft ? data.page.metadata : draft?.metadata,
+          {
+            preferredUpdatedAt: preferredIsDraft ? draftUpdatedAt : libraryUpdatedAt,
+            fallbackUpdatedAt: preferredIsDraft ? libraryUpdatedAt : draftUpdatedAt,
+          }
+        )
+      );
+      // Fill any empty detail fields from suggestions last.
+      applyMetadataToForm(
+        mergeMetadata(collectMetadataFromForm(), suggestedMetadata, {
+          preferredUpdatedAt: Date.now(),
+          fallbackUpdatedAt: 0,
+        })
       );
     } else {
       state.savedPageId = null;
@@ -1520,7 +1693,7 @@ async function loadPageQuotes() {
   }
 }
 
-async function deleteQuoteRecord(quote, { silent = false } = {}) {
+async function deleteQuoteRecord(quote, { silent = false, skipStateFilter = false } = {}) {
   const id = String(quote?.id || "").trim();
   if (id && !id.startsWith("local-")) {
     try {
@@ -1533,7 +1706,9 @@ async function deleteQuoteRecord(quote, { silent = false } = {}) {
       if (!silent) setStatus(err.message, true);
     }
   }
-  state.quotes = (state.quotes || []).filter((item) => String(item.id || "").trim() !== id);
+  if (!skipStateFilter) {
+    state.quotes = (state.quotes || []).filter((item) => String(item.id || "").trim() !== id);
+  }
   void syncHighlightsToPage();
 }
 
@@ -1628,6 +1803,8 @@ async function saveCurrentPage() {
   if (els.savePageBtn) els.savePageBtn.disabled = true;
   setStatus("Saving page…");
   try {
+    // Flush local notes first so Save promotes the latest draft into the library.
+    await flushPageDraft(state.page.url);
     state.page.title = getDisplayTitle();
     state.page.metadata = collectMetadataFromForm();
     if (!state.page.metadata.dateAdded) {
@@ -1643,6 +1820,7 @@ async function saveCurrentPage() {
     if (!res.ok) throw new Error(data.error || "Save failed");
     state.savedPageId = data.page.id;
     markPageSaved(true);
+    await persistPageDraft(state.page.url);
     setStatus("Page saved");
     void loadPageQuotes();
   } catch (err) {

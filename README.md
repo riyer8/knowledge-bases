@@ -30,4 +30,4 @@ Read [docs/constitution.md](docs/constitution.md) and follow [init.md](init.md) 
 
 Inspired by [Andrej Karpathy's post](https://x.com/karpathy/status/2039805659525644595?lang=en).
 
-Created by [Rebecca Joseph](https://github.com/rrebeccajoseph) & [Ramya Iyer](https://github.com/riyer8).
+Created by [Rebecca Joseph](https://github.com/rrebeccajjoseph) & [Ramya Iyer](https://github.com/riyer8).

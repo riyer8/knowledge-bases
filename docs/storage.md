@@ -45,6 +45,7 @@ tree is committed to git.
 | `events/clean/` | Append-only | `core/privacy/` |
 | `events/paused.log` | Append-only, no PII | `core/privacy/` |
 | `library/` | Mutable | `core/library_service.py` |
+| Extension `pageDraft:*` | Local-only notes until + Save | `chrome-extension/sidepanel/page-drafts.js` |
 | `wiki/` | Mutable | `core/wiki_service.py` |
 | `pages/` | Mutable | `core/page_context_service.py` |
 | `index/` | Mutable | `core/memory/` |

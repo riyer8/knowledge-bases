@@ -276,6 +276,11 @@ def save_page(
     index = _load_saved_index()
 
     existing = next((e for e in index if e.get("url") == url and url), None)
+    if existing is None and url:
+        existing = next(
+            (e for e in index if _urls_match(str(e.get("url", "")), url)),
+            None,
+        )
     page_id = existing["id"] if existing else str(uuid.uuid4())
     saved_at = _now_iso()
     prior_meta: dict[str, Any] = {}

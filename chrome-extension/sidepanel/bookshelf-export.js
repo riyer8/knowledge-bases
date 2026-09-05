@@ -60,7 +60,8 @@
   }
 
   function format(entry) {
-    const value = entry && entry.notes !== undefined ? entry : buildEntry(entry || {});
+    // Normalize through buildEntry so notes always use :::quote fences.
+    const value = buildEntry(entry && typeof entry === "object" ? entry : {});
     return `{
     title: ${JSON.stringify(value.title || "")},
     url: ${JSON.stringify(value.url || "")},

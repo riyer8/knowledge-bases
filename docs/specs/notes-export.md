@@ -1,10 +1,21 @@
 # Notes and bookshelf export
 
-The **Notes editor** is the source of truth for what you copy onto a personal site. Library `quotes.json` is only for on-page highlight IDs.
+The **Notes editor** is the working UI. **Local drafts** (`chrome.storage.local`, canonical `pageDraft:<url>`) are the persistent store until you click **+ Save**. Library `quotes.json` is only for on-page highlight IDs. Library `pages/{id}.json` → `metadata.notes` is what Saved / graph / wiki / dashboard read after Save.
 
-## Storage
+## Persistence (local-first)
 
-Page `metadata.notes` is markdown. Quote blocks are `>` blockquotes (or `:::quote` fences, which round-trip to the same document).
+| Action | Where notes live |
+|---|---|
+| Typing / highlighting | Side panel editor + flushed local draft |
+| Panel close / tab switch | Local draft (flush on leave; not debounce-only) |
+| Extension reload | Local draft restored by canonical URL |
+| **+ Save** | Draft promoted into library `metadata.notes` (graph / wiki / dashboard) |
+
+Draft keys use the same URL canonicalization as the library (strip hash, normalize trailing slash). Legacy exact-URL draft keys are migrated on read.
+
+## Storage (document shape)
+
+Page notes are markdown. Quote blocks are `>` blockquotes (or `:::quote` fences, which round-trip to the same document).
 
 ```markdown
 > A passage from the article
@@ -41,4 +52,4 @@ your commentary`
 
 `notes` is `markdownBlockquotesToFences(editorMarkdown)`. Field names and `:::quote` fences are the contract.
 
-Helpers live in `chrome-extension/sidepanel/notes.js` and `bookshelf-export.js` (copied to `web/` for the dashboard).
+Helpers live in `chrome-extension/sidepanel/notes.js`, `page-drafts.js`, and `bookshelf-export.js` (notes/export helpers are also under `web/` for the dashboard).
