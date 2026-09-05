@@ -58,6 +58,24 @@ def test_update_page_metadata(library_env, monkeypatch):
     assert updated["metadata"]["medium"] == "research paper"
     assert ":::quote" in updated["metadata"]["notes"]
     assert updated["metadata"]["custom"][0]["key"] == "Journal"
+    assert updated["metadata"]["dateAdded"]
+
+
+def test_date_added_set_once(library_env, monkeypatch):
+    monkeypatch.setattr(library_env, "_generate_summary", lambda page: "Summary")
+    monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    page = library_env.save_page({
+        "url": "https://example.com/dated",
+        "title": "Dated",
+        "visible_text": "Body",
+        "metadata": {"dateAdded": "2026-01-02", "notes": "> Hello"},
+    })
+    assert page["metadata"]["dateAdded"] == "2026-01-02"
+    updated = library_env.update_page(page["id"], metadata={"notes": "> Hello\n\nMore"})
+    assert updated["metadata"]["dateAdded"] == "2026-01-02"
+    loaded = library_env.get_saved_page(page["id"])
+    assert loaded["metadata"]["dateAdded"] == "2026-01-02"
 
 
 def test_update_and_delete_quote(library_env, monkeypatch):

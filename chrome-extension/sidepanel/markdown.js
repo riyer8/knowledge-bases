@@ -24,10 +24,17 @@
     return html;
   }
 
+  /** Split mid-paragraph "1. **Title** … 2. **Title**" into real list lines. */
+  function normalizeLooseLists(text) {
+    return String(text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\s+(\d{1,2})\.\s+(?=\*\*|\[|"|“|‘)/g, "\n$1. ");
+  }
+
   function renderMarkdown(text) {
     if (!text) return "";
     const codeBlocks = [];
-    let src = String(text).replace(/\r\n/g, "\n");
+    let src = normalizeLooseLists(text);
 
     src = src.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
       const idx = codeBlocks.length;
@@ -41,6 +48,7 @@
     const blocks = [];
     let paragraph = [];
     let listItems = [];
+    let listType = null;
     let inBlockquote = false;
     let quoteLines = [];
 
@@ -52,8 +60,10 @@
 
     function flushList() {
       if (!listItems.length) return;
-      blocks.push(`<ul>${listItems.map((li) => `<li>${inlineMarkdown(li)}</li>`).join("")}</ul>`);
+      const tag = listType === "ol" ? "ol" : "ul";
+      blocks.push(`<${tag}>${listItems.map((li) => `<li>${inlineMarkdown(li)}</li>`).join("")}</${tag}>`);
       listItems = [];
+      listType = null;
     }
 
     function flushBlockquote() {
@@ -61,6 +71,14 @@
       blocks.push(`<blockquote>${inlineMarkdown(quoteLines.join("<br>"))}</blockquote>`);
       quoteLines = [];
       inBlockquote = false;
+    }
+
+    function pushListItem(type, body) {
+      flushParagraph();
+      flushBlockquote();
+      if (listType && listType !== type) flushList();
+      listType = type;
+      listItems.push(body);
     }
 
     for (const rawLine of lines) {
@@ -104,11 +122,15 @@
         flushBlockquote();
       }
 
-      const listMatch = trimmed.match(/^[-*]\s+(.+)$/);
-      if (listMatch) {
-        flushParagraph();
-        flushBlockquote();
-        listItems.push(listMatch[1]);
+      const unordered = trimmed.match(/^[-*]\s+(.+)$/);
+      if (unordered) {
+        pushListItem("ul", unordered[1]);
+        continue;
+      }
+
+      const ordered = trimmed.match(/^\d{1,3}\.\s+(.+)$/);
+      if (ordered) {
+        pushListItem("ol", ordered[1]);
         continue;
       }
 

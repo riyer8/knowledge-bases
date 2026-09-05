@@ -2,7 +2,7 @@ const API = window.location.origin;
 
 const VIEW_META = {
   home: { title: "Overview", subtitle: "Everything in your knowledge base at a glance." },
-  library: { title: "Library", subtitle: "Saved pages with summaries, quotes, and chat history." },
+  library: { title: "Library", subtitle: "Saved pages with notes, summaries, and chat history." },
   graph: { title: "Graph", subtitle: "How your saved pages connect through shared topics." },
   life: { title: "Life", subtitle: "Saved reading, grouped by category." },
   wiki: { title: "Wiki", subtitle: "LLM-compiled articles from your reading." },
@@ -170,6 +170,28 @@ async function loadLibrary() {
   }
 }
 
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      return document.execCommand("copy");
+    } catch {
+      return false;
+    } finally {
+      textarea.remove();
+    }
+  }
+}
+
 async function openPage(pageId) {
   state.selectedPageId = pageId;
   document.querySelectorAll(".lib-card").forEach((el) => {
@@ -180,8 +202,15 @@ async function openPage(pageId) {
   try {
     const data = await apiGet(`/library/pages/${encodeURIComponent(pageId)}`);
     const page = data.page;
-    const quotes = page.quotes || [];
+    const meta = page.metadata || {};
+    const notes = String(meta.notes || "").trim();
     const chat = page.chat_history || [];
+    const tags = Array.isArray(meta.tags) ? meta.tags.filter(Boolean) : [];
+    const entry = ContextBookshelf.buildEntry({
+      title: page.title,
+      url: page.url,
+      ...meta,
+    });
 
     detail.innerHTML = `
       <div class="detail-head">
@@ -189,15 +218,20 @@ async function openPage(pageId) {
           <h3>${escapeHtml(page.title || "Untitled")}</h3>
           <p class="muted"><a href="${escapeHtml(page.url)}" target="_blank" rel="noopener">${escapeHtml(page.url || "")}</a></p>
         </div>
-        <button type="button" class="btn ghost danger-outline" id="library-delete-btn">Delete page</button>
+        <div class="detail-actions">
+          <button type="button" class="btn ghost" id="library-copy-json">Copy JSON</button>
+          <button type="button" class="btn ghost danger-outline" id="library-delete-btn">Delete page</button>
+        </div>
+      </div>
+      ${meta.tldr ? `<p class="lib-tldr">${escapeHtml(meta.tldr)}</p>` : ""}
+      ${tags.length ? `<p class="lib-tags">${tags.map((tag) => `<span class="lib-pill">${escapeHtml(tag)}</span>`).join("")}</p>` : ""}
+      <div class="detail-block">
+        <h4>Notes</h4>
+        <div class="notes-document markdown-body">${notes ? ContextNotes.markdownToHtml(notes) : "<p class='muted'>No notes saved for this page.</p>"}</div>
       </div>
       <div class="detail-block">
         <h4>Summary</h4>
         <div class="markdown-body">${renderMarkdown(page.summary || "_No summary._")}</div>
-      </div>
-      <div class="detail-block">
-        <h4>Quotes (${quotes.length})</h4>
-        <div id="detail-quotes"></div>
       </div>
       <div class="detail-block">
         <h4>Chat (${chat.length} messages)</h4>
@@ -206,21 +240,10 @@ async function openPage(pageId) {
     `;
 
     $("library-delete-btn")?.addEventListener("click", () => deleteLibraryPage(pageId));
-
-    const quotesEl = $("detail-quotes");
-    if (!quotes.length) {
-      quotesEl.innerHTML = "<p class='muted'>No quotes saved for this page.</p>";
-    } else {
-      for (const q of quotes) {
-        const card = document.createElement("div");
-        card.className = "quote-card";
-        card.innerHTML = `
-          <blockquote>${escapeHtml(q.text)}</blockquote>
-          ${q.note ? `<p class="muted">${escapeHtml(q.note)}</p>` : ""}
-        `;
-        quotesEl.appendChild(card);
-      }
-    }
+    $("library-copy-json")?.addEventListener("click", async () => {
+      const copied = await copyText(ContextBookshelf.format(entry));
+      toast(copied ? "JSON copied" : "Could not copy JSON");
+    });
 
     const chatEl = $("detail-chat");
     if (!chat.length) {
@@ -255,7 +278,7 @@ async function deleteLibraryPage(pageId) {
     if (state.selectedPageId === pageId) {
       state.selectedPageId = null;
       $("library-detail").innerHTML =
-        '<p class="empty-state">Select a saved page to read its summary, quotes, and chat history.</p>';
+        '<p class="empty-state">Select a saved page to read its notes, summary, and chat history.</p>';
     }
     toast("Page deleted");
     await loadLibrary();

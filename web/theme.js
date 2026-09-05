@@ -57,4 +57,7 @@
     syncThemeSelect,
     resolvedTheme,
   };
+
+  // Apply immediately on load (no inline script — CSP forbids it).
+  initTheme();
 })(window);

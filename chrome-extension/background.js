@@ -2,6 +2,12 @@ const BACKEND = "http://127.0.0.1:8765";
 const LAUNCHER_URL = "http://127.0.0.1:8798";
 const NATIVE_HOST = "com.context.backend";
 
+try {
+  importScripts("sidepanel/notes.js");
+} catch {
+  // Notes helpers are optional for quote-save fallbacks.
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   ensureBackend().catch(() => {});
@@ -11,11 +17,28 @@ chrome.runtime.onStartup.addListener(() => {
   ensureBackend().catch(() => {});
 });
 
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === "highlight-selection") {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url || tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) {
+      return;
+    }
+    await ensureBackend().catch(() => {});
+    await chrome.tabs.sendMessage(tab.id, { type: "HIGHLIGHT_SELECTION" }).catch(() => {});
+    return;
+  }
+  if (command === "open-notes") {
+    await openNotesPanel();
+  }
+});
+
 const panelPorts = new Set();
+const quickSaveLocks = new Map();
 
 if (chrome.sidePanel?.onOpened) {
   chrome.sidePanel.onOpened.addListener(() => {
     ensureBackend().catch(() => {});
+    void setPanelOpen(true);
   });
 }
 
@@ -65,8 +88,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === "GET_PANEL_STATE") {
-    sendResponse({ open: panelPorts.size > 0 });
-    return false;
+    chrome.storage.session.get("panelOpen", (data) => {
+      sendResponse({ open: panelPorts.size > 0 || Boolean(data?.panelOpen) });
+    });
+    return true;
   }
 
   if (message?.type === "GET_PAGE_CONTEXT") {
@@ -100,7 +125,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const res = await fetch(`${BACKEND}/library/quotes?${params}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load quotes");
-        sendResponse({ ok: true, quotes: data.quotes || [] });
+        const records = data.quotes || [];
+        const savedPage = savedMeta?.id ? savedMeta : await lookupSavedPage(pageUrl);
+        const notes = String(savedPage?.metadata?.notes || "");
+        const quotes = (typeof ContextNotes !== "undefined" && ContextNotes.quotesForHighlights)
+          ? ContextNotes.quotesForHighlights(notes, records)
+          : records;
+        sendResponse({ ok: true, quotes });
       } catch (err) {
         sendResponse({ ok: false, error: String(err) });
       }
@@ -110,8 +141,21 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "QUICK_SAVE_QUOTE") {
     (async () => {
-      try {
-        const pageUrl = String(message.page_url || "").trim();
+      const pageUrl = String(message.page_url || "").trim();
+      const text = String(message.text || "").trim();
+      const lockKey = `${pageUrl}::${text}`;
+      if (quickSaveLocks.get(lockKey)) {
+        try {
+          const quote = await quickSaveLocks.get(lockKey);
+          sendResponse({ ok: true, quote });
+        } catch (err) {
+          sendResponse({ ok: false, error: String(err?.message || err) });
+        }
+        return;
+      }
+      const savePromise = (async () => {
+        await ensureBackend({ maxWaitMs: 12000 });
+        if (!text) throw new Error("Nothing selected to highlight");
         const customTitle = await getCustomTitle(pageUrl);
         const savedMeta = await lookupSavedPage(pageUrl);
         const pageTitle = customTitle || savedMeta?.title || String(message.page_title || "").trim();
@@ -119,31 +163,50 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            text: String(message.text || "").trim(),
+            text,
             note: String(message.note || "").trim(),
             page_id: savedMeta?.id || "",
             page_url: pageUrl,
             page_title: pageTitle,
           }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || "Save quote failed");
         const quote = data.quote || {
-          text: String(message.text || "").trim(),
+          text,
           note: String(message.note || "").trim(),
         };
         await chrome.storage.session.set({
           quoteSavedAt: Date.now(),
           lastSavedQuote: {
-            text: String(quote.text || message.text || "").trim(),
+            text: String(quote.text || text).trim(),
             note: String(quote.note || message.note || "").trim(),
             id: quote.id || "",
             page_url: pageUrl,
           },
         });
+        chrome.runtime.sendMessage({
+          type: "QUOTE_SAVED",
+          quote: {
+            text: String(quote.text || text).trim(),
+            note: String(quote.note || message.note || "").trim(),
+            id: quote.id || "",
+            page_url: pageUrl,
+          },
+        }).catch(() => {});
+        if (panelPorts.size === 0) {
+          await appendQuoteToStoredNotes(pageUrl, quote, savedMeta);
+        }
+        return quote;
+      })();
+      quickSaveLocks.set(lockKey, savePromise);
+      try {
+        const quote = await savePromise;
         sendResponse({ ok: true, quote });
       } catch (err) {
-        sendResponse({ ok: false, error: String(err) });
+        sendResponse({ ok: false, error: String(err?.message || err) });
+      } finally {
+        quickSaveLocks.delete(lockKey);
       }
     })();
     return true;
@@ -166,8 +229,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
 
+  if (message?.type === "OPEN_NOTES_PANEL") {
+    openNotesPanel().then(() => sendResponse({ ok: true })).catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   return false;
 });
+
+async function openNotesPanel() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+  await chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
+  await chrome.storage.session.set({ openToNotes: Date.now() });
+  chrome.runtime.sendMessage({ type: "OPEN_NOTES_TAB" }).catch(() => {});
+  await setPanelOpen(true);
+}
 
 async function setPanelOpen(open) {
   await chrome.storage.session.set({ panelOpen: open });
@@ -216,6 +293,30 @@ async function lookupSavedPage(url) {
     return data.page || null;
   } catch {
     return null;
+  }
+}
+
+async function appendQuoteToStoredNotes(pageUrl, quote, savedPage) {
+  if (typeof ContextNotes === "undefined" || !ContextNotes.appendQuoteToNotes) return;
+  const key = `pageDraft:${pageUrl}`;
+  const data = await chrome.storage.local.get(key);
+  const draft = data[key] || { title: savedPage?.title || "", metadata: savedPage?.metadata || {} };
+  const metadata = { ...(draft.metadata || savedPage?.metadata || {}) };
+  const nextNotes = ContextNotes.appendQuoteToNotes(metadata.notes || "", quote);
+  if (nextNotes === (metadata.notes || "")) return;
+  metadata.notes = nextNotes;
+  draft.metadata = metadata;
+  if (savedPage?.title && !draft.title) draft.title = savedPage.title;
+  await chrome.storage.local.set({ [key]: draft });
+  if (!savedPage?.id) return;
+  try {
+    await fetch(`${BACKEND}/library/pages/${encodeURIComponent(savedPage.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ metadata }),
+    });
+  } catch {
+    // Draft still holds the quote until the page is saved.
   }
 }
 

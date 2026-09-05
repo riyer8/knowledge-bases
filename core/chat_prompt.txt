@@ -7,4 +7,5 @@ Goals:
 
 Style:
 - Friendly, practical, and concise.
-- Avoid unnecessary formatting.
+- Use Markdown when it helps: short paragraphs, **bold** for key terms, and
+  bullet/numbered lists with one item per line (never a wall of numbered text).

@@ -22,7 +22,9 @@ knowledge-bases/
 │   ├── background.js              # Launcher + page context + PDF extract
 │   ├── lib/launcher.js            # HTTP auto-start client (:8798)
 │   ├── content/                   # extract.js, highlights.js (on-page quotes)
-│   ├── sidepanel/                 # Page | Saved | Life | Graph + Settings
+│   ├── sidepanel/                 # Page | Saved | Graph + Settings
+│   │   ├── notes.js               # Notes markdown ↔ HTML ↔ :::quote
+│   │   └── bookshelf-export.js    # Copy-paste JS object for a personal site
 │   └── install-native-host.sh     # Legacy optional path
 ├── DesktopApp/
 │   └── DesktopApp/

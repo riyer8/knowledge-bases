@@ -4,27 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Context</title>
-  <script>
-    (function () {
-      var k = "context-theme";
-      var p = localStorage.getItem(k);
-      if (p !== "light" && p !== "dark") p = "system";
-      var resolved = p;
-      if (p === "system") {
-        resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
-          ? "dark"
-          : "light";
-      }
-      document.documentElement.dataset.themePreference = p;
-      document.documentElement.dataset.theme = resolved;
-      document.documentElement.style.colorScheme = resolved;
-    })();
-  </script>
+  <script src="theme.js"></script>
   <link rel="icon" type="image/png" href="../icons/icon-32.png" />
   <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="panel.css" />
-  <script src="theme.js"></script>
-  <script>ContextTheme.initTheme();</script>
 </head>
 <body>
   <header class="header">
@@ -67,7 +50,7 @@
   <section class="view active" id="view-chat">
     <nav class="page-subnav" id="page-subnav" aria-label="Page panels">
       <button type="button" class="page-tab active" data-page-tab="details">Details</button>
-      <button type="button" class="page-tab" data-page-tab="quotes">Quotes</button>
+          <button type="button" class="page-tab" data-page-tab="notes">Notes</button>
       <button type="button" class="page-tab" data-page-tab="chat">Chat</button>
     </nav>
 
@@ -145,36 +128,39 @@
           <button type="button" id="meta-add-field" class="text-btn meta-add-btn">+ Add field</button>
         </details>
 
-        <details class="details-more" id="details-export">
+        <details class="details-more" id="details-export" open>
           <summary>Bookshelf JSON</summary>
           <div class="bookshelf-export">
             <div class="bookshelf-export-head">
               <span class="bookshelf-export-label">Copy into your site</span>
               <button type="button" id="copy-export-json" class="toolbar-btn">Copy JSON</button>
             </div>
+            <div id="export-notes-preview" class="notes-document markdown-body"></div>
             <pre id="export-json-preview" class="export-json-preview" tabindex="0"></pre>
           </div>
         </details>
       </div>
     </div>
 
-    <div class="page-panel" id="page-panel-quotes">
+    <div class="page-panel" id="page-panel-notes">
       <div class="notes-shell">
         <div class="notes-toolbar">
           <span class="notes-toolbar-label">Notes</span>
           <div class="notes-toolbar-actions">
             <button type="button" class="text-btn notes-md-btn" id="notes-bold" title="Bold">B</button>
             <button type="button" class="text-btn notes-md-btn" id="notes-italic" title="Italic"><em>I</em></button>
+            <button type="button" class="toolbar-btn" id="clear-notes-btn" title="Clear all notes">Clear</button>
+            <button type="button" class="toolbar-btn" id="copy-notes-json" title="Copy bookshelf JSON">Copy JSON</button>
           </div>
         </div>
         <div
           id="meta-notes"
-          class="notes-editor markdown-body is-empty"
+          class="notes-editor markdown-body"
           contenteditable="true"
           role="textbox"
           aria-multiline="true"
           spellcheck="true"
-          data-placeholder="Highlight on the page and tap Save quote, or start writing."
+          data-placeholder="Select text on the page, then Highlight (⌥H)"
         ></div>
       </div>
     </div>
@@ -215,8 +201,11 @@
         <div id="saved-summary" class="detail-content markdown-body"></div>
       </section>
       <section class="detail-block">
-        <h3>Quotes</h3>
-        <ul id="saved-quotes" class="quote-list"></ul>
+        <div class="bookshelf-export-head">
+          <h3>Notes</h3>
+          <button type="button" id="saved-copy-json" class="toolbar-btn">Copy JSON</button>
+        </div>
+        <div id="saved-notes" class="notes-document markdown-body"></div>
       </section>
       <section class="detail-block">
         <h3>Chat history</h3>
@@ -308,7 +297,7 @@
 
       <section class="settings-block">
         <h2 class="settings-heading">Archived</h2>
-        <p class="muted settings-lead">Life (category grouping) and Wiki are archived for now and hidden from the nav. The views and backend still exist if we revive them.</p>
+        <p class="muted settings-lead">Life (category grouping) and Wiki are archived — see docs/archived.md. The views and backend still exist if we revive them.</p>
       </section>
 
       <section class="settings-block">
@@ -425,6 +414,8 @@
   </div>
 
   <script src="markdown.js"></script>
+  <script src="notes.js"></script>
+  <script src="bookshelf-export.js"></script>
   <script src="panel.js"></script>
 </body>
 </html>

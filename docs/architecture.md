@@ -50,9 +50,9 @@ The browser is the primary reading surface. The extension:
 
 - Extracts structured page context (title, URL, headings, selection, visible text, metadata)
 - Provides unified chat about the current page (`POST /ask`)
-- Saves pages and quotes explicitly (`/library/*`) with editable title, metadata, and quote edit/delete
-- **Page | Saved | Life | Graph** tabs plus **Settings** (gear) for API keys and data controls
-- On-page highlight toolbar for fast quote capture
+- Saves pages and quotes explicitly (`/library/*`). The Notes document (`metadata.notes`) is the export source of truth; Copy JSON emits the current JS object with `:::quote` fences.
+- **Page | Saved | Graph** tabs plus **Settings** (gear). Life and Wiki are archived from nav.
+- On-page highlight toolbar for fast quote capture (available even if the panel is closed)
 - Visualizes a page-centric knowledge graph (saved pages linked by shared topics)
 
 The extension does **not** contain the knowledge brain — it sends context to the backend.

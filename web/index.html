@@ -4,26 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Context</title>
-  <script>
-    (function () {
-      var k = "context-theme";
-      var p = localStorage.getItem(k);
-      if (p !== "light" && p !== "dark") p = "system";
-      var resolved = p;
-      if (p === "system") {
-        resolved = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
-          ? "dark"
-          : "light";
-      }
-      document.documentElement.dataset.themePreference = p;
-      document.documentElement.dataset.theme = resolved;
-      document.documentElement.style.colorScheme = resolved;
-    })();
-  </script>
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="tokens.css" />
   <link rel="stylesheet" href="app.css" />
-  <script src="theme.js"></script>
-  <script>ContextTheme.initTheme();</script>
 </head>
 <body>
   <div class="shell">
@@ -78,7 +61,7 @@
             <p class="muted empty">Loading…</p>
           </div>
           <div class="split-detail" id="library-detail">
-            <p class="empty-state">Select a saved page to read its summary, quotes, and chat history.</p>
+            <p class="empty-state">Select a saved page to read its notes, summary, and chat history.</p>
           </div>
         </div>
       </section>
@@ -175,8 +158,8 @@
           <article class="panel-card">
             <h3>Clients</h3>
             <ul class="bullets muted">
-              <li>Chrome extension — save quotes and chat while browsing</li>
-              <li>This dashboard — browse library and graph</li>
+              <li>Chrome extension — highlight, take notes, and copy bookshelf JSON</li>
+              <li>This dashboard — browse the same notes document</li>
               <li>Desktop app — full macOS experience</li>
             </ul>
           </article>
@@ -186,6 +169,8 @@
   </div>
   <div class="toast" id="toast" hidden></div>
   <script src="markdown.js"></script>
+  <script src="notes.js"></script>
+  <script src="bookshelf-export.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
