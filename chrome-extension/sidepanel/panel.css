@@ -320,7 +320,7 @@ body {
 }
 
 .export-json-preview {
-  margin: 0;
+  margin: 10px 0 0;
   padding: 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
@@ -399,7 +399,7 @@ body {
   min-height: 0;
   width: 100%;
   margin: 0;
-  padding: 14px 16px 20px;
+  padding: 14px 16px 48px;
   border: 0;
   border-radius: 0;
   overflow-y: auto;
@@ -411,14 +411,14 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   outline: none;
+  cursor: text;
 }
 
 .notes-editor.is-empty::before {
   content: attr(data-placeholder);
   color: var(--muted);
   pointer-events: none;
-  float: left;
-  height: 0;
+  display: block;
 }
 
 .notes-editor p {
@@ -429,6 +429,10 @@ body {
   margin-top: 0;
 }
 
+.notes-editor > p:last-child {
+  min-height: 1.6em;
+}
+
 .notes-editor a {
   color: var(--accent);
 }
@@ -436,7 +440,7 @@ body {
 .notes-editor .custom-quote,
 .notes-editor blockquote {
   margin: 0.85em 0;
-  padding: 12px 14px 26px;
+  padding: 12px 36px 26px 14px;
   border-radius: 8px;
   border: 1px solid transparent;
   border-left: 4px solid var(--accent);
@@ -464,6 +468,44 @@ body {
   opacity: 0.7;
   content: "Quote from Article";
   color: var(--muted);
+}
+
+.notes-editor .note-quote-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  font-style: normal;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.notes-editor .custom-quote:hover .note-quote-delete,
+.notes-editor blockquote:hover .note-quote-delete,
+.notes-editor .note-quote-delete:focus-visible {
+  opacity: 1;
+}
+
+.notes-editor .note-quote-delete:hover,
+.notes-editor .note-quote-delete:focus-visible {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+}
+
+@media (hover: none) {
+  .notes-editor .note-quote-delete {
+    opacity: 0.65;
+  }
 }
 
 .quote-card-actions {
@@ -876,10 +918,10 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
 
 .explore-chat-card {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   width: 100%;
   margin: 0;
-  padding: 10px 12px;
+  padding: 11px 12px;
   text-align: left;
   font: inherit;
   cursor: pointer;
@@ -887,11 +929,17 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
   border-radius: var(--radius-sm);
   background: var(--panel);
   color: var(--text);
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .explore-chat-card:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.explore-chat-card:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .explore-chat-title {
@@ -907,9 +955,14 @@ h3 { font-size: 12px; margin: 0 0 6px; color: var(--muted); text-transform: uppe
 
 .explore-chat-why {
   font-size: 12px;
-  line-height: 1.4;
-  color: var(--text);
+  line-height: 1.45;
+  color: var(--muted);
   margin-top: 2px;
+}
+
+.message.assistant.explore-answer .markdown-body,
+.message.assistant.explore-answer > p {
+  margin-bottom: 0;
 }
 
 .ask-form {
@@ -1270,8 +1323,15 @@ a.toolbar-btn {
 .markdown-body h3 { font-size: 1em; color: var(--muted); }
 
 .markdown-body p { margin: 0.5em 0; }
-.markdown-body ul { margin: 0.5em 0; padding-left: 1.2em; }
-.markdown-body li { margin: 0.2em 0; }
+.markdown-body p:first-child { margin-top: 0; }
+.markdown-body p:last-child { margin-bottom: 0; }
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.55em 0;
+  padding-left: 1.35em;
+}
+.markdown-body li { margin: 0.35em 0; }
+.markdown-body li strong { font-weight: 650; }
 
 .markdown-body blockquote {
   margin: 0.6em 0;
@@ -1281,7 +1341,9 @@ a.toolbar-btn {
 }
 
 .notes-editor.markdown-body blockquote,
-.notes-editor.markdown-body .custom-quote {
+.notes-editor.markdown-body .custom-quote,
+.notes-document.markdown-body blockquote,
+.notes-document.markdown-body .custom-quote {
   margin: 0.85em 0;
   padding: 12px 14px 26px;
   border: 1px solid transparent;
@@ -1290,6 +1352,30 @@ a.toolbar-btn {
   background: var(--accent-soft);
   color: var(--text);
   font-style: italic;
+}
+
+.notes-document {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.notes-document .custom-quote::after,
+.notes-document blockquote::after {
+  display: block;
+  margin-top: 0.7em;
+  font-size: 0.65em;
+  line-height: 1;
+  text-align: right;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  font-style: normal;
+  opacity: 0.7;
+  content: "Quote from Article";
+  color: var(--muted);
+}
+
+.notes-editor blockquote {
+  cursor: pointer;
 }
 
 .markdown-body code {

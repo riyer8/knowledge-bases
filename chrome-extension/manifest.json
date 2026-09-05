@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Context",
-  "version": "0.1.0",
-  "description": "personal knowledge system + graph",
+  "version": "0.1.1",
+  "description": "Highlight passages, keep notes, copy them onto your site",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -31,13 +31,29 @@
       "48": "icons/icon-48.png"
     }
   },
+  "commands": {
+    "highlight-selection": {
+      "suggested_key": {
+        "default": "Alt+H",
+        "mac": "Alt+H"
+      },
+      "description": "Highlight the current selection"
+    },
+    "open-notes": {
+      "suggested_key": {
+        "default": "Alt+N",
+        "mac": "Alt+N"
+      },
+      "description": "Open Context notes for this page"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content/extract.js", "content/highlights.js"],
       "css": ["content/highlights.css"],
       "run_at": "document_idle",
-      "all_frames": true
+      "all_frames": false
     }
   ]
 }

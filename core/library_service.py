@@ -24,6 +24,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _today_date_added() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def _date_added_from_timestamp(value: str) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+        return text[:10]
+    return ""
+
+
 def _library_dir() -> Path:
     return config.kb_root / _LIBRARY_DIR_NAME
 
@@ -49,11 +60,21 @@ def _ensure_dirs() -> None:
     (_library_dir() / "chats").mkdir(parents=True, exist_ok=True)
 
 
-def _load_saved_index() -> list[dict[str, Any]]:
-    path = _saved_index_path()
+def _read_json_list(path: Path) -> list[Any]:
     if not path.exists():
         return []
-    return json.loads(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8").strip()
+    if not text:
+        return []
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    return data if isinstance(data, list) else []
+
+
+def _load_saved_index() -> list[dict[str, Any]]:
+    return _read_json_list(_saved_index_path())
 
 
 def _save_saved_index(entries: list[dict[str, Any]]) -> None:
@@ -71,6 +92,7 @@ def _empty_metadata() -> dict[str, Any]:
         "tldr": "",
         "thoughts": "",
         "notes": "",
+        "dateAdded": "",
         "tags": [],
         "custom": [],
     }
@@ -87,6 +109,7 @@ def _normalize_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
     meta["tldr"] = str(raw.get("tldr", "") or "").strip()
     meta["thoughts"] = str(raw.get("thoughts", "") or "").strip()
     meta["notes"] = str(raw.get("notes", "") or "").strip()
+    meta["dateAdded"] = str(raw.get("dateAdded") or raw.get("date_added") or "").strip()
     tags: list[str] = []
     for item in raw.get("tags") or []:
         tag = str(item or "").strip()
@@ -103,6 +126,13 @@ def _normalize_metadata(raw: dict[str, Any] | None) -> dict[str, Any]:
             custom.append({"key": key, "value": value})
     meta["custom"] = custom[:30]
     return meta
+
+
+def _with_date_added(meta: dict[str, Any], *, fallback: str = "") -> dict[str, Any]:
+    normalized = _normalize_metadata(meta)
+    if not normalized.get("dateAdded"):
+        normalized["dateAdded"] = _date_added_from_timestamp(fallback) or _today_date_added()
+    return normalized
 
 
 def _metadata_from_pdf(reader) -> dict[str, Any]:
@@ -268,7 +298,10 @@ def save_page(
         "selected_text": str(page_data.get("selected_text", ""))[:4000],
         "page_type": str(page_data.get("page_type", "webpage")),
         "visible_text": str(page_data.get("visible_text", ""))[:20000],
-        "metadata": _normalize_metadata(page_data.get("metadata") or prior_meta),
+        "metadata": _with_date_added(
+            page_data.get("metadata") or prior_meta,
+            fallback=str((prior_meta or {}).get("dateAdded") or ""),
+        ),
         "saved_at": saved_at,
         "updated_at": saved_at,
         "summary": prior_summary or _instant_summary(
@@ -333,6 +366,10 @@ def get_saved_page(page_id: str) -> dict[str, Any] | None:
     if not path.exists():
         return None
     page = json.loads(path.read_text(encoding="utf-8"))
+    page["metadata"] = _with_date_added(
+        page.get("metadata"),
+        fallback=str(page.get("saved_at") or ""),
+    )
     page["chat_history"] = load_chat_history(page_id)
     page["quotes"] = [q for q in _load_quotes() if q.get("page_id") == page_id]
     return page
@@ -376,7 +413,13 @@ def update_page(
         page["title"] = title
 
     if metadata is not None:
-        page["metadata"] = _normalize_metadata(metadata)
+        incoming = _normalize_metadata(metadata)
+        prior_added = str((page.get("metadata") or {}).get("dateAdded") or "").strip()
+        if not incoming.get("dateAdded"):
+            incoming["dateAdded"] = prior_added or _date_added_from_timestamp(
+                str(page.get("saved_at") or "")
+            ) or _today_date_added()
+        page["metadata"] = incoming
 
     page["updated_at"] = _now_iso()
     _page_path(page_id).write_text(json.dumps(page, indent=2), encoding="utf-8")
@@ -514,10 +557,7 @@ def load_chat_history(page_id: str) -> list[dict[str, str]]:
 
 
 def _load_quotes() -> list[dict[str, Any]]:
-    path = _quotes_path()
-    if not path.exists():
-        return []
-    quotes = json.loads(path.read_text(encoding="utf-8"))
+    quotes = _read_json_list(_quotes_path())
     changed = False
     for quote in quotes:
         if not quote.get("id"):
@@ -544,17 +584,31 @@ def save_quote(
     if not text.strip():
         raise ValueError("text is required")
 
+    cleaned = text.strip()[:4000]
+    note_text = note.strip()
+    quotes = _load_quotes()
+    for existing in quotes:
+        if str(existing.get("text", "")).strip() != cleaned:
+            continue
+        same_page = bool(page_id) and existing.get("page_id") == page_id
+        same_url = bool(page_url) and _urls_match(str(existing.get("page_url", "")), page_url)
+        if not (same_page or same_url):
+            continue
+        if note_text and note_text != str(existing.get("note") or "").strip():
+            existing["note"] = note_text
+            _save_quotes(quotes)
+        return existing
+
     quote_id = str(uuid.uuid4())
     quote = {
         "id": quote_id,
-        "text": text.strip()[:4000],
-        "note": note.strip(),
+        "text": cleaned,
+        "note": note_text,
         "page_id": page_id,
         "page_url": page_url,
         "page_title": page_title,
         "saved_at": _now_iso(),
     }
-    quotes = _load_quotes()
     quotes.insert(0, quote)
     _save_quotes(quotes[:500])
 
@@ -571,15 +625,15 @@ def save_quote(
         try:
             if page_id:
                 remember_concept(
-                    passage=text.strip(),
+                    passage=cleaned,
                     page_id=page_id,
                     page_title=page_title or "Saved quote",
                     page_url=page_url,
-                    note=note,
+                    note=note_text,
                     event_id="",
                 )
             ingest_text(
-                text=f'Quote from "{page_title}":\n{text.strip()}\n{("Note: " + note) if note else ""}',
+                text=f'Quote from "{page_title}":\n{cleaned}\n{("Note: " + note_text) if note_text else ""}',
                 source="saved_quote",
                 metadata={"quote_id": quote_id, "page_id": page_id, "url": page_url},
                 flagged_important=True,

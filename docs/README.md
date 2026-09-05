@@ -61,7 +61,9 @@
 | [privacy-pipeline.md](specs/privacy-pipeline.md) | Mandatory privacy gate (auto-pause, PII, hashing) |
 | [event-schema.md](specs/event-schema.md) | Raw and clean event contract |
 | [name-anonymization.md](specs/name-anonymization.md) | Hash → display name mapping |
-| [buckets.md](specs/buckets.md) | Life bucket taxonomy (Phase 3) |
+| [buckets.md](specs/buckets.md) | Life bucket taxonomy (Phase 3, archived) |
+| [notes-export.md](specs/notes-export.md) | Notes document and bookshelf copy format |
+| [Archived surfaces](archived.md) | Life/Wiki hidden from nav |
 
 ---
 

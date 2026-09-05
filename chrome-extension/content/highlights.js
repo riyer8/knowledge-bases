@@ -1,6 +1,8 @@
 const TOOLBAR_ID = "context-save-toolbar";
-const MIN_SELECTION = 8;
-const SKIP_CLOSEST = `script, style, noscript, textarea, input, select, #${TOOLBAR_ID}`;
+const TOAST_ID = "context-clip-toast";
+const NOTE_POPOVER_ID = "context-highlight-note";
+const MIN_SELECTION = 4;
+const SKIP_CLOSEST = `script, style, noscript, textarea, input, select, #${TOOLBAR_ID}, #${NOTE_POPOVER_ID}`;
 
 let toolbar = null;
 let noteInput = null;
@@ -11,32 +13,27 @@ let panelOpen = false;
 let painting = false;
 let retryTimer = 0;
 let paintObserver = null;
+let notePopover = null;
+let toastTimer = 0;
+let toolbarTimer = 0;
+let pointerSelecting = false;
+let saveInFlight = false;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "PANEL_OPENED") {
-    panelOpen = true;
-    const selected = normalizeSelection(window.getSelection()?.toString() || "");
-    if (isSaveableSelection(selected)) {
-      pendingText = selected;
-      chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected });
-      try {
-        const range = window.getSelection().getRangeAt(0);
-        showToolbar(range.getBoundingClientRect());
-      } catch {
-        // Selection may not have a range on this frame.
-      }
-    }
+    setPanelOpenFlag(true);
+    scheduleToolbarUpdate(0);
     sendResponse({ ok: true });
     return false;
   }
   if (message?.type === "PANEL_CLOSED") {
-    panelOpen = false;
-    hideToolbar();
+    setPanelOpenFlag(false);
     sendResponse({ ok: true });
     return false;
   }
   if (message?.type === "REPAINT_HIGHLIGHTS") {
-    loadAndPaintHighlights().then(() => sendResponse({ ok: true }));
+    const incoming = Array.isArray(message.quotes) ? message.quotes : null;
+    loadAndPaintHighlights(incoming).then(() => sendResponse({ ok: true }));
     return true;
   }
   if (message?.type === "CLEAR_HIGHLIGHTS") {
@@ -49,55 +46,127 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true });
     return false;
   }
+  if (message?.type === "HIGHLIGHT_SELECTION") {
+    void highlightCurrentSelection().then((ok) => sendResponse({ ok }));
+    return true;
+  }
   return false;
 });
 
 chrome.runtime.sendMessage({ type: "GET_PANEL_STATE" }, (response) => {
   if (chrome.runtime.lastError) return;
-  panelOpen = Boolean(response?.open);
-  if (!panelOpen) hideToolbar();
+  if (response && "open" in response) setPanelOpenFlag(response.open);
 });
 
-document.addEventListener("mouseup", onPointerUp, true);
-document.addEventListener("keyup", onPointerUp, true);
+chrome.storage.session.get("panelOpen", (data) => {
+  if (chrome.runtime.lastError) return;
+  if (data?.panelOpen) setPanelOpenFlag(true);
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "session" && changes.panelOpen) {
+    setPanelOpenFlag(changes.panelOpen.newValue);
+  }
+});
+
 document.addEventListener("mousedown", onDocumentMouseDown, true);
-document.addEventListener("scroll", hideToolbar, true);
+document.addEventListener("mouseup", onPointerReleased, true);
+document.addEventListener("touchend", onPointerReleased, true);
+document.addEventListener("keyup", onPointerReleased, true);
+document.addEventListener("selectionchange", onSelectionChange);
+document.addEventListener("scroll", onViewportChange, true);
+window.addEventListener("resize", onViewportChange);
+document.addEventListener("click", onHighlightClick, true);
+document.addEventListener("keydown", onPageKeydown, true);
 
 trackClientNavigation(() => {
   paintedKeys = new Set();
+  hideNotePopover();
   loadAndPaintHighlights();
 });
 
 loadAndPaintHighlights();
 
-function onDocumentMouseDown(event) {
-  if (toolbar && toolbar.contains(event.target)) return;
-  hideToolbar();
+function setPanelOpenFlag(open) {
+  panelOpen = Boolean(open);
 }
 
-function onPointerUp(event) {
-  if (toolbar && toolbar.contains(event.target)) return;
-  window.setTimeout(() => {
-    const selection = window.getSelection();
-    const text = normalizeSelection(selection?.toString() || "");
-    if (!isSaveableSelection(text)) {
-      hideToolbar();
-      chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: "" });
-      return;
-    }
-    pendingText = text;
-    chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: text });
-    if (!panelOpen) {
-      hideToolbar();
-      return;
-    }
-    const range = selection.rangeCount ? selection.getRangeAt(0) : null;
-    if (!range) {
-      hideToolbar();
-      return;
-    }
-    showToolbar(range.getBoundingClientRect());
-  }, 12);
+function isOurUiTarget(target) {
+  if (!target) return false;
+  if (toolbar && toolbar.contains(target)) return true;
+  if (notePopover && notePopover.contains(target)) return true;
+  return false;
+}
+
+function toolbarHasFocus() {
+  const active = document.activeElement;
+  return Boolean(active && toolbar && !toolbar.hidden && toolbar.contains(active));
+}
+
+function onDocumentMouseDown(event) {
+  if (isOurUiTarget(event.target)) return;
+  pointerSelecting = true;
+  hideToolbar();
+  hideNotePopover();
+}
+
+function onPointerReleased(event) {
+  if (isOurUiTarget(event.target)) return;
+  pointerSelecting = false;
+  scheduleToolbarUpdate(30);
+}
+
+function onSelectionChange() {
+  // While dragging, wait for mouseup/touchend so the range can settle.
+  if (pointerSelecting) return;
+  scheduleToolbarUpdate(60);
+}
+
+function onViewportChange() {
+  if (!toolbar || toolbar.hidden) return;
+  scheduleToolbarUpdate(0);
+}
+
+function scheduleToolbarUpdate(delayMs = 40) {
+  window.clearTimeout(toolbarTimer);
+  toolbarTimer = window.setTimeout(updateToolbarForSelection, delayMs);
+}
+
+function updateToolbarForSelection() {
+  if (toolbarHasFocus()) return;
+
+  const selection = window.getSelection();
+  const text = normalizeSelection(selection?.toString() || "");
+  if (!isSaveableSelection(text)) {
+    hideToolbar();
+    chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: "" });
+    return;
+  }
+
+  const anchor = selection?.anchorNode;
+  if (anchor && isOurUiTarget(anchor)) return;
+
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  if (!range || range.collapsed) {
+    hideToolbar();
+    return;
+  }
+
+  pendingText = text;
+  chrome.runtime.sendMessage({ type: "SELECTION_CHANGED", selected: text });
+  showToolbar(range.getBoundingClientRect());
+}
+
+function onPageKeydown(event) {
+  // Prefer the extension command (background → HIGHLIGHT_SELECTION). This
+  // handler is a fallback when the page has focus and the command is slow;
+  // saveInFlight dedupes if both fire.
+  if (!(event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey)) return;
+  if (event.key.toLowerCase() !== "h") return;
+  const tag = event.target?.tagName?.toLowerCase();
+  if (tag === "input" || tag === "textarea" || event.target?.isContentEditable) return;
+  event.preventDefault();
+  void highlightCurrentSelection();
 }
 
 function normalizeSelection(text) {
@@ -124,47 +193,93 @@ function ensureToolbar() {
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.dataset.action = "save";
-  saveBtn.textContent = "Save quote";
-  saveBtn.addEventListener("click", () => quickSaveQuote(pendingText, noteInput?.value || ""));
+  saveBtn.textContent = "Highlight";
+  saveBtn.title = "Save highlight (Alt+H)";
 
   noteInput = document.createElement("input");
   noteInput.type = "text";
   noteInput.className = "ctx-note-input";
-  noteInput.placeholder = "Note (optional)";
+  noteInput.placeholder = "Add a note…";
   noteInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      quickSaveQuote(pendingText, noteInput.value || "");
+      event.stopPropagation();
+      void quickSaveQuote(pendingText, noteInput.value || "");
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      hideToolbar();
     }
   });
 
-  toolbar.append(saveBtn, noteInput);
+  const hint = document.createElement("span");
+  hint.className = "ctx-hotkey-hint";
+  hint.textContent = "⌥H";
+
+  toolbar.append(saveBtn, noteInput, hint);
+
+  // Keep selection on Highlight; allow the note input to focus normally.
+  // Do not use capture-phase stopPropagation on click (that blocked the button).
+  toolbar.addEventListener("mousedown", (event) => {
+    event.stopPropagation();
+    if (event.target === noteInput) return;
+    event.preventDefault();
+  });
+  toolbar.addEventListener("mouseup", (event) => {
+    event.stopPropagation();
+  });
+  toolbar.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const save = event.target.closest?.('[data-action="save"]');
+    if (save) {
+      event.preventDefault();
+      void quickSaveQuote(pendingText, noteInput?.value || "");
+    }
+  });
+
   document.documentElement.appendChild(toolbar);
   return toolbar;
 }
 
 function showToolbar(rect) {
-  if (!panelOpen) return;
+  if (!rect || (rect.width === 0 && rect.height === 0)) return;
+  hideNotePopover();
   const bar = ensureToolbar();
-  const top = window.scrollY + rect.top - 48;
-  const left = window.scrollX + rect.left + rect.width / 2;
-  bar.style.top = `${Math.max(8, top)}px`;
-  bar.style.left = `${Math.max(8, left)}px`;
+  const top = Math.max(8, Math.min(window.innerHeight - 52, rect.top - 48));
+  const left = Math.min(window.innerWidth - 24, Math.max(8, rect.left + rect.width / 2));
+  bar.style.top = `${top}px`;
+  bar.style.left = `${left}px`;
   bar.style.transform = "translateX(-50%)";
   bar.hidden = false;
-  bar.querySelector('[data-action="save"]').disabled = false;
-  bar.querySelector('[data-action="save"]').textContent = "Save quote";
+  const saveBtn = bar.querySelector('[data-action="save"]');
+  if (saveBtn && !saveInFlight) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Highlight";
+  }
 }
 
 function hideToolbar() {
   if (!toolbar) return;
   toolbar.hidden = true;
-  if (noteInput) noteInput.value = "";
+  if (noteInput && document.activeElement !== noteInput) noteInput.value = "";
+}
+
+async function highlightCurrentSelection() {
+  const selection = window.getSelection();
+  const text = normalizeSelection(selection?.toString() || pendingText || "");
+  if (!isSaveableSelection(text)) {
+    showToast("Select text to highlight");
+    return false;
+  }
+  pendingText = text;
+  return quickSaveQuote(text, noteInput?.value || "");
 }
 
 async function quickSaveQuote(text, note = "") {
   const normalized = normalizeSelection(text);
-  if (!isSaveableSelection(normalized)) return;
+  if (!isSaveableSelection(normalized)) return false;
+  if (saveInFlight) return false;
+  saveInFlight = true;
 
   const saveBtn = toolbar?.querySelector('[data-action="save"]');
   if (saveBtn) {
@@ -186,13 +301,37 @@ async function quickSaveQuote(text, note = "") {
     paintHighlight(normalized, note, response.quote?.id);
     hideToolbar();
     window.getSelection()?.removeAllRanges();
+    showToast(note?.trim() ? "Highlighted with note" : "Highlighted");
+    return true;
   } catch (err) {
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.textContent = "Save quote";
+      saveBtn.textContent = "Highlight";
     }
+    const message = err?.message || "Save failed";
+    showToast(message, true);
+    chrome.runtime.sendMessage({ type: "QUOTE_SAVE_FAILED", error: message }).catch(() => {});
     console.warn("Context quote save failed:", err);
+    return false;
+  } finally {
+    saveInFlight = false;
   }
+}
+
+function showToast(message, isError = false) {
+  let toast = document.getElementById(TOAST_ID);
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = TOAST_ID;
+    document.documentElement.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.toggle("ctx-toast-error", Boolean(isError));
+  toast.hidden = false;
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => {
+    toast.hidden = true;
+  }, 2200);
 }
 
 function clearPaintedHighlights() {
@@ -206,17 +345,22 @@ function clearPaintedHighlights() {
   paintedKeys = new Set();
   unpaintedQuotes = [];
   painting = false;
+  hideNotePopover();
 }
 
-async function loadAndPaintHighlights() {
+async function loadAndPaintHighlights(quotesOverride = null) {
   try {
-    const response = await chrome.runtime.sendMessage({
-      type: "GET_PAGE_QUOTES",
-      page_url: location.href,
-    });
-    if (!response?.ok) return;
+    let quotes = quotesOverride;
+    if (!Array.isArray(quotes)) {
+      const response = await chrome.runtime.sendMessage({
+        type: "GET_PAGE_QUOTES",
+        page_url: location.href,
+      });
+      if (!response?.ok) return;
+      quotes = response.quotes || [];
+    }
     clearPaintedHighlights();
-    const quotes = (response.quotes || []).slice().sort(
+    quotes = (quotes || []).slice().sort(
       (a, b) => normalizeSelection(b.text).length - normalizeSelection(a.text).length
     );
     unpaintedQuotes = [];
@@ -299,20 +443,25 @@ function createMark(note, quoteId) {
     mark.title = note;
   }
   if (quoteId) mark.dataset.quoteId = quoteId;
+  mark.dataset.ctxHighlight = "1";
   return mark;
 }
 
 function wrapNodeSlice(node, from, to, note, quoteId) {
   if (!node?.parentNode || to <= from) return false;
-  const range = document.createRange();
-  try {
-    range.setStart(node, from);
-    range.setEnd(node, to);
-    range.surroundContents(createMark(note, quoteId));
-    return true;
-  } catch {
+  if (node.parentElement?.closest("mark.ctx-highlight, script, style, textarea, input")) {
     return false;
   }
+  const value = node.nodeValue || "";
+  if (from < 0 || to > value.length) return false;
+  const mark = createMark(note, quoteId);
+  mark.textContent = value.slice(from, to);
+  const fragment = document.createDocumentFragment();
+  if (from > 0) fragment.appendChild(document.createTextNode(value.slice(0, from)));
+  fragment.appendChild(mark);
+  if (to < value.length) fragment.appendChild(document.createTextNode(value.slice(to)));
+  node.parentNode.replaceChild(fragment, node);
+  return true;
 }
 
 function paintMatch(match, note, quoteId) {
@@ -321,59 +470,105 @@ function paintMatch(match, note, quoteId) {
     return wrapNodeSlice(start.node, start.offset, end.offset + 1, note, quoteId);
   }
 
-  const nodes = collectTextNodes(document.body);
-  const slice = [];
+  const nodes = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let collecting = false;
-  for (const node of nodes) {
+  let node;
+  while ((node = walker.nextNode())) {
     if (node === start.node) collecting = true;
-    if (collecting) slice.push(node);
+    if (collecting) nodes.push(node);
     if (node === end.node) break;
   }
-  if (!slice.length) return false;
+  if (!nodes.length) return false;
 
-  let painted = false;
   painting = true;
-  for (let i = slice.length - 1; i >= 0; i -= 1) {
-    const node = slice[i];
-    const from = node === start.node ? start.offset : 0;
-    const to = node === end.node ? end.offset + 1 : (node.nodeValue || "").length;
-    if (wrapNodeSlice(node, from, to, note, quoteId)) painted = true;
+  let ok = true;
+  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+    const current = nodes[i];
+    const value = current.nodeValue || "";
+    let from = 0;
+    let to = value.length;
+    if (current === start.node) from = start.offset;
+    if (current === end.node) to = end.offset + 1;
+    if (!wrapNodeSlice(current, from, to, note, quoteId)) ok = false;
   }
   painting = false;
-  return painted;
+  return ok;
 }
 
 function paintHighlight(text, note = "", quoteId = "") {
-  const normalized = normalizeSelection(text);
-  const key = quoteKey(normalized, quoteId);
-  if (!normalized || paintedKeys.has(key)) return Boolean(marksForQuote(quoteId, normalized).length);
-
-  const match = findQuoteMatch(normalized);
+  const needle = normalizeSelection(text);
+  if (!needle) return false;
+  const key = quoteKey(needle, quoteId);
+  if (paintedKeys.has(key) || paintedKeys.has(quoteKey(needle))) return true;
+  const match = findQuoteMatch(needle);
   if (!match) return false;
-
-  painting = true;
   const painted = paintMatch(match, note, quoteId);
-  painting = false;
   if (painted) {
     paintedKeys.add(key);
-    return true;
+    paintedKeys.add(quoteKey(needle));
   }
-  return false;
+  return painted;
 }
 
-function marksForQuote(quoteId, text = "") {
+function marksForQuote(quoteId, text) {
   const id = String(quoteId || "").trim();
   if (id) {
-    const escaped = (window.CSS && CSS.escape) ? CSS.escape(id) : id.replace(/"/g, "");
-    const found = document.querySelectorAll(`mark.ctx-highlight[data-quote-id="${escaped}"]`);
-    if (found.length) return found;
+    const byId = Array.from(document.querySelectorAll(`mark.ctx-highlight[data-quote-id="${CSS.escape(id)}"]`));
+    if (byId.length) return byId;
   }
   const needle = normalizeSelection(text);
   if (!needle) return [];
   return Array.from(document.querySelectorAll("mark.ctx-highlight")).filter(
-    (mark) => normalizeSelection(mark.textContent || "") === needle
-      || normalizeSelection(mark.textContent || "").includes(needle)
+    (mark) => normalizeSelection(mark.textContent) === needle
   );
+}
+
+function onHighlightClick(event) {
+  const mark = event.target?.closest?.("mark.ctx-highlight");
+  if (!mark) return;
+  event.preventDefault();
+  event.stopPropagation();
+  showNotePopover(mark);
+}
+
+function ensureNotePopover() {
+  if (notePopover) return notePopover;
+  notePopover = document.createElement("div");
+  notePopover.id = NOTE_POPOVER_ID;
+  notePopover.hidden = true;
+  notePopover.innerHTML = `
+    <p class="ctx-note-label">Note</p>
+    <p class="ctx-note-body"></p>
+    <button type="button" class="ctx-note-open">Open in Notes</button>
+  `;
+  notePopover.addEventListener("mousedown", (event) => event.stopPropagation(), true);
+  notePopover.querySelector(".ctx-note-open")?.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ type: "OPEN_NOTES_PANEL" }).catch(() => {});
+    hideNotePopover();
+  });
+  document.documentElement.appendChild(notePopover);
+  return notePopover;
+}
+
+function showNotePopover(mark) {
+  hideToolbar();
+  const pop = ensureNotePopover();
+  const note = mark.title || "";
+  const body = pop.querySelector(".ctx-note-body");
+  if (body) {
+    body.textContent = note || "No note yet — open Notes to add one.";
+    body.classList.toggle("ctx-note-empty", !note);
+  }
+  const rect = mark.getBoundingClientRect();
+  pop.style.top = `${Math.min(window.innerHeight - 12, rect.bottom + 8)}px`;
+  pop.style.left = `${Math.min(window.innerWidth - 24, Math.max(8, rect.left))}px`;
+  pop.hidden = false;
+}
+
+function hideNotePopover() {
+  if (!notePopover) return;
+  notePopover.hidden = true;
 }
 
 function watchForUnpainted() {

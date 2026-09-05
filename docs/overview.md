@@ -11,13 +11,11 @@ memory from the desktop. Everything stays on your machine under `~/.kb/`.
 | Capability | Where |
 |---|---|
 | Read the current webpage (title, structure, selection, text) | Chrome extension |
+| Highlight quotes and write notes | Extension Notes panel + on-page clipper (⌥H) |
+| Copy bookshelf JSON onto a personal site | Extension Details / Notes, dashboard Library |
 | Unified chat with page + memory context | Extension side panel |
-| Explicit page save and quote capture | Extension → `/library/*` |
-| Saved library (pages, quotes, per-page chat) | Extension + macOS app |
-| Sparkles explore suggestions | Extension |
+| Saved library (pages, notes, per-page chat) | Extension + dashboard + macOS app |
 | Knowledge graph (saved pages, linked by shared topics) | Extension + macOS app |
-| Knowledge wiki (raw → compile → Q&A) | Extension Wiki tab + `http://127.0.0.1:8765/app/` + Obsidian vault |
-| Life buckets (review auto-classifications) | Extension Life tab + macOS Life panel |
 | Proactive insights | Extension banner + macOS pet popup |
 | iMessage ingest (read-only, macOS) | Backend `/integrations/imessage/*` |
 | Settings (API keys, data controls) | Extension Settings (gear) + macOS Settings |

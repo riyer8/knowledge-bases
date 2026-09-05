@@ -57,6 +57,22 @@ def test_markdown_codeblock():
     assert "line one" in html
 
 
+def test_markdown_ordered_list():
+    html = _render_markdown("Intro:\n\n1. **First** — note\n2. **Second** — note")
+    assert "<ol>" in html
+    assert "<li><strong>First</strong>" in html
+    assert "<li><strong>Second</strong>" in html
+
+
+def test_markdown_splits_inline_numbered_list():
+    html = _render_markdown(
+        'Related: 1. **"Alpha"** - a. 2. **"Beta"** - b.'
+    )
+    assert "<ol>" in html
+    assert html.count("<li>") == 2
+    assert "<strong>&quot;Alpha&quot;</strong>" in html
+
+
 def test_theme_modes_defined():
     source = THEME_JS.read_text(encoding="utf-8")
     assert '"system"' in source

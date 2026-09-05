@@ -19,7 +19,7 @@ dashboard.
 | **Memory, not noise** | Saved pages, quotes, and connections surface gently; nothing shouts for attention. |
 | **Local & private** | Dark-by-default evokes “on your machine.” No analytics chrome, no engagement bait. |
 | **One backend, many faces** | Extension (narrow), dashboard (wide), desktop (native) share tokens and behavior. |
-| **Progressive depth** | Page → Saved → Graph → Wiki → Life: shallow first, detail on demand. |
+| **Progressive depth** | Page → Notes → Saved → Graph. Wiki and Life are archived. |
 
 ---
 

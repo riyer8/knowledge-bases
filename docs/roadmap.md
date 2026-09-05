@@ -45,7 +45,6 @@ _Make what exists trustworthy before expanding._
 - [x] Gmail (OAuth + thread metadata ingest)
 - [x] iMessage integration (local DB read — `core/integrations/imessage.py`)
 - [x] Time-context for chat queries from calendar (`core/retrieval/time_context.py`)
-- [ ] Slack integration (optional — deferred)
 
 ---
 
@@ -75,16 +74,7 @@ Spec: [specs/buckets.md](specs/buckets.md)
 
 ---
 
-## Phase 5 — External Data
-
-- [x] Web content via Chrome extension (primary path)
-- [ ] Amazon order history (deferred — needs auth strategy)
-- [ ] Apple Health / Strava (deferred — HealthKit bridge)
-- [ ] Research-topic web scraper (deferred)
-
----
-
-## Phase 6 — LLM Wiki (Karpathy-style knowledge base)
+## Phase 5 — LLM Wiki (Karpathy-style knowledge base)
 
 Inspired by [Karpathy's knowledge base workflow](https://x.com/karpathy/status/2039805659525644595).
 
@@ -109,3 +99,19 @@ Inspired by [Karpathy's knowledge base workflow](https://x.com/karpathy/status/2
 - [x] Retrieval latency benchmarks (`tests/test_retrieval_latency.py`, p95 < 2s)
 - Keep [architecture.md](architecture.md) aligned with code
 - Log non-obvious choices in [decisions.md](decisions.md)
+
+---
+
+## Reading-first (current)
+
+Primary loop: highlight on the page → notes in the side panel → Copy JSON onto a personal site. Spec: [notes-export.md](specs/notes-export.md).
+
+- [x] Notes editor is the export source of truth
+- [x] Bookshelf JS object (`:::quote` fences) matches the editor
+- [x] Persist `dateAdded` on first save
+- [x] Dashboard + Saved show the same notes document
+- [ ] Library-wide bookshelf export
+- [ ] Saved list filters
+- [ ] Desktop library notes parity
+
+Life and Wiki stay [archived](archived.md).

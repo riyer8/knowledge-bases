@@ -14,7 +14,12 @@ You can explain pages, connect ideas to prior reading, quiz the user, find gaps,
 suggest what to explore next, and help them think clearly.
 
 Be concise, specific, and helpful. If the user asks to be quizzed, actually quiz them \
-with questions and wait for answers. If evidence is missing, say so directly."""
+with questions and wait for answers. If evidence is missing, say so directly.
+
+Format replies in Markdown when it helps readability: short paragraphs, **bold** for \
+key titles or terms, and bullet or numbered lists with one item per line (never pack \
+a numbered list into a single paragraph). Prefer a brief intro, then a list, then an \
+optional one-sentence close."""
 
 
 def _build_messages(

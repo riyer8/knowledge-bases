@@ -8,14 +8,16 @@ const state = {
   lastSavedSelection: "",
   history: [],
   quotes: [],
-  exportQuoteKeys: new Set(),
+  dateAdded: "",
   tags: [],
+  lastNoteQuoteBodies: [],
   busy: false,
   saving: false,
   view: "chat",
   pageTab: "details",
   savedPages: [],
   selectedSavedId: null,
+  savedDetailPage: null,
   bucketLeaves: [],
   bucketTree: {},
   lifeCategory: "all",
@@ -38,6 +40,7 @@ const els = {
   notesShell: document.querySelector(".notes-shell"),
   notesBold: document.getElementById("notes-bold"),
   notesItalic: document.getElementById("notes-italic"),
+  clearNotesBtn: document.getElementById("clear-notes-btn"),
   exploreBtn: document.getElementById("explore-btn"),
   nav: document.getElementById("nav"),
   savedList: document.getElementById("saved-list"),
@@ -46,7 +49,8 @@ const els = {
   savedDetailTitle: document.getElementById("saved-detail-title"),
   savedDetailUrl: document.getElementById("saved-detail-url"),
   savedSummary: document.getElementById("saved-summary"),
-  savedQuotes: document.getElementById("saved-quotes"),
+  savedNotes: document.getElementById("saved-notes"),
+  savedCopyJsonBtn: document.getElementById("saved-copy-json"),
   savedChat: document.getElementById("saved-chat"),
   deletePageBtn: document.getElementById("delete-page-btn"),
   graphSvg: document.getElementById("graph-svg"),
@@ -77,7 +81,9 @@ const els = {
   metaCustomFields: document.getElementById("meta-custom-fields"),
   metaAddField: document.getElementById("meta-add-field"),
   copyExportJsonBtn: document.getElementById("copy-export-json"),
+  copyNotesJsonBtn: document.getElementById("copy-notes-json"),
   exportJsonPreview: document.getElementById("export-json-preview"),
+  exportNotesPreview: document.getElementById("export-notes-preview"),
   header: document.querySelector(".header"),
   settingsBackendStatus: document.getElementById("settings-backend-status"),
   settingsProviderSummary: document.getElementById("settings-provider-summary"),
@@ -227,9 +233,8 @@ async function init() {
     if (area === "session" && changes.latestSelection) {
       updateSelection(changes.latestSelection.newValue || "");
     }
-    if (area === "session" && changes.quoteSavedAt) {
-      void handleExternalQuoteSaved();
-    }
+    // Quote inserts come only from QUOTE_SAVED — do not also react to
+    // quoteSavedAt or the same highlight is appended twice (race).
     if (area === "session" && changes.activeTabUrl) {
       const nextUrl = changes.activeTabUrl.newValue || "";
       if (nextUrl && nextUrl !== state.page?.url) {
@@ -237,15 +242,27 @@ async function init() {
       }
     }
   });
-  chrome.storage.session.get(["latestSelection", "activeTabUrl"], (data) => {
+  chrome.storage.session.get(["latestSelection", "activeTabUrl", "openToNotes"], (data) => {
     updateSelection(data.latestSelection || "");
     if (data.activeTabUrl && data.activeTabUrl !== state.page?.url) {
       refreshPage();
+    }
+    if (data.openToNotes) {
+      switchView("chat");
+      switchPageTab("notes");
+      chrome.storage.session.remove("openToNotes");
     }
   });
   chrome.runtime.onMessage.addListener((message) => {
     if (message?.type === "QUOTE_SAVED") {
       void handleExternalQuoteSaved(message.quote);
+    }
+    if (message?.type === "QUOTE_SAVE_FAILED") {
+      setStatus(message.error || "Could not save quote", true);
+    }
+    if (message?.type === "OPEN_NOTES_TAB") {
+      switchView("chat");
+      switchPageTab("notes");
     }
     if (message?.type === "TAB_CHANGED" && message.url && message.url !== state.page?.url) {
       refreshPage();
@@ -318,6 +335,7 @@ function bindEvents() {
   on(els.notesItalic, "mousedown", (event) => event.preventDefault());
   on(els.notesBold, "click", () => applyNotesFormat("bold"));
   on(els.notesItalic, "click", () => applyNotesFormat("italic"));
+  on(els.clearNotesBtn, "click", clearAllNotes);
   on(els.exploreBtn, "click", loadExploreSuggestions);
   on(els.savedBack, "click", showSavedList);
   on(els.deletePageBtn, "click", () => deleteSavedPage(state.selectedSavedId));
@@ -393,12 +411,16 @@ function bindEvents() {
     refreshExportJsonPreview();
   });
   els.metaNotes?.addEventListener("input", () => {
+    decorateNoteQuoteControls();
     updateNotesEmptyState();
-    syncExportChecksFromNotes();
+    pruneQuotesRemovedFromNotes();
     schedulePageDraftSave();
     refreshExportJsonPreview();
+    void syncHighlightsToPage();
   });
   els.metaNotes?.addEventListener("keydown", handleNotesKeydown);
+  els.metaNotes?.addEventListener("mousedown", handleNotesBlankClick);
+  els.metaNotes?.addEventListener("click", handleNotesQuoteClick);
   els.metaNotes?.addEventListener("paste", handleNotesPaste);
   els.metaTldr?.addEventListener("blur", savePageDetails);
   els.metaThoughts?.addEventListener("blur", savePageDetails);
@@ -419,6 +441,8 @@ function bindEvents() {
     els.metaTagInput?.focus();
   });
   on(els.copyExportJsonBtn, "click", copyBookshelfJson);
+  on(els.copyNotesJsonBtn, "click", copyBookshelfJson);
+  on(els.savedCopyJsonBtn, "click", copySavedBookshelfJson);
   els.metaAddField?.addEventListener("click", () => {
     const wrap = document.getElementById("details-custom");
     if (wrap) wrap.open = true;
@@ -468,7 +492,7 @@ function switchPageTab(tab) {
       el.classList.toggle("active", el.id === `page-panel-${tab}`);
     });
   }
-  if (tab === "quotes") {
+  if (tab === "notes") {
     els.metaNotes?.focus();
   }
   if (tab === "chat") {
@@ -502,6 +526,18 @@ function normalizeSelection(text) {
   return (text || "").replace(/\s+/g, " ").trim();
 }
 
+function pageUrlsMatch(left, right) {
+  const canon = (url) =>
+    String(url || "")
+      .trim()
+      .replace(/#.*$/, "")
+      .replace(/\/+$/, "")
+      .toLowerCase();
+  const a = canon(left);
+  const b = canon(right);
+  return Boolean(a && b && a === b);
+}
+
 function formatUserError(message) {
   const text = String(message || "");
   if (/rate.?limit|429/i.test(text)) {
@@ -525,73 +561,94 @@ async function refreshSelectionFromPage() {
   }
 }
 
+let lastExternalQuoteKey = "";
+let lastExternalQuoteAt = 0;
+let externalQuoteHandling = null;
+
 async function handleExternalQuoteSaved(quoteFromMessage) {
-  let quote = quoteFromMessage;
-  if (!quote?.text) {
-    const data = await chrome.storage.session.get(["lastSavedQuote"]);
-    quote = data.lastSavedQuote;
+  const run = (async () => {
+    let quote = quoteFromMessage;
+    if (!quote?.text) {
+      const data = await chrome.storage.session.get(["lastSavedQuote"]);
+      quote = data.lastSavedQuote;
+    }
+    const text = ContextNotes.normalizeSelection(quote?.text);
+    if (!text) return;
+    const key = `${String(quote?.id || "").trim()}::${text}`;
+    const now = Date.now();
+    if (key === lastExternalQuoteKey && now - lastExternalQuoteAt < 2500) {
+      return;
+    }
+    lastExternalQuoteKey = key;
+    lastExternalQuoteAt = now;
+
+    await loadPageQuotes();
+    if (quote?.page_url && state.page?.url && !pageUrlsMatch(quote.page_url, state.page.url)) {
+      await syncHighlightsToPage();
+      return;
+    }
+    addQuoteToNotes(quote);
+    rememberNoteQuoteBodies();
+    await syncHighlightsToPage();
+    switchPageTab("notes");
+    els.metaNotes?.focus();
+  })();
+
+  externalQuoteHandling = run;
+  try {
+    await run;
+  } finally {
+    if (externalQuoteHandling === run) externalQuoteHandling = null;
   }
-  await Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
-  if (quote?.page_url && state.page?.url && quote.page_url !== state.page.url) return;
-  if (quote?.text) addQuoteToNotes(quote);
-  switchPageTab("quotes");
-  els.metaNotes?.focus();
 }
 
 function addQuoteToNotes(quote, { switchTab = true } = {}) {
-  const text = normalizeSelection(quote?.text);
+  const text = ContextNotes.normalizeSelection(quote?.text);
   if (!text) return false;
-  const current = getNotesMarkdown();
-  const next = appendQuoteToNotes(current, quote);
-  if (next === current) return false;
-  setNotesMarkdown(next);
-  if (els.metaNotes) els.metaNotes.scrollTop = els.metaNotes.scrollHeight;
-  state.exportQuoteKeys.add(quoteExportKey(quote));
-  state.lastSavedSelection = text;
-  if (switchTab) switchPageTab("quotes");
-  void savePageDetails();
+  if (ContextNotes.notesContainsQuote(getNotesMarkdown(), text)) return false;
+  insertQuoteHtmlAtCaret(quote);
+  rememberNoteQuoteBodies();
+  if (switchTab) switchPageTab("notes");
+  void savePageDetails({ quiet: true });
   setStatus("Quote added to notes");
   return true;
 }
 
-async function saveQuote(text, note = "") {
-  const optimistic = {
-    id: `local-${Date.now()}`,
-    text,
-    note,
-    saved_at: new Date().toISOString(),
-  };
-  state.quotes = [optimistic, ...state.quotes.filter((q) => q.text !== text)];
-  renderPageQuotes();
-
-  try {
-    const res = await fetch(`${BACKEND}/library/quotes`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        page_id: state.savedPageId || "",
-        page_url: state.page?.url || "",
-        page_title: getDisplayTitle(),
-        note,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Save quote failed");
-    if (data.quote) {
-      state.quotes = [
-        data.quote,
-        ...state.quotes.filter((q) => q.id !== optimistic.id && q.text !== text),
-      ];
-      renderPageQuotes();
-    }
-    return true;
-  } catch (err) {
-    state.quotes = state.quotes.filter((q) => q.id !== optimistic.id);
-    renderPageQuotes();
-    setStatus(err.message, true);
-    return false;
+function insertQuoteHtmlAtCaret(quote) {
+  const html = ContextNotes.markdownToHtml(ContextNotes.quoteNotesSnippet(quote));
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = html;
+  const nodes = Array.from(wrapper.childNodes);
+  if (!nodes.length || !els.metaNotes) {
+    setNotesMarkdown(ContextNotes.appendQuoteToNotes(getNotesMarkdown(), quote));
+    return;
   }
+
+  const quoteEl = notesCaretQuote();
+  if (quoteEl) {
+    let last = quoteEl;
+    nodes.forEach((node) => {
+      last.after(node);
+      last = node;
+    });
+  } else {
+    const range = notesCaretRange();
+    if (range && els.metaNotes.contains(range.commonAncestorContainer)) {
+      range.deleteContents();
+      const fragment = document.createDocumentFragment();
+      nodes.forEach((node) => fragment.appendChild(node));
+      range.insertNode(fragment);
+    } else {
+      nodes.forEach((node) => els.metaNotes.appendChild(node));
+    }
+  }
+
+  const paragraph = ensureNotesWritableParagraph();
+  placeNotesCaret(paragraph, true);
+  if (els.metaNotes) els.metaNotes.scrollTop = els.metaNotes.scrollHeight;
+  decorateNoteQuoteControls();
+  updateNotesEmptyState();
+  refreshExportJsonPreview();
 }
 
 function getDisplayTitle() {
@@ -614,21 +671,10 @@ function emptyMetadata() {
     tldr: "",
     thoughts: "",
     notes: "",
+    dateAdded: "",
     tags: [],
     custom: [],
   };
-}
-
-function normalizeTags(raw) {
-  const tags = [];
-  const source = Array.isArray(raw) ? raw : [];
-  for (const item of source) {
-    const tag = String(item || "").trim();
-    if (tag && !tags.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
-      tags.push(tag);
-    }
-  }
-  return tags.slice(0, 40);
 }
 
 function normalizeMetadata(raw) {
@@ -641,7 +687,8 @@ function normalizeMetadata(raw) {
   meta.tldr = String(raw.tldr || "").trim();
   meta.thoughts = String(raw.thoughts || "").trim();
   meta.notes = String(raw.notes || "").trim();
-  meta.tags = normalizeTags(raw.tags);
+  meta.dateAdded = String(raw.dateAdded || raw.date_added || "").trim();
+  meta.tags = ContextBookshelf.normalizeTags(raw.tags);
   meta.custom = Array.isArray(raw.custom)
     ? raw.custom
         .map((item) => ({
@@ -665,6 +712,7 @@ function mergeMetadata(preferred, fallback) {
     tldr: chosen.tldr || base.tldr,
     thoughts: chosen.thoughts || base.thoughts,
     notes: chosen.notes || base.notes,
+    dateAdded: chosen.dateAdded || base.dateAdded,
     tags: chosen.tags.length ? chosen.tags : base.tags,
     custom: chosen.custom.length ? chosen.custom : base.custom,
   };
@@ -685,6 +733,7 @@ function collectMetadataFromForm() {
     tldr: els.metaTldr?.value || "",
     thoughts: els.metaThoughts?.value || "",
     notes: getNotesMarkdown(),
+    dateAdded: state.dateAdded || "",
     tags: state.tags,
     custom,
   });
@@ -711,6 +760,7 @@ function applyMetadataToForm(metadata) {
   if (els.metaTldr) els.metaTldr.value = meta.tldr;
   if (els.metaThoughts) els.metaThoughts.value = meta.thoughts;
   setNotesMarkdown(meta.notes);
+  state.dateAdded = meta.dateAdded;
   state.tags = meta.tags.slice();
   renderTagChips();
   renderCustomMetaFields(meta.custom);
@@ -788,222 +838,241 @@ function suggestMedium(page) {
   return "essay";
 }
 
-function todayDateAdded() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function buildBookshelfEntry() {
-  return {
-    title: getDisplayTitle(),
-    url: state.page?.url || "",
-    author: (els.metaAuthor?.value || "").trim(),
-    dateAdded: todayDateAdded(),
-    category: (els.metaCategory?.value || "").trim(),
-    medium: (els.metaMedium?.value || "").trim(),
-    tldr: (els.metaTldr?.value || "").trim(),
-    thoughts: (els.metaThoughts?.value || "").trim(),
-    tags: state.tags.slice(),
-    notes: markdownBlockquotesToFences(getNotesMarkdown().trim()),
-  };
-}
-
-function quoteExportKey(quote) {
-  return normalizeSelection(quote?.text || "");
-}
-
-function toMarkdownBlockquote(text) {
-  const body = String(text || "").trim();
-  if (!body) return "";
-  return body.split("\n").map((line) => (line.length ? `> ${line}` : ">")).join("\n");
-}
-
-function fencesToMarkdown(notes) {
-  return String(notes || "").replace(
-    /:::(quote|sidenote)\s*\n?([\s\S]*?)\s*:::/g,
-    (_, _kind, body) => toMarkdownBlockquote(body)
-  );
-}
-
-function markdownBlockquotesToFences(notes) {
-  const lines = String(notes || "").split("\n");
-  const out = [];
-  let quote = [];
-  const flush = () => {
-    if (!quote.length) return;
-    const body = quote.map((line) => line.replace(/^>\s?/, "")).join("\n").trim();
-    out.push(`:::quote\n${body}\n:::`);
-    quote = [];
-  };
-  for (const line of lines) {
-    if (/^>/.test(line)) quote.push(line);
-    else {
-      flush();
-      out.push(line);
-    }
-  }
-  flush();
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
-function quoteNotesSnippet(quote) {
-  const block = toMarkdownBlockquote(quote?.text);
-  const note = String(quote?.note || "").trim();
-  return note ? `${block}\n\n${note}` : block;
-}
-
-function renderNotesInline(text) {
-  let html = escapeHtml(String(text || ""));
-  html = html.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
-    '<a href="$2">$1</a>'
-  );
-  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  return html.replace(/\n/g, "<br>");
-}
-
-function markdownToNotesHtml(markdown) {
-  const source = fencesToMarkdown(String(markdown || "")).replace(/\r\n/g, "\n");
-  if (!source.trim()) return "";
-  const parts = [];
-  let paragraph = [];
-  let quote = [];
-  const flushParagraph = () => {
-    const text = paragraph.join("\n").trim();
-    paragraph = [];
-    if (text) parts.push(`<p>${renderNotesInline(text)}</p>`);
-  };
-  const flushQuote = () => {
-    const text = quote.join("\n").trim();
-    quote = [];
-    if (text) {
-      parts.push(`<blockquote class="custom-quote"><p>${renderNotesInline(text)}</p></blockquote>`);
-    }
-  };
-  for (const line of source.split("\n")) {
-    if (/^>/.test(line)) {
-      flushParagraph();
-      quote.push(line.replace(/^>\s?/, ""));
-      continue;
-    }
-    if (!line.trim()) {
-      flushQuote();
-      flushParagraph();
-      continue;
-    }
-    flushQuote();
-    paragraph.push(line);
-  }
-  flushQuote();
-  flushParagraph();
-  return parts.join("");
-}
-
-function serializeNotesInline(node) {
-  if (!node) return "";
-  if (node.nodeType === Node.TEXT_NODE) {
-    return String(node.nodeValue || "").replace(/\u00a0/g, " ");
-  }
-  if (node.nodeType !== Node.ELEMENT_NODE) return "";
-  const tag = node.tagName.toLowerCase();
-  if (tag === "br") return "\n";
-  const inner = Array.from(node.childNodes).map(serializeNotesInline).join("");
-  if (tag === "strong" || tag === "b") return inner ? `**${inner}**` : "";
-  if (tag === "em" || tag === "i") return inner ? `*${inner}*` : "";
-  if (tag === "code") return inner ? `\`${inner}\`` : "";
-  if (tag === "a") {
-    const href = node.getAttribute("href") || "";
-    return href && inner ? `[${inner}](${href})` : inner;
-  }
-  return inner;
-}
-
-function notesHtmlToMarkdown(root) {
-  if (!root) return "";
-  const blocks = [];
-  const walk = (node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = String(node.nodeValue || "").replace(/\u00a0/g, " ").trim();
-      if (text) blocks.push(text);
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const tag = node.tagName.toLowerCase();
-    if (tag === "blockquote") {
-      const text = serializeNotesInline(node).replace(/\n{2,}/g, "\n").trim();
-      if (text) blocks.push(toMarkdownBlockquote(text));
-      return;
-    }
-    if (tag === "ul" || tag === "ol") {
-      const items = Array.from(node.children)
-        .filter((el) => el.tagName.toLowerCase() === "li")
-        .map((li) => `- ${serializeNotesInline(li).trim()}`)
-        .filter((item) => item !== "-");
-      if (items.length) blocks.push(items.join("\n"));
-      return;
-    }
-    if (/^h[1-3]$/.test(tag)) {
-      const text = serializeNotesInline(node).trim();
-      if (text) blocks.push(`${"#".repeat(Number(tag[1]))} ${text}`);
-      return;
-    }
-    if (tag === "p") {
-      const text = serializeNotesInline(node).trim();
-      if (text) blocks.push(text);
-      return;
-    }
-    if (tag === "div") {
-      const hasBlock = Array.from(node.children).some((el) =>
-        /^(p|div|blockquote|ul|ol|h1|h2|h3|pre)$/i.test(el.tagName)
-      );
-      if (hasBlock) Array.from(node.childNodes).forEach(walk);
-      else {
-        const text = serializeNotesInline(node).trim();
-        if (text) blocks.push(text);
-      }
-      return;
-    }
-    Array.from(node.childNodes).forEach(walk);
-  };
-  Array.from(root.childNodes).forEach(walk);
-  return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
 function getNotesMarkdown() {
-  return notesHtmlToMarkdown(els.metaNotes);
+  return ContextNotes.htmlToMarkdown(els.metaNotes);
 }
 
 function setNotesMarkdown(value) {
   if (!els.metaNotes) return;
-  els.metaNotes.innerHTML = markdownToNotesHtml(value);
+  els.metaNotes.innerHTML = ContextNotes.markdownToHtml(value);
+  ensureNotesWritableParagraph();
+  decorateNoteQuoteControls();
+  rememberNoteQuoteBodies();
   updateNotesEmptyState();
-  syncExportChecksFromNotes();
   refreshExportJsonPreview();
 }
 
-function notesEditorIsEmpty() {
-  return !(els.metaNotes?.innerText || "").replace(/\u00a0/g, " ").trim();
+function decorateNoteQuoteControls() {
+  if (!els.metaNotes) return;
+  els.metaNotes.querySelectorAll("blockquote").forEach((quoteEl) => {
+    if (quoteEl.querySelector("[data-delete-quote]")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "note-quote-delete";
+    btn.dataset.deleteQuote = "1";
+    btn.title = "Remove quote";
+    btn.setAttribute("aria-label", "Remove quote");
+    btn.contentEditable = "false";
+    btn.tabIndex = -1;
+    btn.textContent = "×";
+    quoteEl.appendChild(btn);
+  });
+}
+
+function quoteTextFromBlockquote(quoteEl) {
+  if (!quoteEl) return "";
+  const parts = Array.from(quoteEl.querySelectorAll("p")).map((p) => p.innerText || "");
+  if (parts.length) return ContextNotes.normalizeSelection(parts.join("\n"));
+  const clone = quoteEl.cloneNode(true);
+  clone.querySelectorAll("button, [data-delete-quote]").forEach((el) => el.remove());
+  return ContextNotes.normalizeSelection(clone.innerText || "");
+}
+
+function removeNoteQuoteBlock(quoteEl) {
+  if (!quoteEl || !els.metaNotes?.contains(quoteEl)) return;
+  const text = quoteTextFromBlockquote(quoteEl);
+  const match = (state.quotes || []).find(
+    (quote) => ContextNotes.normalizeSelection(quote.text) === text
+  );
+  const next = ContextNotes.removeQuoteFromNotes(
+    getNotesMarkdown(),
+    match || { text }
+  );
+  setNotesMarkdown(next);
+  if (match) void deleteQuoteRecord(match, { silent: true });
+  schedulePageDraftSave();
+  void savePageDetails({ quiet: true });
+  setStatus("Quote removed");
+}
+
+function clearAllNotes() {
+  if (!els.metaNotes || notesDocumentIsEmpty()) return;
+  if (!window.confirm("Clear all notes for this page?")) return;
+  const bodies = ContextNotes.markdownQuoteBodies(getNotesMarkdown()).map((body) =>
+    ContextNotes.normalizeSelection(body)
+  );
+  const toDelete = (state.quotes || []).filter((quote) =>
+    bodies.includes(ContextNotes.normalizeSelection(quote.text))
+  );
+  setNotesMarkdown("");
+  for (const quote of toDelete) {
+    void deleteQuoteRecord(quote, { silent: true });
+  }
+  schedulePageDraftSave();
+  void savePageDetails({ quiet: true });
+  setStatus("Notes cleared");
+}
+
+function notesDocumentIsEmpty() {
+  const text = (els.metaNotes?.innerText || "").replace(/\u00a0/g, " ").trim();
+  return !text;
 }
 
 function updateNotesEmptyState() {
-  els.metaNotes?.classList.toggle("is-empty", notesEditorIsEmpty());
+  els.metaNotes?.classList.toggle("is-empty", notesDocumentIsEmpty());
+}
+
+function rememberNoteQuoteBodies() {
+  state.lastNoteQuoteBodies = ContextNotes.markdownQuoteBodies(getNotesMarkdown()).map(
+    (body) => ContextNotes.normalizeSelection(body)
+  );
+}
+
+function pruneQuotesRemovedFromNotes() {
+  const current = new Set(
+    ContextNotes.markdownQuoteBodies(getNotesMarkdown()).map((body) =>
+      ContextNotes.normalizeSelection(body)
+    )
+  );
+  const removed = state.lastNoteQuoteBodies.filter((body) => body && !current.has(body));
+  state.lastNoteQuoteBodies = Array.from(current);
+  for (const text of removed) {
+    const quote = (state.quotes || []).find(
+      (item) => ContextNotes.normalizeSelection(item.text) === text
+    );
+    if (quote?.id && !String(quote.id).startsWith("local-")) {
+      void deleteQuoteRecord(quote, { silent: true });
+    } else if (quote) {
+      state.quotes = state.quotes.filter((item) => item !== quote);
+    }
+  }
+}
+
+function handleNotesQuoteClick(event) {
+  const deleteBtn = event.target.closest("[data-delete-quote]");
+  if (deleteBtn && els.metaNotes?.contains(deleteBtn)) {
+    event.preventDefault();
+    event.stopPropagation();
+    removeNoteQuoteBlock(deleteBtn.closest("blockquote"));
+    return;
+  }
+  const quoteEl = event.target.closest("blockquote");
+  if (!quoteEl || !els.metaNotes?.contains(quoteEl)) return;
+  if (window.getSelection()?.toString()) return;
+  const text = quoteTextFromBlockquote(quoteEl);
+  if (!text) return;
+  const match = (state.quotes || []).find(
+    (quote) => ContextNotes.normalizeSelection(quote.text) === text
+  );
+  void revealQuoteOnPage(match || { text });
+}
+
+function isBlankParagraph(el) {
+  return Boolean(el) && !(el.innerText || "").replace(/\u00a0/g, " ").trim();
+}
+
+function ensureNotesWritableParagraph() {
+  const editor = els.metaNotes;
+  if (!editor) return null;
+  const last = editor.lastElementChild;
+  if (
+    last
+    && last.matches("p")
+    && last.parentElement === editor
+    && isBlankParagraph(last)
+  ) {
+    return last;
+  }
+  const paragraph = document.createElement("p");
+  paragraph.appendChild(document.createElement("br"));
+  editor.appendChild(paragraph);
+  return paragraph;
+}
+
+function placeNotesCaret(node, atEnd = true) {
+  if (!node) return;
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  range.collapse(!atEnd);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  els.metaNotes?.focus();
+}
+
+function handleNotesBlankClick(event) {
+  if (event.target !== els.metaNotes) return;
+  event.preventDefault();
+  const paragraph = ensureNotesWritableParagraph();
+  placeNotesCaret(paragraph, true);
+}
+
+function notesCaretRange() {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  if (!els.metaNotes?.contains(range.commonAncestorContainer)) return null;
+  return range;
+}
+
+function notesCaretQuote() {
+  const range = notesCaretRange();
+  if (!range) return null;
+  const node = range.startContainer;
+  const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  return el?.closest("blockquote") || null;
+}
+
+function notesCaretBlock() {
+  const range = notesCaretRange();
+  if (!range) return null;
+  const node = range.startContainer;
+  const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  return el?.closest("p, div") || null;
+}
+
+function isNotesCaretAtEnd(node) {
+  const range = notesCaretRange();
+  if (!range?.collapsed || !node) return false;
+  const tail = range.cloneRange();
+  tail.selectNodeContents(node);
+  tail.setStart(range.endContainer, range.endOffset);
+  return !tail.toString().replace(/\u00a0/g, " ").trim();
+}
+
+function exitNotesQuote() {
+  const quote = notesCaretQuote();
+  if (!quote) return false;
+  const block = notesCaretBlock();
+  if (block && isBlankParagraph(block) && quote.contains(block) && block !== quote) {
+    block.remove();
+  }
+  const paragraph = document.createElement("p");
+  paragraph.appendChild(document.createElement("br"));
+  quote.after(paragraph);
+  placeNotesCaret(paragraph, true);
+  updateNotesEmptyState();
+  schedulePageDraftSave();
+  return true;
 }
 
 function applyNotesFormat(command) {
   els.metaNotes?.focus();
   document.execCommand(command, false, null);
   updateNotesEmptyState();
-  syncExportChecksFromNotes();
   schedulePageDraftSave();
   refreshExportJsonPreview();
 }
 
 function handleNotesKeydown(event) {
+  if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+    const quote = notesCaretQuote();
+    if (quote && (isBlankParagraph(notesCaretBlock()) || isNotesCaretAtEnd(quote))) {
+      event.preventDefault();
+      exitNotesQuote();
+      return;
+    }
+  }
   if (!(event.metaKey || event.ctrlKey)) return;
   const key = event.key.toLowerCase();
   if (key === "b") {
@@ -1021,196 +1090,41 @@ function handleNotesPaste(event) {
   document.execCommand("insertText", false, text);
 }
 
-function markdownQuoteBodies(notes) {
-  const bodies = [];
-  const lines = String(notes || "").split("\n");
-  let body = [];
-  const flush = () => {
-    if (!body.length) return;
-    bodies.push(body.join("\n"));
-    body = [];
-  };
-  for (const line of lines) {
-    if (/^>/.test(line)) body.push(line.replace(/^>\s?/, ""));
-    else flush();
-  }
-  flush();
-  return bodies;
-}
-
-function notesContainsQuote(notes, text) {
-  const needle = normalizeSelection(text);
-  if (!needle) return false;
-  const re = /:::(?:quote|sidenote)\s*\n?([\s\S]*?)\s*:::/g;
-  let match;
-  while ((match = re.exec(notes))) {
-    if (normalizeSelection(match[1]) === needle) return true;
-  }
-  return markdownQuoteBodies(notes).some((body) => normalizeSelection(body) === needle);
-}
-
-function quoteBlockRange(notes, text) {
-  const needle = normalizeSelection(text);
-  if (!needle) return null;
-  const re = /:::(?:quote|sidenote)\s*\n?([\s\S]*?)\s*:::/g;
-  let match;
-  while ((match = re.exec(notes))) {
-    if (normalizeSelection(match[1]) !== needle) continue;
-    return { start: match.index, end: match.index + match[0].length };
-  }
-  const source = String(notes || "");
-  const lines = source.split("\n");
-  let idx = 0;
-  let startIdx = -1;
-  let body = [];
-  for (let i = 0; i <= lines.length; i += 1) {
-    const line = i < lines.length ? lines[i] : null;
-    const isQuote = line !== null && /^>/.test(line);
-    if (isQuote) {
-      if (startIdx < 0) startIdx = idx;
-      body.push(line.replace(/^>\s?/, ""));
-    } else if (startIdx >= 0) {
-      if (normalizeSelection(body.join("\n")) === needle) {
-        return { start: startIdx, end: idx };
-      }
-      startIdx = -1;
-      body = [];
-    }
-    if (line !== null) idx += line.length + 1;
-  }
-  return null;
-}
-
-function consumeFollowingNote(notes, fenceEnd, note) {
-  const trimmedNote = String(note || "").trim();
-  if (!trimmedNote) return fenceEnd;
-  const after = notes.slice(fenceEnd);
-  const lead = after.match(/^\s*/)?.[0].length || 0;
-  const rest = after.slice(lead);
-  if (!rest.startsWith(trimmedNote)) return fenceEnd;
-  const trailing = rest.slice(trimmedNote.length);
-  if (trailing && !trailing.startsWith("\n")) return fenceEnd;
-  return fenceEnd + lead + trimmedNote.length;
-}
-
-function appendQuoteToNotes(notes, quote) {
-  if (notesContainsQuote(notes, quote?.text)) return notes;
-  const snippet = quoteNotesSnippet(quote);
-  return notes.trim() ? `${notes.trim()}\n\n${snippet}` : snippet;
-}
-
-function removeQuoteFromNotes(notes, quote) {
-  const range = quoteBlockRange(notes, quote?.text);
-  if (!range) return notes;
-  const end = consumeFollowingNote(notes, range.end, quote?.note);
-  return `${notes.slice(0, range.start)}${notes.slice(end)}`
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function replaceQuoteInNotes(notes, previous, next) {
-  const range = quoteBlockRange(notes, previous?.text);
-  if (!range) return next ? appendQuoteToNotes(notes, next) : notes;
-  const end = consumeFollowingNote(notes, range.end, previous?.note);
-  const replacement = next ? quoteNotesSnippet(next) : "";
-  const before = notes.slice(0, range.start).trimEnd();
-  const after = notes.slice(end).trimStart();
-  return [before, replacement, after].filter(Boolean).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
-function syncExportChecksFromNotes() {
-  const notes = getNotesMarkdown();
-  const next = new Set();
-  for (const quote of state.quotes || []) {
-    if (notesContainsQuote(notes, quote.text)) next.add(quoteExportKey(quote));
-  }
-  state.exportQuoteKeys = next;
-}
-
-function seedNotesFromSelectedQuotes() {
-  if (getNotesMarkdown().trim()) {
-    syncExportChecksFromNotes();
-    refreshExportJsonPreview();
-    return;
-  }
-  const quotes = sortQuotesByPageOrder(state.quotes || []);
-  if (!quotes.length) return;
-  setNotesMarkdown(formatQuoteNotes(quotes));
-  quotes.forEach((quote) => state.exportQuoteKeys.add(quoteExportKey(quote)));
-  void savePageDetails();
-}
-
-function quotesSelectedForExport() {
-  const selected = (state.quotes || []).filter((quote) =>
-    state.exportQuoteKeys.has(quoteExportKey(quote))
-  );
-  return sortQuotesByPageOrder(selected);
-}
-
-function sortQuotesByPageOrder(quotes) {
-  const pageText = normalizeSelection(state.page?.visible_text || "");
-  return quotes.slice().sort((a, b) => {
-    const aPos = pageText.indexOf(quoteExportKey(a));
-    const bPos = pageText.indexOf(quoteExportKey(b));
-    const aRank = aPos < 0 ? Number.MAX_SAFE_INTEGER : aPos;
-    const bRank = bPos < 0 ? Number.MAX_SAFE_INTEGER : bPos;
-    if (aRank !== bRank) return aRank - bRank;
-    return String(a.saved_at || "").localeCompare(String(b.saved_at || ""));
+function buildBookshelfEntry(overrides = {}) {
+  const meta = overrides.metadata || collectMetadataFromForm();
+  return ContextBookshelf.buildEntry({
+    title: overrides.title || getDisplayTitle(),
+    url: overrides.url || state.page?.url || "",
+    author: meta.author,
+    dateAdded: meta.dateAdded,
+    category: meta.category,
+    medium: meta.medium,
+    tldr: meta.tldr,
+    thoughts: meta.thoughts,
+    tags: meta.tags,
+    notes: meta.notes,
   });
 }
 
-function formatQuoteNotes(quotes) {
-  if (!quotes.length) return "";
-  return quotes.map((quote) => quoteNotesSnippet(quote)).join("\n\n");
-}
-
-function escapeTemplateLiteral(text) {
-  return String(text || "")
-    .replace(/\\/g, "\\\\")
-    .replace(/`/g, "\\`")
-    .replace(/\$\{/g, "\\${");
-}
-
-function formatNotesLiteral(notes) {
-  if (!notes) return "``";
-  return `\`${escapeTemplateLiteral(notes)}\``;
-}
-
-function formatTagsLiteral(tags) {
-  const list = normalizeTags(tags);
-  if (!list.length) return "['']";
-  return `[${list
-    .map((tag) => `'${String(tag).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`)
-    .join(", ")}]`;
-}
-
-function formatBookshelfJson(entry) {
-  return `{
-    title: ${JSON.stringify(entry.title || "")},
-    url: ${JSON.stringify(entry.url || "")},
-    author: ${JSON.stringify(entry.author || "")},
-    dateAdded: ${JSON.stringify(entry.dateAdded || todayDateAdded())},
-    category: ${JSON.stringify(entry.category || "")},
-    medium: ${JSON.stringify(entry.medium || "")},
-    tldr: ${JSON.stringify(entry.tldr || "")},
-    thoughts: ${JSON.stringify(entry.thoughts || "")},
-    tags: ${formatTagsLiteral(entry.tags || [])},
-    notes: ${formatNotesLiteral(entry.notes || "")}
-  }`;
-}
-
 function refreshExportJsonPreview() {
-  if (!els.exportJsonPreview) return;
-  els.exportJsonPreview.textContent = formatBookshelfJson(buildBookshelfEntry());
+  const entry = buildBookshelfEntry();
+  if (els.exportJsonPreview) {
+    els.exportJsonPreview.textContent = ContextBookshelf.format(entry);
+  }
+  if (els.exportNotesPreview) {
+    els.exportNotesPreview.innerHTML = entry.notes
+      ? ContextNotes.markdownToHtml(entry.notes)
+      : '<p class="muted">Notes will appear here as you write them.</p>';
+  }
 }
 
 async function copyBookshelfJson() {
-  const text = formatBookshelfJson(buildBookshelfEntry());
+  const text = ContextBookshelf.format(buildBookshelfEntry());
   refreshExportJsonPreview();
   const copied = await copyTextToClipboard(text);
   if (copied) {
-    const button = els.copyExportJsonBtn;
-    if (button) {
+    for (const button of [els.copyExportJsonBtn, els.copyNotesJsonBtn]) {
+      if (!button) continue;
       const previous = button.textContent;
       button.textContent = "Copied";
       window.setTimeout(() => {
@@ -1285,6 +1199,7 @@ function schedulePageDraftSave() {
   clearTimeout(pageDraftTimer);
   pageDraftTimer = setTimeout(() => {
     persistPageDraft();
+    if (state.savedPageId) void savePageDetails({ quiet: true });
   }, 400);
 }
 
@@ -1302,7 +1217,6 @@ async function persistPageDraft() {
   const draft = {
     title: getDisplayTitle(),
     metadata: collectMetadataFromForm(),
-    exportQuoteKeys: Array.from(state.exportQuoteKeys),
   };
   await chrome.storage.local.set({ [`pageDraft:${state.page.url}`]: draft });
 }
@@ -1328,7 +1242,7 @@ async function clearLocalPageDrafts() {
 
   state.exploreCache = {};
   state.quotes = [];
-  state.exportQuoteKeys = new Set();
+  state.dateAdded = "";
   state.tags = [];
   state.lastSavedSelection = "";
   applyMetadataToForm(emptyMetadata());
@@ -1349,10 +1263,14 @@ async function clearAllPageHighlights() {
   }
 }
 
-async function savePageDetails() {
+async function savePageDetails({ quiet = false } = {}) {
   if (!state.page?.url) return;
   const title = getDisplayTitle();
   const metadata = collectMetadataFromForm();
+  if (!metadata.dateAdded) {
+    metadata.dateAdded = ContextBookshelf.todayDateAdded();
+    state.dateAdded = metadata.dateAdded;
+  }
   state.page.title = title;
   state.page.metadata = metadata;
   await persistPageDraft();
@@ -1368,7 +1286,7 @@ async function savePageDetails() {
         const data = await res.json();
         throw new Error(data.error || "Could not update page details");
       }
-      setStatus("Details updated");
+      if (!quiet) setStatus("Details updated");
     } catch (err) {
       setStatus(err.message, true);
     }
@@ -1378,12 +1296,18 @@ async function savePageDetails() {
 async function syncHighlightsToPage() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      await chrome.tabs.sendMessage(tab.id, { type: "REPAINT_HIGHLIGHTS" });
-    }
+    if (!tab?.id) return;
+    await chrome.tabs.sendMessage(tab.id, {
+      type: "REPAINT_HIGHLIGHTS",
+      quotes: quotesForPageHighlights(),
+    }).catch(() => {});
   } catch {
     // Restricted pages (e.g. chrome://) cannot host highlights.
   }
+}
+
+function quotesForPageHighlights() {
+  return ContextNotes.quotesForHighlights(getNotesMarkdown(), state.quotes);
 }
 
 async function revealQuoteOnPage(quote) {
@@ -1504,7 +1428,6 @@ async function refreshPageContext() {
   if (isNewPage) {
     state.history = [];
     state.quotes = [];
-    state.exportQuoteKeys = new Set();
     els.messages.innerHTML = "";
     removeChatEmptyHint();
     els.question.value = "";
@@ -1515,7 +1438,6 @@ async function refreshPageContext() {
   const suggestedTitle = page.title || "Untitled page";
   const suggestedMetadata = normalizeMetadata(page.metadata);
   const draft = await loadPageDraft(page.url);
-  applyExportQuoteKeys(draft);
 
   els.site.textContent = page.site || page.url || "";
   if (els.pageTypeHint) {
@@ -1545,7 +1467,6 @@ async function syncPageLibraryState() {
   const suggestedTitle = state.page.title || "Untitled page";
   const suggestedMetadata = normalizeMetadata(state.page.metadata);
   const draft = await loadPageDraft(previousUrl);
-  applyExportQuoteKeys(draft);
 
   try {
     const res = await fetch(`${BACKEND}/library/by-url?url=${encodeURIComponent(previousUrl)}`);
@@ -1568,7 +1489,8 @@ async function syncPageLibraryState() {
     resizeTitleField();
     state.page.title = getDisplayTitle();
     state.page.metadata = collectMetadataFromForm();
-    await Promise.all([loadPageQuotes(), syncHighlightsToPage()]);
+    await loadPageQuotes();
+    await syncHighlightsToPage();
     const provider = await getBackendProvider();
     setStatus(provider ? `Ready (${provider})` : "Ready");
   } catch (err) {
@@ -1591,249 +1513,28 @@ async function loadPageQuotes() {
     state.quotes = (data.quotes || []).sort(
       (a, b) => String(b.saved_at || "").localeCompare(String(a.saved_at || ""))
     );
-    renderPageQuotes();
-    seedNotesFromSelectedQuotes();
+    rememberNoteQuoteBodies();
+    refreshExportJsonPreview();
   } catch (err) {
     setStatus(err.message, true);
   }
 }
 
-function formatQuoteTime(savedAt) {
-  if (!savedAt) return "";
-  const date = new Date(savedAt);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function applyExportQuoteKeys(draft) {
-  if (!Array.isArray(draft?.exportQuoteKeys)) return;
-  state.exportQuoteKeys = new Set(
-    draft.exportQuoteKeys.map((key) => normalizeSelection(key)).filter(Boolean)
-  );
-}
-
-function renderPageQuotes() {
-  refreshExportJsonPreview();
-}
-
-function quoteApiPath(quoteId) {
-  return `${BACKEND}/library/quotes/${encodeURIComponent(String(quoteId || "").trim())}`;
-}
-
-function handlePageQuoteAction(event) {
-  const deleteBtn = event.target.closest("[data-quote-delete]");
-  if (deleteBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    const card = deleteBtn.closest(".quote-card");
-    const quote = findQuoteById(
-      deleteBtn.dataset.quoteId || card?.dataset.quoteId,
-      Number(card?.dataset.quoteIndex)
-    );
-    if (quote) void deleteQuote(quote);
-    return;
+async function deleteQuoteRecord(quote, { silent = false } = {}) {
+  const id = String(quote?.id || "").trim();
+  if (id && !id.startsWith("local-")) {
+    try {
+      const res = await fetch(`${BACKEND}/library/quotes/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 404) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Could not delete quote (${res.status})`);
+      }
+    } catch (err) {
+      if (!silent) setStatus(err.message, true);
+    }
   }
-
-  const editBtn = event.target.closest("[data-quote-edit]");
-  if (editBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    const card = editBtn.closest(".quote-card");
-    const quote = findQuoteById(
-      editBtn.dataset.quoteId || card?.dataset.quoteId,
-      Number(card?.dataset.quoteIndex)
-    );
-    if (quote && card) startQuoteEdit(card, quote);
-    return;
-  }
-
-  handleQuoteEditAction(event);
-  if (event.defaultPrevented) return;
-
-  if (event.target.closest(".quote-export, [data-quote-export]")) return;
-
-  const card = event.target.closest(".quote-card");
-  if (!card || card.classList.contains("editing")) return;
-  if (event.target.closest("button, a, textarea, input, label")) return;
-  const quote = findQuoteById(card.dataset.quoteId, Number(card.dataset.quoteIndex));
-  if (quote) void revealQuoteOnPage(quote);
-}
-
-function findQuoteById(quoteId, quoteIndex) {
-  const normalizedId = String(quoteId || "").trim();
-  if (normalizedId) {
-    const match = state.quotes.find((q) => String(q.id || "").trim() === normalizedId);
-    if (match) return match;
-  }
-  if (quoteIndex >= 0 && quoteIndex < state.quotes.length) {
-    return state.quotes[quoteIndex];
-  }
-  return null;
-}
-
-function handleQuoteExportToggle(event) {
-  const input = event.target.closest("[data-quote-export]");
-  if (!input) return;
-  const card = input.closest(".quote-card");
-  const quote = findQuoteById(
-    card?.dataset.quoteId,
-    Number(card?.dataset.quoteIndex)
-  );
-  if (!quote) return;
-  const key = quoteExportKey(quote);
-  if (input.checked) {
-    state.exportQuoteKeys.add(key);
-    setNotesMarkdown(appendQuoteToNotes(getNotesMarkdown(), quote));
-  } else {
-    state.exportQuoteKeys.delete(key);
-    setNotesMarkdown(removeQuoteFromNotes(getNotesMarkdown(), quote));
-  }
-  void persistPageDraft();
-}
-
-function rememberQuoteExportKey(previousText, nextText) {
-  const oldKey = normalizeSelection(previousText);
-  const newKey = normalizeSelection(nextText);
-  if (!oldKey || oldKey === newKey) return;
-  if (!state.exportQuoteKeys.has(oldKey)) return;
-  state.exportQuoteKeys.delete(oldKey);
-  if (newKey) state.exportQuoteKeys.add(newKey);
-}
-
-function handleQuoteEditAction(event) {
-  const saveBtn = event.target.closest("[data-quote-save]");
-  const cancelBtn = event.target.closest("[data-quote-cancel-edit]");
-  if (!saveBtn && !cancelBtn) return;
-
-  const card = event.target.closest(".quote-card");
-  if (!card) return;
-
-  event.preventDefault();
-  event.stopPropagation();
-
-  const quote = findQuoteById(card.dataset.quoteId, Number(card.dataset.quoteIndex));
-  if (!quote) {
-    setStatus("Could not find that quote — try refreshing", true);
-    return;
-  }
-
-  if (saveBtn) {
-    void saveQuoteEdit(card, quote);
-    return;
-  }
-  if (cancelBtn) {
-    renderPageQuotes();
-  }
-}
-
-function startQuoteEdit(card, quote) {
-  card.classList.add("editing");
-  const form = document.createElement("div");
-  form.className = "quote-edit-form";
-  form.innerHTML = `
-    <textarea rows="4" data-quote-edit-text></textarea>
-    <input type="text" data-quote-edit-note placeholder="Optional note…" />
-    <div class="quote-edit-actions">
-      <button type="button" class="toolbar-btn primary" data-quote-save>Save changes</button>
-      <button type="button" class="text-btn" data-quote-cancel-edit>Close</button>
-    </div>
-  `;
-  form.querySelector("[data-quote-edit-text]").value = quote.text || "";
-  form.querySelector("[data-quote-edit-note]").value = quote.note || "";
-  card.querySelector(".quote-card-actions")?.replaceWith(form);
-}
-
-async function saveQuoteEdit(card, quote) {
-  const text = card.querySelector("[data-quote-edit-text]")?.value?.trim() || "";
-  const note = card.querySelector("[data-quote-edit-note]")?.value?.trim() || "";
-  if (!text) {
-    setStatus("Quote text cannot be empty", true);
-    return;
-  }
-  rememberQuoteExportKey(quote.text, text);
-  if (notesContainsQuote(getNotesMarkdown(), quote.text) || state.exportQuoteKeys.has(quoteExportKey(quote))) {
-    setNotesMarkdown(replaceQuoteInNotes(getNotesMarkdown(), quote, { text, note }));
-  }
-  void persistPageDraft();
-  if (!quote.id || quote.id.startsWith("local-")) {
-    quote.text = text;
-    quote.note = note;
-    renderPageQuotes();
-    return;
-  }
-  try {
-    const res = await fetch(quoteApiPath(quote.id), {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, note }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Could not update quote");
-    const idx = state.quotes.findIndex((q) => q.id === quote.id);
-    if (idx >= 0) state.quotes[idx] = data.quote;
-    renderPageQuotes();
-    await syncHighlightsToPage();
-    setStatus("Quote updated");
-  } catch (err) {
-    setStatus(err.message, true);
-  }
-}
-
-async function deleteQuote(quote) {
-  const quoteId = String(quote?.id || "").trim();
-  const confirmed = await showConfirmDialog({
-    title: "Delete quote?",
-    message: "Remove this quote from your library?",
-    confirmText: "Delete",
-    cancelText: "Keep",
-    danger: true,
-  });
-  if (!confirmed) return;
-
-  const current = findQuoteById(quoteId, -1) || quote;
-  const id = String(current?.id || quoteId).trim();
-  state.exportQuoteKeys.delete(quoteExportKey(current));
-  setNotesMarkdown(removeQuoteFromNotes(getNotesMarkdown(), current));
-  void persistPageDraft();
-
-  if (!id || id.startsWith("local-")) {
-    state.quotes = state.quotes.filter((q) => String(q.id || "").trim() !== id);
-    renderPageQuotes();
-    void syncHighlightsToPage();
-    setStatus("Quote deleted");
-    return;
-  }
-
-  const previousQuotes = state.quotes.slice();
-  state.quotes = state.quotes.filter((q) => String(q.id || "").trim() !== id);
-  renderPageQuotes();
+  state.quotes = (state.quotes || []).filter((item) => String(item.id || "").trim() !== id);
   void syncHighlightsToPage();
-
-  try {
-    const ready = await ensureBackendReady({ quiet: true });
-    if (!ready) throw new Error("Backend not connected");
-
-    const res = await fetch(quoteApiPath(id), { method: "DELETE" });
-    if (res.status === 404) {
-      setStatus("Quote deleted");
-      return;
-    }
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || `Could not delete quote (${res.status})`);
-    }
-    setStatus("Quote deleted");
-  } catch (err) {
-    state.quotes = previousQuotes;
-    renderPageQuotes();
-    setStatus(err.message, true);
-    void loadPageQuotes();
-  }
 }
 
 function markPageSaved(saved) {
@@ -1929,6 +1630,10 @@ async function saveCurrentPage() {
   try {
     state.page.title = getDisplayTitle();
     state.page.metadata = collectMetadataFromForm();
+    if (!state.page.metadata.dateAdded) {
+      state.page.metadata.dateAdded = ContextBookshelf.todayDateAdded();
+      state.dateAdded = state.page.metadata.dateAdded;
+    }
     const res = await fetch(`${BACKEND}/library/save-page`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1952,22 +1657,42 @@ async function loadExploreSuggestions() {
   if (!state.page || state.busy) return;
   const title = getDisplayTitle();
   const question = `Explore more articles related to ${title}`;
-  const itemsPromise = fetchExploreItems();
-  const result = await askQuestion(question);
-  const items = await itemsPromise.catch(() => []);
-  if (!result?.assistantNode) return;
-  const extras = items.filter((item) => !String(result.answer || "").includes(item.url));
-  if (!extras.length) return;
-  const extraMd = formatExploreMarkdown(extras);
-  const introHtml = result.answer
-    ? renderMarkdown(result.answer)
-    : `<p>Here are more specific articles related to <strong>${escapeHtml(title)}</strong>.</p>`;
-  result.assistantNode.classList.add("markdown-body", "explore-answer");
-  result.assistantNode.classList.remove("error");
-  result.assistantNode.innerHTML = `${introHtml}${renderExploreCardsHtml(extras)}`;
-  const last = state.history[state.history.length - 1];
-  if (last?.role === "assistant") {
-    last.content = [result.answer, extraMd].filter(Boolean).join("\n\n").trim();
+
+  switchPageTab("chat");
+  state.busy = true;
+  els.askBtn.disabled = true;
+  removeChatEmptyHint();
+  appendMessage("user", question);
+  const assistantNode = appendMessage("assistant", "_Finding related articles…_");
+  setStatus("Finding related articles…");
+
+  try {
+    const items = await fetchExploreItems();
+    if (!items.length) {
+      assistantNode.innerHTML = renderMarkdown(
+        "I couldn't find related links right now. Try again in a moment."
+      );
+      setStatus("No suggestions", true);
+      return;
+    }
+    const intro = `Here are related articles you might want to open next, based on **${title}**.`;
+    const extraMd = formatExploreMarkdown(items);
+    assistantNode.classList.add("explore-answer");
+    assistantNode.classList.remove("error");
+    assistantNode.innerHTML = `${renderMarkdown(intro)}${renderExploreCardsHtml(items)}`;
+    state.history.push({ role: "user", content: question });
+    state.history.push({
+      role: "assistant",
+      content: [intro, extraMd].filter(Boolean).join("\n\n").trim(),
+    });
+    setStatus("Explore ready");
+  } catch (err) {
+    assistantNode.textContent = formatUserError(err.message);
+    assistantNode.classList.add("error");
+    setStatus(formatUserError(err.message), true);
+  } finally {
+    state.busy = false;
+    els.askBtn.disabled = false;
   }
 }
 
@@ -2203,8 +1928,24 @@ async function loadSavedPages() {
 
 function showSavedList() {
   state.selectedSavedId = null;
+  state.savedDetailPage = null;
   els.savedList.hidden = false;
   els.savedDetail.hidden = true;
+}
+
+async function copySavedBookshelfJson() {
+  const page = state.savedDetailPage;
+  if (!page) {
+    setStatus("Open a saved page first", true);
+    return;
+  }
+  const entry = ContextBookshelf.buildEntry({
+    title: page.title,
+    url: page.url,
+    ...(page.metadata || {}),
+  });
+  const copied = await copyTextToClipboard(ContextBookshelf.format(entry));
+  setStatus(copied ? "JSON copied" : "Select the JSON and copy it", !copied);
 }
 
 async function openSavedPage(pageId) {
@@ -2213,30 +1954,20 @@ async function openSavedPage(pageId) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Failed to load page");
     const page = data.page;
+    const meta = normalizeMetadata(page.metadata);
     state.selectedSavedId = pageId;
+    state.savedDetailPage = page;
     els.savedList.hidden = true;
     els.savedDetail.hidden = false;
     els.savedDetailTitle.textContent = page.title || "Untitled";
     els.savedDetailUrl.textContent = page.url || "";
     els.savedSummary.innerHTML = renderMarkdown(page.summary || "_No summary._");
 
-    els.savedQuotes.innerHTML = "";
-    const quotes = (page.quotes || []).slice().sort(
-      (a, b) => String(b.saved_at || "").localeCompare(String(a.saved_at || ""))
-    );
-    for (const quote of quotes) {
-      const item = document.createElement("li");
-      item.className = "quote-list-item";
-      const when = formatQuoteTime(quote.saved_at);
-      item.innerHTML = `
-        <blockquote>${escapeHtml(quote.text)}</blockquote>
-        ${quote.note ? `<div class="quote-note-text">${escapeHtml(quote.note)}</div>` : ""}
-        ${when ? `<time class="quote-time muted">${escapeHtml(when)}</time>` : ""}
-      `;
-      els.savedQuotes.appendChild(item);
-    }
-    if (!quotes.length) {
-      els.savedQuotes.innerHTML = '<li class="muted">No quotes saved for this page.</li>';
+    const notes = meta.notes || "";
+    if (els.savedNotes) {
+      els.savedNotes.innerHTML = notes
+        ? ContextNotes.markdownToHtml(notes)
+        : '<p class="muted">No notes saved for this page.</p>';
     }
 
     els.savedChat.innerHTML = "";
@@ -2400,7 +2131,7 @@ async function clearSavedLibrary() {
     state.selectedSavedId = null;
     state.quotes = [];
     markPageSaved(false);
-    renderPageQuotes();
+    refreshExportJsonPreview();
     setStatus("Saved pages cleared");
     if (state.view === "chat") void refreshPage();
     if (state.view === "saved") loadSavedPages();
@@ -2555,7 +2286,7 @@ function resetExtensionClientState() {
   state.savedPageId = null;
   state.history = [];
   state.quotes = [];
-  state.exportQuoteKeys = new Set();
+  state.dateAdded = "";
   state.tags = [];
   state.savedPages = [];
   state.selectedSavedId = null;
@@ -2566,7 +2297,7 @@ function resetExtensionClientState() {
   state.bucketTree = {};
   renderChatHistory([]);
   markPageSaved(false);
-  renderPageQuotes();
+  refreshExportJsonPreview();
   if (els.lifeSummary) els.lifeSummary.innerHTML = "";
   if (els.lifeEvents) {
     els.lifeEvents.innerHTML =

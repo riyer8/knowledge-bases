@@ -92,6 +92,34 @@ def test_save_quote(library_env, monkeypatch):
     assert quotes[0]["text"] == "An important passage"
 
 
+def test_save_quote_dedupes_same_passage(library_env, monkeypatch):
+    monkeypatch.setattr(library_env, "_generate_summary", lambda page: "Summary")
+    monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
+    monkeypatch.setattr(library_env, "remember_concept", lambda **kwargs: {"id": "c1"})
+
+    saved = library_env.save_page({
+        "url": "https://example.com/dedupe",
+        "title": "Dedupe",
+        "visible_text": "Content",
+    })
+    first = library_env.save_quote(
+        text="Same passage",
+        page_id=saved["id"],
+        page_url=saved["url"],
+        page_title=saved["title"],
+    )
+    second = library_env.save_quote(
+        text="Same passage",
+        page_id=saved["id"],
+        page_url=saved["url"],
+        page_title=saved["title"],
+        note="added later",
+    )
+    assert second["id"] == first["id"]
+    assert second["note"] == "added later"
+    assert len(library_env.list_quotes(page_id=saved["id"])) == 1
+
+
 def test_chat_history_persisted(library_env, monkeypatch):
     monkeypatch.setattr(library_env, "_generate_summary", lambda page: "Summary")
     monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
