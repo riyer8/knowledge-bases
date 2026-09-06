@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Context",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Highlight passages, keep notes, copy them onto your site",
   "icons": {
     "16": "icons/icon-16.png",

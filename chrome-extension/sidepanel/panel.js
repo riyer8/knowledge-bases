@@ -383,9 +383,16 @@ function bindEvents() {
     schedulePageDraftSave();
     refreshExportJsonPreview();
   });
-  els.title?.addEventListener("blur", savePageDetails);
+  els.title?.addEventListener("blur", () => {
+    if (els.title) {
+      const normalized = normalizeTitle(els.title.value);
+      if (els.title.value !== normalized) els.title.value = normalized;
+      resizeTitleField();
+    }
+    savePageDetails();
+  });
   els.title?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (event.key === "Enter") {
       event.preventDefault();
       els.title.blur();
     }
@@ -416,10 +423,11 @@ function bindEvents() {
     refreshExportJsonPreview();
   });
   els.metaNotes?.addEventListener("input", () => {
-    if (notesStructuralUpdate) return;
-    stabilizeNotesQuotes();
-    repairBrokenNoteQuotes();
+    if (notesStructuralDepth > 0) return;
+    normalizeNotesQuoteBlocks();
+    convertTypedBlockquoteMarkers();
     decorateNoteQuoteControls();
+    markLinkedQuotesFromState();
     updateNotesEmptyState();
     pruneQuotesRemovedFromNotes();
     schedulePageDraftSave();
@@ -527,6 +535,7 @@ function switchView(view) {
   if (view === "chat") {
     loadPageQuotes();
     refreshSelectionFromPage();
+    resizeTitleField();
   }
 }
 
@@ -626,52 +635,81 @@ function addQuoteToNotes(quote, { switchTab = true } = {}) {
 }
 
 function insertQuoteHtmlAtCaret(quote) {
-  const html = ContextNotes.markdownToHtml(ContextNotes.quoteNotesSnippet(quote));
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = html;
-  const nodes = Array.from(wrapper.childNodes);
-  if (!nodes.length || !els.metaNotes) {
-    setNotesMarkdown(ContextNotes.appendQuoteToNotes(getNotesMarkdown(), quote));
-    return;
-  }
-
-  const quoteEl = notesCaretQuote();
-  if (quoteEl) {
-    let last = quoteEl;
-    nodes.forEach((node) => {
-      last.after(node);
-      last = node;
-    });
-  } else {
-    const range = notesCaretRange();
-    if (range && els.metaNotes.contains(range.commonAncestorContainer)) {
-      range.deleteContents();
-      const fragment = document.createDocumentFragment();
-      nodes.forEach((node) => fragment.appendChild(node));
-      range.insertNode(fragment);
-    } else {
-      nodes.forEach((node) => els.metaNotes.appendChild(node));
+  withNotesStructuralUpdate(() => {
+    const html = ContextNotes.markdownToHtml(ContextNotes.quoteNotesSnippet(quote));
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = html;
+    const nodes = Array.from(wrapper.childNodes);
+    if (!nodes.length || !els.metaNotes) {
+      setNotesMarkdown(ContextNotes.appendQuoteToNotes(getNotesMarkdown(), quote), { force: true });
+      return;
     }
-  }
 
-  const paragraph = ensureNotesWritableParagraph();
-  placeNotesCaret(paragraph, true);
-  if (els.metaNotes) els.metaNotes.scrollTop = els.metaNotes.scrollHeight;
-  stabilizeNotesQuotes();
-  decorateNoteQuoteControls();
-  updateNotesEmptyState();
-  refreshExportJsonPreview();
+    const linkKey = ContextNotes.quoteMatchKey(quote?.text);
+    nodes.forEach((node) => {
+      if (node.nodeType === 1 && node.tagName?.toLowerCase() === "blockquote" && linkKey) {
+        node.dataset.quoteKey = linkKey;
+      }
+    });
+
+    const quoteEl = notesCaretQuote();
+    if (quoteEl) {
+      let last = quoteEl;
+      nodes.forEach((node) => {
+        last.after(node);
+        last = node;
+      });
+    } else {
+      const range = notesCaretRange();
+      if (range && els.metaNotes.contains(range.commonAncestorContainer)) {
+        range.deleteContents();
+        const fragment = document.createDocumentFragment();
+        nodes.forEach((node) => fragment.appendChild(node));
+        range.insertNode(fragment);
+      } else {
+        nodes.forEach((node) => els.metaNotes.appendChild(node));
+      }
+    }
+
+    const paragraph = ensureNotesWritableParagraph();
+    placeNotesCaret(paragraph, true);
+    if (els.metaNotes) els.metaNotes.scrollTop = els.metaNotes.scrollHeight;
+    stabilizeNotesQuotes();
+    decorateNoteQuoteControls();
+    markLinkedQuotesFromState();
+    updateNotesEmptyState();
+    refreshExportJsonPreview();
+  });
+}
+
+function normalizeTitle(text) {
+  if (typeof ContextPageDrafts !== "undefined" && ContextPageDrafts.normalizeTitle) {
+    return ContextPageDrafts.normalizeTitle(text);
+  }
+  return String(text || "").replace(/\s+/g, " ").trim();
 }
 
 function getDisplayTitle() {
-  return (els.title?.value || state.page?.title || "").trim() || "Untitled page";
+  return normalizeTitle(els.title?.value || state.page?.title || "") || "Untitled page";
 }
+
+const TITLE_MAX_HEIGHT_PX = 72;
 
 function resizeTitleField() {
   const field = els.title;
   if (!field) return;
-  field.style.height = "auto";
-  field.style.height = `${field.scrollHeight}px`;
+  const run = () => {
+    field.style.height = "auto";
+    const measured = field.scrollHeight || 24;
+    field.style.height = `${Math.min(Math.max(measured, 24), TITLE_MAX_HEIGHT_PX)}px`;
+  };
+  requestAnimationFrame(run);
+}
+
+function setTitleValue(value) {
+  if (!els.title) return;
+  els.title.value = normalizeTitle(value);
+  resizeTitleField();
 }
 
 function emptyMetadata() {
@@ -771,7 +809,7 @@ function setSelectValue(select, value) {
   select.value = next;
 }
 
-function applyMetadataToForm(metadata) {
+function applyMetadataToForm(metadata, { forceNotes = false } = {}) {
   const meta = normalizeMetadata(metadata);
   if (els.metaAuthor) els.metaAuthor.value = meta.author;
   if (els.metaDate) els.metaDate.value = meta.date;
@@ -779,7 +817,7 @@ function applyMetadataToForm(metadata) {
   setSelectValue(els.metaMedium, meta.medium || suggestMedium(state.page));
   if (els.metaTldr) els.metaTldr.value = meta.tldr;
   if (els.metaThoughts) els.metaThoughts.value = meta.thoughts;
-  setNotesMarkdown(meta.notes);
+  setNotesMarkdown(meta.notes, { force: forceNotes });
   state.dateAdded = meta.dateAdded;
   state.tags = meta.tags.slice();
   renderTagChips();
@@ -863,25 +901,33 @@ function getNotesMarkdown() {
 }
 
 /** Ignore contenteditable "input" while we surgically change notes DOM. */
-let notesStructuralUpdate = false;
+let notesStructuralDepth = 0;
 
 function withNotesStructuralUpdate(fn) {
-  notesStructuralUpdate = true;
+  notesStructuralDepth += 1;
   try {
     return fn();
   } finally {
-    window.setTimeout(() => {
-      notesStructuralUpdate = false;
-    }, 0);
+    notesStructuralDepth -= 1;
   }
 }
 
-function setNotesMarkdown(value) {
+function setNotesMarkdown(value, { force = false } = {}) {
   if (!els.metaNotes) return;
+  const next = String(value || "");
+  if (!force && document.activeElement === els.metaNotes) return;
+  if (!force && getNotesMarkdown() === next.trim()) {
+    decorateNoteQuoteControls();
+    markLinkedQuotesFromState();
+    updateNotesEmptyState();
+    return;
+  }
   withNotesStructuralUpdate(() => {
-    els.metaNotes.innerHTML = ContextNotes.markdownToHtml(value);
+    els.metaNotes.innerHTML = ContextNotes.markdownToHtml(next);
+    normalizeNotesQuoteBlocks();
     stabilizeNotesQuotes();
     decorateNoteQuoteControls();
+    markLinkedQuotesFromState();
     rememberNoteQuoteBodies();
     updateNotesEmptyState();
     refreshExportJsonPreview();
@@ -905,9 +951,23 @@ function decorateNoteQuoteControls() {
   });
 }
 
+function markLinkedQuotesFromState() {
+  if (!els.metaNotes) return;
+  const keys = new Set(
+    (state.quotes || [])
+      .map((quote) => ContextNotes.quoteMatchKey(quote?.text))
+      .filter(Boolean)
+  );
+  els.metaNotes.querySelectorAll("blockquote").forEach((quoteEl) => {
+    const key = ContextNotes.quoteMatchKey(quoteTextFromBlockquote(quoteEl));
+    if (key && keys.has(key)) quoteEl.dataset.quoteKey = key;
+    else delete quoteEl.dataset.quoteKey;
+  });
+}
+
 function quoteTextFromBlockquote(quoteEl) {
   if (!quoteEl) return "";
-  const parts = Array.from(quoteEl.querySelectorAll("p")).map((p) => p.innerText || "");
+  const parts = Array.from(quoteEl.querySelectorAll("p, div")).map((p) => p.innerText || "");
   if (parts.length) return ContextNotes.normalizeSelection(parts.join("\n"));
   const clone = quoteEl.cloneNode(true);
   clone.querySelectorAll("button, [data-delete-quote]").forEach((el) => el.remove());
@@ -1063,50 +1123,146 @@ function notesEditorStillHasQuote(text) {
 function quoteContentParagraphs(quoteEl) {
   if (!quoteEl) return [];
   return Array.from(quoteEl.children).filter((el) => {
-    if (el.tagName.toLowerCase() !== "p") return false;
+    const tag = el.tagName.toLowerCase();
+    if (tag !== "p" && tag !== "div") return false;
+    if (el.matches("button, [data-delete-quote]")) return false;
     if (el.hasAttribute("data-delete-quote")) return false;
     return true;
   });
 }
 
-function stabilizeNotesQuotes() {
+/** Contenteditable often uses <div>; normalize quote children to <p>. */
+function normalizeNotesQuoteBlocks() {
   if (!els.metaNotes) return;
   els.metaNotes.querySelectorAll("blockquote").forEach((quoteEl) => {
-    // Contenteditable often leaves blank trailing paragraphs inside the last quote.
-    let guard = 0;
-    while (guard < 8) {
-      guard += 1;
-      const paragraphs = quoteContentParagraphs(quoteEl);
-      const last = paragraphs[paragraphs.length - 1];
-      if (!last || !isBlankParagraph(last)) break;
-      quoteEl.after(last);
-    }
+    Array.from(quoteEl.children).forEach((child) => {
+      if (child.tagName.toLowerCase() !== "div") return;
+      if (child.matches("button, [data-delete-quote]")) return;
+      const paragraph = document.createElement("p");
+      while (child.firstChild) paragraph.appendChild(child.firstChild);
+      if (!paragraph.childNodes.length) paragraph.appendChild(document.createElement("br"));
+      child.replaceWith(paragraph);
+    });
+  });
+}
+
+/**
+ * Only eject trailing blank paragraphs when leaving a quote (not on every keystroke).
+ * Keeps Enter-inside-quote from fighting stabilize.
+ */
+function stabilizeNotesQuotes() {
+  if (!els.metaNotes) return;
+  normalizeNotesQuoteBlocks();
+  els.metaNotes.querySelectorAll("blockquote").forEach((quoteEl) => {
     const btn = quoteEl.querySelector("[data-delete-quote]");
     if (btn) quoteEl.appendChild(btn);
   });
   ensureNotesWritableParagraph();
 }
 
-function repairBrokenNoteQuotes() {
-  if (!els.metaNotes) return;
-  const wrappedKeys = new Set(
-    Array.from(els.metaNotes.querySelectorAll("blockquote")).map((quoteEl) =>
-      ContextNotes.quoteMatchKey(quoteTextFromBlockquote(quoteEl))
-    ).filter(Boolean)
-  );
-  for (const quote of state.quotes || []) {
-    const key = ContextNotes.quoteMatchKey(quote?.text);
-    if (!key || wrappedKeys.has(key)) continue;
-    const match = Array.from(els.metaNotes.querySelectorAll(":scope > p")).find(
-      (paragraph) => ContextNotes.quoteMatchKey(paragraph.innerText || "") === key
-    );
-    if (!match) continue;
-    const blockquote = document.createElement("blockquote");
-    blockquote.className = "custom-quote";
-    match.replaceWith(blockquote);
-    blockquote.appendChild(match);
-    wrappedKeys.add(key);
+function ejectTrailingBlankFromQuote(quoteEl) {
+  if (!quoteEl) return;
+  let guard = 0;
+  while (guard < 8) {
+    guard += 1;
+    const paragraphs = quoteContentParagraphs(quoteEl);
+    const last = paragraphs[paragraphs.length - 1];
+    if (!last || !isBlankParagraph(last)) break;
+    quoteEl.after(last);
   }
+  const btn = quoteEl.querySelector("[data-delete-quote]");
+  if (btn) quoteEl.appendChild(btn);
+}
+
+/** Disabled: never re-wrap freeform commentary that matches a library quote. */
+function repairBrokenNoteQuotes() {}
+
+/** Convert a top-level paragraph starting with `> ` into an unlinked blockquote. */
+function convertTypedBlockquoteMarkers() {
+  if (!els.metaNotes) return;
+  const blocks = Array.from(els.metaNotes.children).filter((el) =>
+    /^(p|div)$/i.test(el.tagName)
+  );
+  for (const block of blocks) {
+    const raw = (block.innerText || "").replace(/\u00a0/g, " ");
+    if (!/^>\s/.test(raw)) continue;
+    const bodyText = raw.replace(/^>\s/, "");
+    withNotesStructuralUpdate(() => {
+      const blockquote = document.createElement("blockquote");
+      blockquote.className = "custom-quote";
+      const paragraph = document.createElement("p");
+      if (bodyText.trim()) paragraph.textContent = bodyText.replace(/\n$/, "");
+      else paragraph.appendChild(document.createElement("br"));
+      blockquote.appendChild(paragraph);
+      block.replaceWith(blockquote);
+      decorateNoteQuoteControls();
+      placeNotesCaret(paragraph, true);
+      ensureNotesWritableParagraph();
+    });
+  }
+}
+
+function isCaretAtStart(node) {
+  const range = notesCaretRange();
+  if (!range?.collapsed || !node) return false;
+  const head = range.cloneRange();
+  head.selectNodeContents(node);
+  head.setEnd(range.startContainer, range.startOffset);
+  return !head.toString().replace(/\u00a0/g, " ").trim();
+}
+
+function insertParagraphInQuote(quote, currentBlock) {
+  withNotesStructuralUpdate(() => {
+    const paragraph = document.createElement("p");
+    paragraph.appendChild(document.createElement("br"));
+    if (currentBlock && quote.contains(currentBlock)) {
+      currentBlock.after(paragraph);
+    } else {
+      const btn = quote.querySelector("[data-delete-quote]");
+      if (btn) btn.before(paragraph);
+      else quote.appendChild(paragraph);
+    }
+    placeNotesCaret(paragraph, true);
+    decorateNoteQuoteControls();
+    updateNotesEmptyState();
+    schedulePageDraftSave();
+  });
+}
+
+function handleNotesBackspace(event) {
+  const range = notesCaretRange();
+  if (!range?.collapsed) return;
+  const block = notesCaretBlock();
+  const quote = notesCaretQuote();
+
+  // At start of a paragraph after a blockquote — do not merge into the quote.
+  if (block && !quote && isCaretAtStart(block)) {
+    const prev = block.previousElementSibling;
+    if (prev?.tagName.toLowerCase() === "blockquote") {
+      if (!isBlankParagraph(block)) event.preventDefault();
+      return;
+    }
+  }
+
+  if (!quote || !block || !quote.contains(block) || !isCaretAtStart(block)) return;
+
+  const paragraphs = quoteContentParagraphs(quote);
+  const index = paragraphs.indexOf(block);
+  if (index <= 0) {
+    // First line of quote: do not unwrap into previous commentary.
+    event.preventDefault();
+    return;
+  }
+
+  event.preventDefault();
+  withNotesStructuralUpdate(() => {
+    const prev = paragraphs[index - 1];
+    while (block.firstChild) prev.appendChild(block.firstChild);
+    block.remove();
+    placeNotesCaret(prev, true);
+    decorateNoteQuoteControls();
+    schedulePageDraftSave();
+  });
 }
 
 function handleNotesMouseDown(event) {
@@ -1215,7 +1371,9 @@ function isNotesCaretAtEnd(node) {
 function isNotesCaretAtEndOfQuote(quote) {
   if (!quote) return false;
   const block = notesCaretBlock();
-  if (!block || !quote.contains(block) || block.tagName.toLowerCase() !== "p") return false;
+  if (!block || !quote.contains(block)) return false;
+  const tag = block.tagName.toLowerCase();
+  if (tag !== "p" && tag !== "div") return false;
   if (!isNotesCaretAtEnd(block)) return false;
   const paragraphs = quoteContentParagraphs(quote);
   return paragraphs.length > 0 && paragraphs[paragraphs.length - 1] === block;
@@ -1224,26 +1382,30 @@ function isNotesCaretAtEndOfQuote(quote) {
 function exitNotesQuote() {
   const quote = notesCaretQuote();
   if (!quote) return false;
-  const block = notesCaretBlock();
-  if (block && isBlankParagraph(block) && quote.contains(block) && block !== quote) {
-    block.remove();
-  }
-  const paragraph = document.createElement("p");
-  paragraph.appendChild(document.createElement("br"));
-  quote.after(paragraph);
-  placeNotesCaret(paragraph, true);
-  stabilizeNotesQuotes();
-  updateNotesEmptyState();
-  schedulePageDraftSave();
+  withNotesStructuralUpdate(() => {
+    const block = notesCaretBlock();
+    if (block && isBlankParagraph(block) && quote.contains(block) && block !== quote) {
+      block.remove();
+    }
+    ejectTrailingBlankFromQuote(quote);
+    const paragraph = document.createElement("p");
+    paragraph.appendChild(document.createElement("br"));
+    quote.after(paragraph);
+    placeNotesCaret(paragraph, true);
+    stabilizeNotesQuotes();
+    updateNotesEmptyState();
+    schedulePageDraftSave();
+    refreshExportJsonPreview();
+  });
   return true;
 }
 
 function applyNotesFormat(command) {
   els.metaNotes?.focus();
   document.execCommand(command, false, null);
-  stabilizeNotesQuotes();
-  repairBrokenNoteQuotes();
+  normalizeNotesQuoteBlocks();
   decorateNoteQuoteControls();
+  markLinkedQuotesFromState();
   updateNotesEmptyState();
   rememberNoteQuoteBodies();
   schedulePageDraftSave();
@@ -1254,11 +1416,21 @@ function applyNotesFormat(command) {
 function handleNotesKeydown(event) {
   if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
     const quote = notesCaretQuote();
-    if (quote && (isBlankParagraph(notesCaretBlock()) || isNotesCaretAtEndOfQuote(quote))) {
+    if (quote) {
+      const block = notesCaretBlock();
+      if (block && quote.contains(block) && isBlankParagraph(block)) {
+        event.preventDefault();
+        exitNotesQuote();
+        return;
+      }
       event.preventDefault();
-      exitNotesQuote();
+      insertParagraphInQuote(quote, block);
       return;
     }
+  }
+  if (event.key === "Backspace") {
+    handleNotesBackspace(event);
+    return;
   }
   if (!(event.metaKey || event.ctrlKey)) return;
   const key = event.key.toLowerCase();
@@ -1698,9 +1870,10 @@ async function refreshPageContext() {
     mergeMetadata(draft?.metadata, suggestedMetadata, {
       preferredUpdatedAt: Number(draft?.updatedAt || 0),
       fallbackUpdatedAt: 0,
-    })
+    }),
+    { forceNotes: true }
   );
-  resizeTitleField();
+  setTitleValue(draft?.title || suggestedTitle);
   state.page.title = getDisplayTitle();
   state.page.metadata = collectMetadataFromForm();
 
@@ -1725,7 +1898,7 @@ async function syncPageLibraryState() {
       state.history = data.page.chat_history || [];
       renderChatHistory(state.history);
       markPageSaved(true);
-      els.title.value = draft?.title || data.page.title || suggestedTitle;
+      setTitleValue(draft?.title || data.page.title || suggestedTitle);
       const libraryUpdatedAt =
         Date.parse(String(data.page.updated_at || data.page.saved_at || "")) || 0;
       // Local draft is the working store; prefer it when newer or when library has no stamp.
@@ -1753,7 +1926,7 @@ async function syncPageLibraryState() {
       renderChatHistory([]);
       markPageSaved(false);
     }
-    resizeTitleField();
+    setTitleValue(els.title?.value || suggestedTitle);
     state.page.title = getDisplayTitle();
     state.page.metadata = collectMetadataFromForm();
     await loadPageQuotes();

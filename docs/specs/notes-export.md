@@ -15,7 +15,7 @@ Draft keys use the same URL canonicalization as the library (strip hash, normali
 
 ## Storage (document shape)
 
-Page notes are markdown. Quote blocks are `>` blockquotes (or `:::quote` fences, which round-trip to the same document).
+Page notes are a markdown subset: paragraphs, `>` blockquotes, `#`–`###` headings, `-` / `1.` lists, and inline `**bold**` `*italic*` `` `code` `` links. `:::quote` fences round-trip to the same `>` document.
 
 ```markdown
 > A passage from the article
@@ -25,11 +25,24 @@ Your commentary, with **bold** if you want.
 > Another passage
 ```
 
+### Quotes in the editor
+
+| Action | Behavior |
+|---|---|
+| Page highlight | Inserts a linked blockquote + library quote + page paint |
+| Type `> ` at the start of a line | Converts that paragraph into an **unlinked** blockquote (notes + export only; no page paint) |
+| Enter inside a quote | New paragraph inside the quote |
+| Enter on an empty quote line | Exit the quote (commentary paragraph after) |
+| × on a linked quote | Removes the block and the library/highlight record |
+| × on a manual quote | Removes the block only |
+
 `metadata.dateAdded` is `YYYY-MM-DD`, set once on first save and never overwritten on copy.
+
+Titles are single-line: newlines / excess whitespace are collapsed on load, blur, and draft save.
 
 ## Clipboard shape
 
-Copy JSON produces a **JS object literal** (not `JSON.parse`-able) for pasting into a site:
+Copy JSON produces a **JS object literal** (not `JSON.parse`-able) for pasting into a site.
 
 Matches site `BookshelfPage/data/*.js` (e.g. essayData / researchPaperData):
 
@@ -54,6 +67,6 @@ your commentary
 }
 ```
 
-Quotes use `:::quote` … `:::`. Your commentary stays outside the fences. The Notes tab editor is unchanged (`>` / HTML blockquotes internally).
+Quotes use `:::quote` … `:::`. Your commentary stays outside the fences. The Notes tab editor keeps `>` / HTML blockquotes internally; export reads the DOM via `domToExportNotes`.
 
 Helpers live in `chrome-extension/sidepanel/notes.js`, `page-drafts.js`, and `bookshelf-export.js` (notes/export helpers are also under `web/` for the dashboard).

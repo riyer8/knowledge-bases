@@ -68,6 +68,12 @@ Full rationale: [decisions.md](decisions.md)
 - PDF quotes save; on-page paint is HTML-only
 - Phase 5 integrations (Amazon, Health, scraper) intentionally deferred
 
+## Recently hardened (extension 0.1.8)
+
+- Title field: single-line normalize, no giant-gap autosize
+- Notes: Enter/Backspace quote contract, typed `>` manual quotes, markdown headings/lists round-trip
+- Copy JSON: `:::quote` fences; manual quotes do not paint on the page
+
 ## Blockers
 
 None.

@@ -6,6 +6,11 @@
   const DRAFT_PREFIX = "pageDraft:";
   const MAX_DRAFTS = 200;
 
+  /** Single-line title: collapse newlines / excess whitespace (heals draft corruption). */
+  function normalizeTitle(text) {
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
   /** Match core.library_service._canonical_page_url */
   function canonicalPageUrl(url) {
     let value = String(url || "").trim();
@@ -82,7 +87,7 @@
     const key = pageDraftKey(url);
     if (!key) return null;
     const payload = {
-      title: String(draft?.title || "").trim(),
+      title: normalizeTitle(draft?.title),
       metadata: draft?.metadata && typeof draft.metadata === "object" ? draft.metadata : {},
       updatedAt: Date.now(),
     };
@@ -118,6 +123,7 @@
 
   const ContextPageDrafts = {
     DRAFT_PREFIX,
+    normalizeTitle,
     MAX_DRAFTS,
     canonicalPageUrl,
     pageDraftKey,

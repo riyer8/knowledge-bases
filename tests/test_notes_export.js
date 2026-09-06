@@ -210,6 +210,54 @@ assert.ok(siteFenced.includes(":::quote\nOuter quote body\n> nested markdown quo
 assert.ok(siteFenced.includes(":::quote\nbare editor quote becomes a fence\n:::"));
 assert.ok(siteFenced.includes("My commentary."));
 
+// Multi-line > quotes load as multiple <p>s and round-trip.
+const multiQuoteMd = ["> First line", "> Second line", "", "Commentary."].join("\n");
+const multiQuoteHtml = ContextNotes.markdownToHtml(multiQuoteMd);
+assert.ok(multiQuoteHtml.includes("<blockquote class=\"custom-quote\"><p>First line</p><p>Second line</p></blockquote>"));
+assert.ok(multiQuoteHtml.includes("<p>Commentary.</p>"));
+assert.ok(
+  ContextNotes.markdownBlockquotesToFences(multiQuoteMd).includes(
+    ":::quote\nFirst line\nSecond line\n:::"
+  )
+);
+
+// Headings and lists round-trip through markdownToHtml.
+const structuredMd = [
+  "## Section",
+  "",
+  "- item one",
+  "- item two",
+  "",
+  "1. first",
+  "2. second",
+].join("\n");
+const structuredHtml = ContextNotes.markdownToHtml(structuredMd);
+assert.ok(structuredHtml.includes("<h2>Section</h2>"));
+assert.ok(structuredHtml.includes("<ul><li>item one</li><li>item two</li></ul>"));
+assert.ok(structuredHtml.includes("<ol><li>first</li><li>second</li></ol>"));
+
+// Manual quotes (in notes only) do not paint; linked library quotes do.
+const mixedNotes = [
+  "> Linked highlight quote",
+  "",
+  "thoughts",
+  "",
+  "> Manual only quote",
+].join("\n");
+const linkedOnlyPaint = ContextNotes.quotesForHighlights(mixedNotes, [
+  { id: "q1", text: "Linked highlight quote", note: "" },
+]);
+assert.strictEqual(linkedOnlyPaint.length, 1);
+assert.strictEqual(linkedOnlyPaint[0].id, "q1");
+assert.ok(!linkedOnlyPaint.some((item) => /Manual/.test(item.text)));
+
+// Title normalize collapses newlines / excess whitespace.
+const ContextPageDrafts = require(path.join(__dirname, "../chrome-extension/sidepanel/page-drafts.js"));
+assert.strictEqual(
+  ContextPageDrafts.normalizeTitle("Hello\n\n  world\t title"),
+  "Hello world title"
+);
+
 // Notes are the source of truth for page highlights — orphan library quotes do not paint.
 const partialNotes = "> Older quote only";
 const notesScopedHighlights = ContextNotes.quotesForHighlights(partialNotes, [

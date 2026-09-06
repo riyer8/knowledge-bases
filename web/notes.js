@@ -117,33 +117,85 @@
     const parts = [];
     let paragraph = [];
     let quote = [];
+    let listItems = [];
+    let listOrdered = false;
+
     const flushParagraph = () => {
       const text = paragraph.join("\n").trim();
       paragraph = [];
       if (text) parts.push(`<p>${renderNotesInline(text)}</p>`);
     };
-    const flushQuote = () => {
-      const text = quote.join("\n").trim();
-      quote = [];
-      if (text) {
-        parts.push(`<blockquote class="custom-quote"><p>${renderNotesInline(text)}</p></blockquote>`);
-      }
+    const flushList = () => {
+      if (!listItems.length) return;
+      const tag = listOrdered ? "ol" : "ul";
+      parts.push(
+        `<${tag}>${listItems
+          .map((item) => `<li>${renderNotesInline(item)}</li>`)
+          .join("")}</${tag}>`
+      );
+      listItems = [];
     };
+    const flushQuote = () => {
+      if (!quote.length) return;
+      while (quote.length && !String(quote[quote.length - 1] || "").trim()) quote.pop();
+      if (!quote.length) return;
+      const inner = quote
+        .map((line) => {
+          const text = String(line || "").trim();
+          return text ? `<p>${renderNotesInline(text)}</p>` : "<p><br></p>";
+        })
+        .join("");
+      parts.push(`<blockquote class="custom-quote">${inner}</blockquote>`);
+      quote = [];
+    };
+
     for (const line of source.split("\n")) {
       if (/^>/.test(line)) {
+        flushList();
         flushParagraph();
         quote.push(line.replace(/^>\s?/, ""));
         continue;
       }
       if (!line.trim()) {
         flushQuote();
+        flushList();
         flushParagraph();
         continue;
       }
       flushQuote();
+
+      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      if (heading) {
+        flushList();
+        flushParagraph();
+        const level = heading[1].length;
+        parts.push(`<h${level}>${renderNotesInline(heading[2].trim())}</h${level}>`);
+        continue;
+      }
+
+      const unordered = line.match(/^[-*]\s+(.+)$/);
+      if (unordered) {
+        flushParagraph();
+        if (listItems.length && listOrdered) flushList();
+        listOrdered = false;
+        listItems.push(unordered[1]);
+        continue;
+      }
+
+      const ordered = line.match(/^\d+\.\s+(.+)$/);
+      if (ordered) {
+        flushParagraph();
+        if (listItems.length && !listOrdered) flushList();
+        listOrdered = true;
+        listItems.push(ordered[1]);
+        continue;
+      }
+
+      flushList();
       paragraph.push(line);
     }
     flushQuote();
+    flushList();
     flushParagraph();
     return parts.join("");
   }
@@ -185,7 +237,7 @@
           if (child.nodeType === 1) {
             const childTag = child.tagName.toLowerCase();
             if (childTag === "button" || child.hasAttribute("data-delete-quote")) continue;
-            if (childTag === "p") {
+            if (childTag === "p" || childTag === "div") {
               const text = serializeNotesInline(child).trim();
               if (text) parts.push(text);
               continue;
@@ -199,10 +251,15 @@
         return;
       }
       if (tag === "ul" || tag === "ol") {
+        const ordered = tag === "ol";
         const items = Array.from(node.children)
           .filter((el) => el.tagName.toLowerCase() === "li")
-          .map((li) => `- ${serializeNotesInline(li).trim()}`)
-          .filter((item) => item !== "-");
+          .map((li, index) => {
+            const text = serializeNotesInline(li).trim();
+            if (!text) return "";
+            return ordered ? `${index + 1}. ${text}` : `- ${text}`;
+          })
+          .filter(Boolean);
         if (items.length) blocks.push(items.join("\n"));
         return;
       }
@@ -260,7 +317,7 @@
           if (child.nodeType === 1) {
             const childTag = child.tagName.toLowerCase();
             if (childTag === "button" || child.hasAttribute("data-delete-quote")) continue;
-            if (childTag === "p") {
+            if (childTag === "p" || childTag === "div") {
               const text = serializeNotesInline(child).trim();
               if (text) parts.push(text);
               continue;
@@ -275,10 +332,15 @@
         return;
       }
       if (tag === "ul" || tag === "ol") {
+        const ordered = tag === "ol";
         const items = Array.from(node.children)
           .filter((el) => el.tagName.toLowerCase() === "li")
-          .map((li) => `- ${serializeNotesInline(li).trim()}`)
-          .filter((item) => item !== "-");
+          .map((li, index) => {
+            const text = serializeNotesInline(li).trim();
+            if (!text) return "";
+            return ordered ? `${index + 1}. ${text}` : `- ${text}`;
+          })
+          .filter(Boolean);
         if (items.length) blocks.push(items.join("\n"));
         return;
       }
@@ -422,12 +484,14 @@
       if (!key || seen.has(key)) continue;
       seen.add(key);
       const rec = byKey.get(key);
+      // Manual `>` quotes live in notes only — no page paint without a library record.
+      if (!rec) continue;
       out.push({
-        id: rec?.id || "",
+        id: rec.id || "",
         // Prefer the library quote (page selection). Notes may add bold/italic
         // or punctuation that is not present on the webpage.
-        text: rec?.text || plainQuoteText(body),
-        note: rec?.note || "",
+        text: rec.text || plainQuoteText(body),
+        note: rec.note || "",
       });
     }
     // Notes are the source of truth: quotes removed from notes are not painted.
