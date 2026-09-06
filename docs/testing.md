@@ -66,3 +66,24 @@ python3 demo/seed_demo.py
 
 All tests in `tests/` must pass before marking work complete. Privacy eval cases are part
 of that gate.
+
+## Browser smoke (Chrome extension reading loop)
+
+Requires a running backend and Playwright:
+
+```bash
+# terminal 1
+./start.sh   # or however you normally boot http://127.0.0.1:8765
+
+# terminal 2
+node scripts/e2e_browser_smoke.mjs
+```
+
+Covers: extension load against a real essay, highlight toolbar probe, save page/quotes/notes, quote delete without wiping commentary, backend title normalize, `:::quote` bookshelf export, manual `>` quotes (no paint), Enter-inside-quote / exit simulation, title CSS cap. Screenshots land in `.tmp-e2e/`. Exit code 1 if any `fail` finding.
+
+API-only backend smoke (no browser):
+
+```bash
+python3 scripts/e2e_smoke.py
+```
+

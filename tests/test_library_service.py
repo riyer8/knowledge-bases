@@ -268,3 +268,52 @@ def test_clear_library(library_env, monkeypatch):
     })
     library_env.clear_library()
     assert library_env.list_saved_pages() == []
+
+
+def test_normalize_title_collapses_whitespace(library_env):
+    assert library_env._normalize_title("Hello\n\n  world\t title") == "Hello world title"
+    assert library_env._normalize_title("   ") == "Untitled page"
+    assert library_env._normalize_title("", empty="") == ""
+
+
+def test_save_and_update_page_normalize_title(library_env, monkeypatch):
+    monkeypatch.setattr(library_env, "_generate_summary", lambda page: "Summary")
+    monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    page = library_env.save_page({
+        "url": "https://example.com/title-gaps",
+        "title": "Hello\n\nworld",
+        "visible_text": "Content",
+    })
+    assert page["title"] == "Hello world"
+    listed = library_env.list_saved_pages()
+    assert listed[0]["title"] == "Hello world"
+
+    updated = library_env.update_page(page["id"], title="Fresh\n\n  title")
+    assert updated["title"] == "Fresh title"
+    loaded = library_env.get_saved_page(page["id"])
+    assert loaded["title"] == "Fresh title"
+
+
+def test_get_saved_page_heals_legacy_multiline_title(library_env, monkeypatch, tmp_path):
+    monkeypatch.setattr(library_env, "_generate_summary", lambda page: "Summary")
+    monkeypatch.setattr(library_env, "ingest_text", lambda **kwargs: {"id": "e1"})
+
+    page = library_env.save_page({
+        "url": "https://example.com/legacy-title",
+        "title": "Normal",
+        "visible_text": "Content",
+    })
+    path = library_env._page_path(page["id"])
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["title"] = "Broken\n\nTitle"
+    path.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+    index = library_env._load_saved_index()
+    for entry in index:
+        if entry.get("id") == page["id"]:
+            entry["title"] = "Broken\n\nTitle"
+    library_env._save_saved_index(index)
+
+    healed = library_env.get_saved_page(page["id"])
+    assert healed["title"] == "Broken Title"
+    assert json.loads(path.read_text(encoding="utf-8"))["title"] == "Broken Title"

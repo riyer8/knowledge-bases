@@ -385,6 +385,169 @@ async function main() {
       note("fail", "DOM delete path lost freeform commentary");
     } else note("ok", "DOM delete path kept freeform commentary");
 
+    // --- Phase 2 reading-loop checks (title / :::quote / manual > / Enter) ---
+    const ContextBookshelf = require(path.join(EXT, "sidepanel/bookshelf-export.js"));
+    const ContextPageDrafts = require(path.join(EXT, "sidepanel/page-drafts.js"));
+
+    // Backend title normalize
+    const messyTitle = await api("/library/save-page", {
+      method: "POST",
+      body: JSON.stringify({
+        page: {
+          url: "https://example.com/e2e-title-normalize",
+          title: "Roofline\n\n  Gaps",
+          site: "example.com",
+          text: "title normalize probe",
+          metadata: { notes: "", tags: ["e2e"], category: "science", medium: "essay" },
+        },
+        history: [],
+      }),
+    });
+    const messyId = messyTitle.data?.page?.id;
+    if (!messyTitle.ok) {
+      note("fail", `title-normalize save-page failed: ${messyTitle.status}`);
+    } else if (messyTitle.data?.page?.title !== "Roofline Gaps") {
+      note(
+        "weird",
+        `Backend title not normalized yet (got ${JSON.stringify(messyTitle.data?.page?.title)}). Restart backend to load Phase 2 library_service.`
+      );
+    } else {
+      note("ok", "Backend save_page normalizes multiline titles");
+    }
+    if (messyId) {
+      const patchedTitle = await api(`/library/pages/${messyId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title: "Updated\n\nTitle" }),
+      });
+      if (patchedTitle.data?.page?.title === "Updated Title") {
+        note("ok", "Backend update_page normalizes multiline titles");
+      } else {
+        note(
+          "weird",
+          `PATCH title not normalized (got ${JSON.stringify(patchedTitle.data?.page?.title)}). Restart backend if still on old code.`
+        );
+      }
+      await api(`/library/pages/${messyId}`, { method: "DELETE" });
+    }
+
+    if (ContextPageDrafts.normalizeTitle("A\n\nB") === "A B") {
+      note("ok", "Extension draft normalizeTitle collapses whitespace");
+    } else {
+      note("fail", "Extension normalizeTitle failed");
+    }
+
+    // :::quote export + commentary outside fences
+    const exportNotes = [
+      "> Hardware is bound by compute",
+      "",
+      "My independent commentary.",
+      "",
+      "> Arithmetic intensity is FLOPs per byte",
+    ].join("\n");
+    const paste = ContextBookshelf.format(
+      ContextBookshelf.buildEntry({
+        title: "Roofline",
+        url: ESSAY,
+        dateAdded: "2026-09-06",
+        notes: exportNotes,
+      })
+    );
+    if (
+      paste.includes(":::quote\nHardware is bound by compute\n:::") &&
+      paste.includes("My independent commentary.") &&
+      !/^>/m.test(paste.split("notes:")[1] || "")
+    ) {
+      note("ok", "Bookshelf export uses :::quote fences with plain commentary");
+    } else {
+      note("fail", `Bookshelf export unexpected:\n${paste.slice(0, 400)}`);
+    }
+
+    // Manual > quotes do not paint; linked library quotes do
+    const mixedNotes = [
+      "> Linked highlight quote",
+      "",
+      "thoughts",
+      "",
+      "> Manual only quote",
+    ].join("\n");
+    const paint = ContextNotes.quotesForHighlights(mixedNotes, [
+      { id: "q1", text: "Linked highlight quote", note: "" },
+    ]);
+    if (paint.length === 1 && paint[0].id === "q1" && !paint.some((q) => /Manual/.test(q.text))) {
+      note("ok", "Manual quotes excluded from page highlight paint");
+    } else {
+      note("fail", `quotesForHighlights unexpected: ${JSON.stringify(paint)}`);
+    }
+
+    // Multi-p quotes + Enter contract simulation in a real DOM
+    const editorSim = await page.evaluate(({ notesJs }) => {
+      // eslint-disable-next-line no-eval
+      eval(notesJs);
+      const host = document.createElement("div");
+      host.contentEditable = "true";
+      host.innerHTML = ContextNotes.markdownToHtml("> First line\n> Second line\n\nCommentary.");
+      const quote = host.querySelector("blockquote");
+      const paras = quote ? Array.from(quote.querySelectorAll("p")) : [];
+      // Simulate Enter inside quote: append a new empty <p> inside
+      const inner = document.createElement("p");
+      inner.appendChild(document.createElement("br"));
+      quote.appendChild(inner);
+      const afterEnterInside = quote.querySelectorAll("p").length;
+      // Simulate empty Enter exit: move blank para after quote
+      quote.after(inner);
+      const exited = inner.parentElement === host && !quote.contains(inner);
+      // Manual > conversion: top-level p starting with "> "
+      const typed = document.createElement("p");
+      typed.textContent = "> smoke manual quote";
+      host.appendChild(typed);
+      const raw = (typed.innerText || "").replace(/\u00a0/g, " ");
+      let converted = false;
+      if (/^>\s/.test(raw)) {
+        const body = raw.replace(/^>\s/, "");
+        const bq = document.createElement("blockquote");
+        bq.className = "custom-quote";
+        const p = document.createElement("p");
+        p.textContent = body;
+        bq.appendChild(p);
+        typed.replaceWith(bq);
+        converted = bq.classList.contains("custom-quote");
+      }
+      const exportText = ContextNotes.domToExportNotes(host);
+      host.remove();
+      return {
+        multiP: paras.length >= 2,
+        afterEnterInside,
+        exited,
+        converted,
+        exportHasFence: exportText.includes(":::quote"),
+        exportHasManual: exportText.includes("smoke manual quote"),
+        exportHasCommentary: exportText.includes("Commentary."),
+      };
+    }, { notesJs: fs.readFileSync(path.join(EXT, "sidepanel/notes.js"), "utf8") });
+
+    if (editorSim.multiP) note("ok", "Multi-line > loads as multiple <p> inside quote");
+    else note("fail", "Multi-line > did not produce multiple quote paragraphs");
+    if (editorSim.afterEnterInside >= 3) note("ok", "Enter-inside-quote keeps new paragraph in box");
+    else note("fail", `Enter-inside-quote para count=${editorSim.afterEnterInside}`);
+    if (editorSim.exited) note("ok", "Empty Enter exits quote (paragraph after blockquote)");
+    else note("fail", "Empty Enter did not exit quote");
+    if (editorSim.converted) note("ok", "Typed > line converts to unlinked blockquote");
+    else note("fail", "Typed > conversion failed");
+    if (editorSim.exportHasFence && editorSim.exportHasManual && editorSim.exportHasCommentary) {
+      note("ok", "domToExportNotes fences quotes and keeps commentary");
+    } else {
+      note("fail", `domToExportNotes unexpected: ${JSON.stringify(editorSim)}`);
+    }
+
+    // Side panel title CSS: no pre-wrap, has max-height cap
+    const panelCss = fs.readFileSync(path.join(EXT, "sidepanel/panel.css"), "utf8");
+    const titleBlock = panelCss.match(/#page-title,[\s\S]*?\.page-title-input\s*\{[\s\S]*?\}/);
+    if (titleBlock && /max-height:\s*4\.2em/.test(titleBlock[0]) && !/white-space:\s*pre-wrap/.test(titleBlock[0])) {
+      note("ok", "Title CSS caps height and drops pre-wrap");
+    } else {
+      note("fail", "Title CSS missing max-height cap or still uses pre-wrap");
+    }
+
     // Cleanup created page to avoid polluting library (optional keep for inspection)
     if (pageId) {
       const cleared = await api(`/library/pages/${pageId}`, { method: "DELETE" });

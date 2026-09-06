@@ -73,6 +73,8 @@ Full rationale: [decisions.md](decisions.md)
 - Title field: single-line normalize, no giant-gap autosize
 - Notes: Enter/Backspace quote contract, typed `>` manual quotes, markdown headings/lists round-trip
 - Copy JSON: `:::quote` fences; manual quotes do not paint on the page
+- Backend `_normalize_title` on save/update/get (restart backend to load)
+- Browser smoke: `node scripts/e2e_browser_smoke.mjs` (see [testing.md](testing.md))
 
 ## Blockers
 

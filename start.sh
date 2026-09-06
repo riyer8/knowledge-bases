@@ -47,23 +47,42 @@ step "Checking spaCy model..."
     "$PYTHON" -m spacy download en_core_web_sm --quiet
 }
 
-# ── 4. Ollama ─────────────────────────────────────────────────────────────────
-step "Checking Ollama..."
-if ! pgrep -x "ollama" > /dev/null; then
+# ── 4. Ollama (only when OpenAI is not configured) ────────────────────────────
+# Load .env early so we can skip local models if OPENAI_API_KEY is set.
+if [ -f "$REPO/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$REPO/.env"
+  set +a
+fi
+
+HAS_OPENAI=0
+if [ -n "${OPENAI_API_KEY:-}" ]; then
+  HAS_OPENAI=1
+fi
+
+if [ "$HAS_OPENAI" -eq 1 ]; then
+  step "OpenAI API key found — skipping Ollama"
+else
+  step "Checking Ollama (no OpenAI key; local models required)..."
+  if ! command -v ollama >/dev/null 2>&1; then
+    abort "Ollama not installed and OPENAI_API_KEY is empty. Install Ollama or set OPENAI_API_KEY in .env"
+  fi
+  if ! pgrep -x "ollama" > /dev/null; then
     warn "Starting Ollama..."
     ollama serve > /dev/null 2>&1 &
     sleep 2
-fi
+  fi
 
-# Pull models if missing (shows progress inline)
-OLLAMA_MODELS=$(ollama list 2>/dev/null || echo "")
-if ! echo "$OLLAMA_MODELS" | grep -q "nomic-embed-text"; then
+  OLLAMA_MODELS=$(ollama list 2>/dev/null || echo "")
+  if ! echo "$OLLAMA_MODELS" | grep -q "nomic-embed-text"; then
     warn "Pulling nomic-embed-text (~274MB, one-time)..."
     ollama pull nomic-embed-text
-fi
-if ! echo "$OLLAMA_MODELS" | grep -q "qwen2.5:3b"; then
+  fi
+  if ! echo "$OLLAMA_MODELS" | grep -q "qwen2.5:3b"; then
     warn "Pulling qwen2.5:3b (~1.9GB, one-time)..."
     ollama pull qwen2.5:3b
+  fi
 fi
 
 # ── 5. .env ───────────────────────────────────────────────────────────────────

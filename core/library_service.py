@@ -35,6 +35,12 @@ def _date_added_from_timestamp(value: str) -> str:
     return ""
 
 
+def _normalize_title(value: Any, *, empty: str = "Untitled page") -> str:
+    """Collapse newlines / excess whitespace so titles stay single-line."""
+    text = " ".join(str(value or "").split())
+    return text or empty
+
+
 def _library_dir() -> Path:
     return config.kb_root / _LIBRARY_DIR_NAME
 
@@ -272,7 +278,7 @@ def save_page(
     """Explicitly save a page. LLM summary and memory ingest can run in the background."""
     _ensure_dirs()
     url = str(page_data.get("url", "")).strip()
-    title = str(page_data.get("title", "")).strip() or "Untitled page"
+    title = _normalize_title(page_data.get("title", ""))
     index = _load_saved_index()
 
     existing = next((e for e in index if e.get("url") == url and url), None)
@@ -363,7 +369,22 @@ def save_page(
 
 
 def list_saved_pages(limit: int = 100) -> list[dict[str, Any]]:
-    return _load_saved_index()[: max(1, min(limit, 200))]
+    entries = _load_saved_index()[: max(1, min(limit, 200))]
+    healed = False
+    for entry in entries:
+        normalized = _normalize_title(entry.get("title", ""))
+        if str(entry.get("title") or "") != normalized:
+            entry["title"] = normalized
+            healed = True
+    if healed:
+        full = _load_saved_index()
+        by_id = {e.get("id"): e for e in entries}
+        for item in full:
+            fixed = by_id.get(item.get("id"))
+            if fixed is not None:
+                item["title"] = fixed["title"]
+        _save_saved_index(full)
+    return entries
 
 
 def get_saved_page(page_id: str) -> dict[str, Any] | None:
@@ -377,6 +398,16 @@ def get_saved_page(page_id: str) -> dict[str, Any] | None:
     )
     page["chat_history"] = load_chat_history(page_id)
     page["quotes"] = [q for q in _load_quotes() if q.get("page_id") == page_id]
+    normalized = _normalize_title(page.get("title", ""))
+    if str(page.get("title") or "") != normalized:
+        page["title"] = normalized
+        path.write_text(json.dumps(page, indent=2), encoding="utf-8")
+        index = _load_saved_index()
+        for entry in index:
+            if entry.get("id") == page_id:
+                entry["title"] = normalized
+                break
+        _save_saved_index(index)
     return page
 
 
@@ -412,7 +443,7 @@ def update_page(
         raise ValueError("page not found")
 
     if title is not None:
-        title = title.strip()
+        title = _normalize_title(title, empty="")
         if not title:
             raise ValueError("title is required")
         page["title"] = title
