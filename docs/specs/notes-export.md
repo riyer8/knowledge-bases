@@ -31,6 +31,8 @@ Your commentary, with **bold** if you want.
 
 Copy JSON produces a **JS object literal** (not `JSON.parse`-able) for pasting into a site:
 
+Matches site `BookshelfPage/data/*.js` (e.g. essayData / researchPaperData):
+
 ```js
 {
     title: "...",
@@ -42,14 +44,16 @@ Copy JSON produces a **JS object literal** (not `JSON.parse`-able) for pasting i
     tldr: "...",
     thoughts: "...",
     tags: ['tag'],
-    notes: `:::quote
+    notes: `
+:::quote
 quoted text
 :::
 
-your commentary`
+your commentary
+`
 }
 ```
 
-`notes` is `markdownBlockquotesToFences(editorMarkdown)`. Field names and `:::quote` fences are the contract.
+Quotes use `:::quote` … `:::`. Your commentary stays outside the fences. The Notes tab editor is unchanged (`>` / HTML blockquotes internally).
 
 Helpers live in `chrome-extension/sidepanel/notes.js`, `page-drafts.js`, and `bookshelf-export.js` (notes/export helpers are also under `web/` for the dashboard).

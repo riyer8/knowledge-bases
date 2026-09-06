@@ -50,9 +50,13 @@
   }
 
   function markdownBlockquotesToFences(notes) {
+    // Convert editor `>` quotes to site fences (`:::quote` … `:::`).
+    // Do not rewrite lines already inside a :::quote / :::sidenote region
+    // (site data sometimes nests `>` inside a fence).
     const lines = String(notes || "").split("\n");
     const out = [];
     let quote = [];
+    let fenceKind = null;
     const flush = () => {
       if (!quote.length) return;
       const body = quote.map((line) => line.replace(/^>\s?/, "")).join("\n").trim();
@@ -60,6 +64,22 @@
       quote = [];
     };
     for (const line of lines) {
+      const open = line.match(/^:::(quote|sidenote)\s*$/);
+      if (open) {
+        flush();
+        fenceKind = open[1];
+        out.push(line);
+        continue;
+      }
+      if (fenceKind && /^:::\s*$/.test(line)) {
+        fenceKind = null;
+        out.push(line);
+        continue;
+      }
+      if (fenceKind) {
+        out.push(line);
+        continue;
+      }
       if (/^>/.test(line)) quote.push(line);
       else {
         flush();
@@ -213,6 +233,83 @@
     return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
+  function toQuoteFence(text) {
+    const body = String(text || "").trim();
+    if (!body) return "";
+    return `:::quote\n${body}\n:::`;
+  }
+
+  /**
+   * Bookshelf export only: blockquotes → :::quote fences, commentary stays plain.
+   * Does not change the Notes editor document format.
+   */
+  function domToExportNotes(root) {
+    if (!root) return "";
+    const blocks = [];
+    const walk = (node) => {
+      if (node.nodeType === 3) {
+        const text = String(node.nodeValue || "").replace(/\u00a0/g, " ").trim();
+        if (text) blocks.push(text);
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "blockquote" || node.classList?.contains?.("custom-quote")) {
+        const parts = [];
+        for (const child of Array.from(node.childNodes)) {
+          if (child.nodeType === 1) {
+            const childTag = child.tagName.toLowerCase();
+            if (childTag === "button" || child.hasAttribute("data-delete-quote")) continue;
+            if (childTag === "p") {
+              const text = serializeNotesInline(child).trim();
+              if (text) parts.push(text);
+              continue;
+            }
+          }
+          const text = serializeNotesInline(child).replace(/\n{2,}/g, "\n").trim();
+          if (text) parts.push(text);
+        }
+        const text = parts.join("\n").replace(/\n{2,}/g, "\n").trim();
+        const fence = toQuoteFence(text);
+        if (fence) blocks.push(fence);
+        return;
+      }
+      if (tag === "ul" || tag === "ol") {
+        const items = Array.from(node.children)
+          .filter((el) => el.tagName.toLowerCase() === "li")
+          .map((li) => `- ${serializeNotesInline(li).trim()}`)
+          .filter((item) => item !== "-");
+        if (items.length) blocks.push(items.join("\n"));
+        return;
+      }
+      if (/^h[1-3]$/.test(tag)) {
+        const text = serializeNotesInline(node).trim();
+        if (text) blocks.push(`${"#".repeat(Number(tag[1]))} ${text}`);
+        return;
+      }
+      if (tag === "p") {
+        const text = serializeNotesInline(node).trim();
+        if (text) blocks.push(text);
+        return;
+      }
+      if (tag === "div") {
+        const hasBlock = Array.from(node.children).some((el) =>
+          /^(p|div|blockquote|ul|ol|h1|h2|h3|pre)$/i.test(el.tagName) ||
+          el.classList?.contains?.("custom-quote")
+        );
+        if (hasBlock) Array.from(node.childNodes).forEach(walk);
+        else {
+          const text = serializeNotesInline(node).trim();
+          if (text) blocks.push(text);
+        }
+        return;
+      }
+      Array.from(node.childNodes).forEach(walk);
+    };
+    Array.from(root.childNodes).forEach(walk);
+    return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
   function markdownQuoteBodies(notes) {
     const bodies = [];
     const lines = fencesToMarkdown(String(notes || "")).split("\n");
@@ -350,6 +447,8 @@
     renderNotesInline,
     markdownToHtml,
     htmlToMarkdown,
+    domToExportNotes,
+    toQuoteFence,
     markdownQuoteBodies,
     notesContainsQuote,
     quoteBlockRange,

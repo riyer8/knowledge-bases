@@ -63,7 +63,7 @@ const fromEditor = ContextBookshelf.format(
     ].join("\n"),
   })
 );
-assert.ok(fromEditor.includes("notes: `:::quote\nHello **bold** quote\n:::"));
+assert.ok(fromEditor.includes("notes: `\n:::quote\nHello **bold** quote\n:::"));
 assert.ok(fromEditor.includes(":::quote\nSecond quote\n:::"));
 assert.ok(fromEditor.includes("Commentary with *italic*."));
 assert.ok(!fromEditor.includes("> Hello"));
@@ -155,6 +155,60 @@ const multiMd = ContextNotes.htmlToMarkdown(multiRoot);
 assert.ok(multiMd.includes("> First line"));
 assert.ok(multiMd.includes("> Second line"));
 assert.ok(!multiMd.includes("First lineSecond line"));
+
+// Bookshelf export: blockquotes become :::quote fences; commentary stays plain.
+const exportRoot = mockEl("div", [
+  mockEl("blockquote", [
+    mockEl("p", [mockText("Hardware is bound by compute")]),
+    mockEl("button", [mockText("×")], { "data-delete-quote": "1" }),
+  ]),
+  mockEl("p", [mockText("My independent commentary.")]),
+  mockEl("blockquote", [
+    mockEl("p", [mockText("Arithmetic intensity is FLOPs per byte")]),
+  ]),
+]);
+const exportNotes = ContextNotes.domToExportNotes(exportRoot);
+assert.strictEqual(
+  exportNotes,
+  [
+    ":::quote",
+    "Hardware is bound by compute",
+    ":::",
+    "",
+    "My independent commentary.",
+    "",
+    ":::quote",
+    "Arithmetic intensity is FLOPs per byte",
+    ":::",
+  ].join("\n")
+);
+const pasteReady = ContextBookshelf.format(
+  ContextBookshelf.buildEntry({
+    title: "Rooflines",
+    url: "https://example.com/roofline",
+    dateAdded: "2026-09-05",
+    notes: exportNotes,
+  })
+);
+assert.ok(pasteReady.includes("notes: `\n:::quote\nHardware is bound by compute\n:::"));
+assert.ok(pasteReady.includes("My independent commentary."));
+assert.ok(!pasteReady.includes("> Hardware"));
+
+// Site-style: do not re-fence `>` lines that already sit inside :::quote.
+const siteMixed = [
+  ":::quote",
+  "Outer quote body",
+  "> nested markdown quote left alone",
+  ":::",
+  "",
+  "My commentary.",
+  "",
+  "> bare editor quote becomes a fence",
+].join("\n");
+const siteFenced = ContextNotes.markdownBlockquotesToFences(siteMixed);
+assert.ok(siteFenced.includes(":::quote\nOuter quote body\n> nested markdown quote left alone\n:::"));
+assert.ok(siteFenced.includes(":::quote\nbare editor quote becomes a fence\n:::"));
+assert.ok(siteFenced.includes("My commentary."));
 
 // Notes are the source of truth for page highlights — orphan library quotes do not paint.
 const partialNotes = "> Older quote only";

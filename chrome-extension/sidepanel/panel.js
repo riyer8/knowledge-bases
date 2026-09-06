@@ -1279,7 +1279,18 @@ function handleNotesPaste(event) {
 
 function buildBookshelfEntry(overrides = {}) {
   const meta = overrides.metadata || collectMetadataFromForm();
-  // Always fence through the exporter (handles > blockquotes → :::quote).
+  // Export reads quote <blockquote>s from the Notes DOM as :::quote fences.
+  // Commentary paragraphs stay plain. Notes tab editing format is unchanged.
+  let notes;
+  if (Object.prototype.hasOwnProperty.call(overrides, "notes")) {
+    notes = overrides.notes;
+  } else if (overrides.metadata) {
+    notes = meta.notes;
+  } else if (els.metaNotes && typeof ContextNotes.domToExportNotes === "function") {
+    notes = ContextNotes.domToExportNotes(els.metaNotes);
+  } else {
+    notes = meta.notes;
+  }
   return ContextBookshelf.buildEntry({
     title: overrides.title || getDisplayTitle(),
     url: overrides.url || state.page?.url || "",
@@ -1290,7 +1301,7 @@ function buildBookshelfEntry(overrides = {}) {
     tldr: meta.tldr,
     thoughts: meta.thoughts,
     tags: meta.tags,
-    notes: meta.notes,
+    notes,
   });
 }
 

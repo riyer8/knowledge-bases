@@ -28,7 +28,10 @@
 
   function formatNotesLiteral(notes) {
     if (!notes) return "``";
-    return `\`${escapeTemplateLiteral(notes)}\``;
+    const body = escapeTemplateLiteral(notes);
+    // Match site BookshelfPage/data/*.js: multiline notes: `\n...\n`
+    if (body.includes("\n")) return `\`\n${body}\n\``;
+    return `\`${body}\``;
   }
 
   function formatTagsLiteral(tags) {
@@ -44,6 +47,7 @@
     const lines = String(notes || "").split("\n");
     const out = [];
     let quote = [];
+    let fenceKind = null;
     const flush = () => {
       if (!quote.length) return;
       const body = quote.map((line) => line.replace(/^>\s?/, "")).join("\n").trim();
@@ -51,6 +55,22 @@
       quote = [];
     };
     for (const line of lines) {
+      const open = line.match(/^:::(quote|sidenote)\s*$/);
+      if (open) {
+        flush();
+        fenceKind = open[1];
+        out.push(line);
+        continue;
+      }
+      if (fenceKind && /^:::\s*$/.test(line)) {
+        fenceKind = null;
+        out.push(line);
+        continue;
+      }
+      if (fenceKind) {
+        out.push(line);
+        continue;
+      }
       if (/^>/.test(line)) quote.push(line);
       else {
         flush();
