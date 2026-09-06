@@ -1,5 +1,7 @@
 # Name Anonymization Spec
 
+_Last updated: 2026-09-06_
+
 ## The Problem
 
 The system passively captures communications and content involving real people.

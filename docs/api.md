@@ -1,5 +1,7 @@
 # API Reference
 
+_Last updated: 2026-09-06_
+
 Base URL: `http://127.0.0.1:8765`
 
 All endpoints accept and return JSON unless noted. CORS headers are set for the Chrome
@@ -25,14 +27,19 @@ Returns `{ "ok": true, "page": { ... } }`.
 ### `POST /ask`
 
 Ask a question about a page. Supports conversation history and streaming.
+Requires either a full `page` object **or** `saved_page_id` (loads the saved library page).
 
 ```json
 {
   "question": "What does this mean?",
-  "page_id": "uuid",
+  "page": {
+    "url": "...",
+    "title": "...",
+    "visible_text": "..."
+  },
+  "saved_page_id": "optional-library-id",
   "history": [{"role": "user", "content": "..."}],
-  "stream": true,
-  "saved_page_id": "optional-library-id"
+  "stream": true
 }
 ```
 
@@ -86,12 +93,20 @@ Update a saved page's title and/or metadata.
   "metadata": {
     "author": "...",
     "date": "...",
+    "category": "...",
+    "medium": "...",
+    "tldr": "...",
+    "thoughts": "...",
+    "notes": "...",
+    "dateAdded": "2026-09-05",
+    "tags": ["scaling"],
     "custom": [{"key": "Journal", "value": "..."}]
   }
 }
 ```
 
-At least one of `title` or `metadata` is required.
+At least one of `title` or `metadata` is required. Metadata is normalized to the fields above
+(`notes` is the Notes / bookshelf export document).
 
 ### `DELETE /library/pages/{id}`
 
@@ -152,6 +167,21 @@ AI-suggested things to explore next for a page.
 
 Returns `{ "suggestions": [...] }`.
 
+### `POST /library/extract-document`
+
+Extract text from a PDF (or similar) for library save / page context. Used by the extension
+when reading `file://` / PDF tabs.
+
+```json
+{
+  "url": "file:///…/paper.pdf",
+  "content_base64": "<base64 PDF bytes>",
+  "title": "optional title"
+}
+```
+
+Returns `{ "ok": true, "page": { ... } }` with extracted text and metadata when available.
+
 ### `GET /library/graph`
 
 Page-centric graph for the extension: **saved pages only**, with edges when pages share
@@ -186,10 +216,12 @@ Update repo `.env` (extension Settings panel or API). Supported fields:
 
 Omitted API key fields leave existing keys unchanged.
 
-## Wiki (all clients)
+## Wiki (APIs live; archived from nav)
 
 LLM-maintained markdown wiki at `~/.kb/wiki/`. Raw sources in `wiki/raw/` are compiled into
-linked articles in `wiki/articles/`. Browse at `http://127.0.0.1:8765/app/`.
+linked articles in `wiki/articles/`. Extension and dashboard hide Wiki from primary nav
+([archived.md](archived.md)); Desktop still exposes a Wiki panel. Dashboard shell:
+`http://127.0.0.1:8765/app/`.
 
 ### `GET /wiki/status`
 
@@ -291,7 +323,7 @@ Set `flaggedImportant` to mark the moment as high-priority in retrieval.
 
 ### `GET /proactive`
 
-Returns pending proactive insights for the desktop app and extension banner.
+Returns pending proactive insights for the macOS pet / proactive popup. (No extension banner UI today.)
 
 ### `GET /dashboard/time?days=7`
 
@@ -379,8 +411,8 @@ Ingest recent iMessages through the privacy pipeline.
 
 ### `POST /delete-all`
 
-Deletes all runtime data under `~/.kb/` including library, events, index, graph,
-hashes, buckets, pages, relationship profiles, and OAuth tokens. Returns
+Deletes runtime data under `~/.kb/`: library, events (incl. `paused.log`), index, graph,
+hashes, buckets, pages, wiki, relationships, and OAuth tokens under `auth/`. Returns
 `{ "ok": true, "scope": "all" }`.
 
 ### `POST /ingest`

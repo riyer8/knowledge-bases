@@ -1,5 +1,7 @@
 # Engineering Constitution
 
+_Last updated: 2026-09-06_
+
 **Read this at the start of every session** (with [status.md](status.md) and [init.md](../init.md)).
 
 This is the engineering constitution for **Context** — a privacy-first personal knowledge
@@ -25,6 +27,7 @@ and storage (`~/.kb/`). AI agents and human contributors must follow these rules
 |---|---|
 | Current state | [status.md](status.md) |
 | What to build next | [roadmap.md](roadmap.md) |
+| Extension pitfalls + next sprints | [extension-pitfalls-and-next.md](extension-pitfalls-and-next.md) |
 | Architecture | [architecture.md](architecture.md) |
 | API endpoints | [api.md](api.md) |
 | Module ownership | [agents.md](agents.md) |
@@ -104,13 +107,13 @@ Full agent specs: [agents.md](agents.md).
 |---|---|
 | `core/ingestion/` | ingestion-agent |
 | `core/privacy/` | privacy-agent |
-| `core/memory/`, `library_service`, `page_context_service` | memory-agent |
+| `core/memory/`, `library_service`, `page_context_service`, `wiki_service` | memory-agent |
 | `core/retrieval/` | retrieval-agent |
 | `core/integrations/` | integration-agent |
 | `core/proactive/` | proactive-agent |
-| `DesktopApp/`, `chrome-extension/` | frontend-agent |
+| `DesktopApp/`, `chrome-extension/`, `web/` | frontend-agent |
 | `tests/` | eval-agent |
-| `core/config.py`, `main.py`, `frontend_backend.py`, `scripts/` | infra-agent |
+| `core/config.py`, `env_settings.py`, `http/`, `main.py`, `frontend_backend.py`, `scripts/` | infra-agent |
 
 Cross-module changes → new entry in [decisions.md](decisions.md).
 
@@ -131,7 +134,7 @@ Cross-module changes → new entry in [decisions.md](decisions.md).
 |---|---|
 | New side-effecting functions | Unit test in `tests/` |
 | Privacy pipeline | Detection accuracy, false positives, reversibility; run `tests/test_privacy_eval_cases.py` |
-| Retrieval | Latency benchmarks planned — see [testing.md](testing.md) |
+| Retrieval | Latency gate: `tests/test_retrieval_latency.py` (p95 < 2s) — see [testing.md](testing.md) |
 | Shipping | A broken privacy filter is worse than a missing feature |
 
 ---
@@ -151,13 +154,16 @@ Cross-module changes → new entry in [decisions.md](decisions.md).
 | Location | Rule | Writer |
 |---|---|---|
 | `~/.kb/events/raw/` | append-only, short TTL | ingestion |
-| `~/.kb/events/clean/` | append-only | privacy |
+| `~/.kb/events/clean/` | append-only | ingestion (after privacy) |
 | `~/.kb/events/paused.log` | append-only | privacy |
 | `~/.kb/library/` | mutable | memory |
+| `~/.kb/pages/` | mutable | memory |
+| `~/.kb/wiki/` | mutable | memory (`wiki_service`) |
 | `~/.kb/index/` | mutable | memory |
 | `~/.kb/graph/` | mutable | memory |
+| `~/.kb/relationships/` | mutable | memory |
 | `~/.kb/hashes/map.json` | mutable | privacy |
-| `~/.kb/hashes/salt` | write-once | infra (first run) |
+| `~/.kb/hashes/salt` | write-once | privacy (`hasher` on first hash) |
 | `~/.kb/auth/` | mutable | integrations |
 | `~/.kb/buckets/` | mutable | memory |
 
@@ -168,31 +174,12 @@ Details: [storage.md](storage.md)
 ## Dependency graph
 
 ```text
-                    ┌─────────────┐
-                    │ Chrome ext  │
-                    │ DesktopApp  │
-                    └──────┬──────┘
-                           │ HTTP :8765
-                    ┌──────▼──────┐
-                    │ frontend_   │
-                    │ backend.py  │
-                    └──┬───┬───┬──┘
-                       │   │   │
-           ┌───────────┘   │   └────────────┐
-           │               │                │
-    ┌──────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-    │  retrieval  │  │  proactive  │  │  ingestion  │
-    └──────┬──────┘  └─────┬──────┘  └─────┬──────┘
-           │               │                │
-           └───────┐        │         ┌─────▼──────┐
-                   │        │         │   privacy   │
-           ┌───────▼────────▼─────────▼──────┐
-           │         memory + library         │
-           └──────────────────────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │ llm_providers│
-                    └─────────────┘
+Clients (extension, web/, DesktopApp)
+        → frontend_backend.py + core/http/*
+        → retrieval | proactive | ingestion | library | wiki | page_context
+        → privacy (mandatory for ingestion)
+        → memory (+ relationships, buckets)
+        → llm_providers
 ```
 
 Before changing a module: identify consumers, dependencies, and blast radius.

@@ -1,5 +1,7 @@
 # Getting Started
 
+_Last updated: 2026-09-06_
+
 ## Quick Start
 
 From repo root:
@@ -47,6 +49,7 @@ Key variables — full reference: [configuration.md](configuration.md).
 | `OPENAI_MODEL` | `gpt-4o-mini` | OpenAI chat model |
 | `OPENAI_EMBED_MODEL` | `text-embedding-3-small` | OpenAI embedding model |
 | `KB_EMBED_PROVIDER` | `auto` | `auto`, `ollama`, or `openai` |
+| `KB_PROACTIVE_INTERVAL_MINUTES` | `20` | Desktop proactive check cadence |
 
 ### Using OpenAI (recommended if you have a key)
 
@@ -64,6 +67,7 @@ KB_EMBED_PROVIDER=auto
 ```
 
 With `auto`, chat and semantic search both use OpenAI when the key is set — no Ollama required.
+`start.sh` also skips pulling/starting Ollama when `OPENAI_API_KEY` is set.
 
 ## Chrome Extension
 
@@ -87,22 +91,15 @@ See [chrome-extension/README.md](../chrome-extension/README.md) for details.
 | `ollama` | `KB_CHAT_MODEL`, Ollama running locally |
 | `anthropic` | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` |
 
-## Legacy Claude path
-
-For Claude API chat (legacy desktop path), set in `.env`:
-
-```bash
-CLAUDE_CODE_API_KEY=your_key_here
-CLAUDE_CODE_MODEL=claude-3-5-sonnet-latest
-```
-
-If `CLAUDE_CODE_API_KEY` is unset or still the placeholder, `POST /chat` returns a default fallback reply so the frontend flow still works.
+Chat and page Q&A go through `core/llm_providers.py` (`KB_LLM_PROVIDER`). Anthropic supports
+chat only; embeddings require Ollama or OpenAI.
 
 ## Dependencies
 
 - Python 3.11+
-- Ollama (for local models) — `start.sh` handles model pulls
+- Ollama (for local models) — `start.sh` handles model pulls unless `OPENAI_API_KEY` is set
 - Xcode (for the macOS app)
+- Node + Playwright (optional) for `scripts/e2e_browser_smoke.mjs` — `npm install`
 
 Install Python dependencies:
 
@@ -139,15 +136,16 @@ seeding, start the app and ask chat about **Symsys161** or your class presentati
 should be fast and on-topic. Re-run anytime to add more demo context (events are appended,
 not deduplicated).
 
-## Obsidian (optional IDE)
+## Obsidian (optional; wiki archived from nav)
 
-Open your wiki as an Obsidian vault for reading and editing compiled articles:
+Wiki APIs and `~/.kb/wiki/` still work. Life/Wiki are [archived from extension/dashboard nav](archived.md);
+Desktop may still show Wiki. To browse the vault in Obsidian:
 
 1. Install [Obsidian](https://obsidian.md/)
 2. **Open folder as vault** → select `~/.kb/wiki/`
-3. Browse `articles/`, `raw/`, and `index.md` — the same files the web UI and extension use
+3. Browse `articles/`, `raw/`, and `index.md`
 
-Context auto-writes most wiki content via **Compile**; you can edit markdown directly when you want control. Use the Obsidian Web Clipper to save articles into `wiki/raw/` (or save via the extension and tap **+ Wiki**).
+Context auto-writes most wiki content via **Compile** when that flow is used. Manual markdown edits in the vault are fine.
 
 ## macOS App
 
@@ -169,8 +167,8 @@ open -a Context
 
 On launch, the app auto-starts the Python backend. Your knowledge data stays in `~/.kb/`.
 
-The app includes **Chat**, **Library** (saved pages and quotes from the extension),
-**Graph**, **Life** (bucket review), **Settings**, and **Manual Inputs** panels.
+The app includes **Chat**, **Library** (saved pages/quotes; notes document parity is extension + dashboard today),
+**Graph**, **Life**, **Wiki**, **Settings**, and **Manual Inputs** panels.
 
 Configure API keys in the macOS app **Settings** panel or the Chrome extension **Settings**
 tab (gear icon). Both use `GET` / `POST /settings` to read and update `.env` — see
@@ -187,7 +185,8 @@ Or build in Xcode: open `DesktopApp/DesktopApp.xcodeproj` and press **⌘B**.
 
 After the first build, `start.sh` can also launch the app automatically.
 
-The app appears in the Dock with its own icon and menu bar. Use **⌘⇧C** for chat, **⌘⇧G** for graph.
+The app appears in the Dock with its own icon and menu bar. Use **⌘⇧C** for chat, **⌘⇧G** for graph,
+**⌘⇧P** for the proactive popup, **⌘⇧S** / **⌘⇧I** for screenshots.
 
 The Swift frontend connects to the backend at `http://127.0.0.1:8765`. Both the Chrome extension
 and macOS app share the same backend and storage root (`~/.kb/`). See [architecture.md](architecture.md).

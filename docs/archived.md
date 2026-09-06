@@ -1,5 +1,7 @@
 # Archived surfaces
 
+_Last updated: 2026-09-06_
+
 Life and Wiki are **hidden from nav**, not deleted. The reading loop (highlight → notes → bookshelf JSON) is the product. Revive by restoring a nav button; the views and backend already exist.
 
 ## What is archived

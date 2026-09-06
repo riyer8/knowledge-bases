@@ -1,5 +1,7 @@
 # Configuration
 
+_Last updated: 2026-09-06_
+
 All configuration flows through `core/config.py` and `.env`. Copy `.env.example` to `.env`
 at the repo root.
 
@@ -50,6 +52,12 @@ With `KB_LLM_PROVIDER=auto`, OpenAI is used when `OPENAI_API_KEY` is set; otherw
 
 Scopes: Calendar and Gmail **read-only**. See [getting-started.md](getting-started.md).
 
+### Proactive insights
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KB_PROACTIVE_INTERVAL_MINUTES` | `20` | Minutes between desktop proactive checks (also via `POST /settings`) |
+
 ### macOS app
 
 | Variable | Purpose |
@@ -84,9 +92,11 @@ config.ensure_dirs()    # create ~/.kb structure
 ```
 
 Path properties: `pages_dir`, `events_raw_dir`, `events_clean_dir`, `index_dir`, `graph_dir`,
-`hashes_dir`, `buckets_dir`, `auth_dir`, `paused_log`, `hash_map_path`, `hash_salt_path`.
+`hashes_dir`, `buckets_dir`, `auth_dir`, `paused_log`, `hash_map_path`, `hash_salt_path`,
+`wiki_dir`, `wiki_raw_dir`, `wiki_articles_dir`, `wiki_outputs_dir`.
 
 Library data (`~/.kb/library/`) is managed by `core/library_service.py`.
+Relationship profiles live under `~/.kb/relationships/` via `core/memory/relationships.py`.
 
 ---
 

@@ -1,9 +1,15 @@
 # Buckets of Life Spec
 
+_Last updated: 2026-09-06_
+
 ## Purpose
 
 Automatically classify all captured events into life categories. This creates a structured
 view of how the user actually spends their time, not just screen time — real life signal.
+
+**Status today:** backend + Desktop Life panel are implemented. Life is [archived from
+extension/dashboard nav](../archived.md). UI requirements below that go beyond the archived
+surface (rich filters, create/rename buckets) are target UX, not the current reading-first product.
 
 ---
 

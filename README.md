@@ -1,5 +1,7 @@
 # Context
 
+_Last updated: 2026-09-06_
+
 A local-first personal knowledge system — highlight what you read, keep notes, copy them onto your own site.
 
 ## Quick links
@@ -24,7 +26,8 @@ Primary loop: highlight on the page → notes in the side panel → Copy JSON in
 
 ## For AI agents
 
-Read [docs/constitution.md](docs/constitution.md) and follow [init.md](init.md) at session start.
+Read [AGENTS.md](AGENTS.md) (Cursor loads this automatically), then follow [init.md](init.md)
+and [docs/constitution.md](docs/constitution.md) at session start.
 
 ---
 

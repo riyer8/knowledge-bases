@@ -1,6 +1,8 @@
 # init.md — Session Initialization Protocol
 
-Every Claude session in this repository must follow this protocol in full.
+_Last updated: 2026-09-06_
+
+Every agent session in this repository must follow this protocol in full.
 Do not skip steps. Do not reorder steps. The protocol exists because context loss
 between sessions is the primary failure mode of AI-assisted engineering.
 
@@ -158,15 +160,17 @@ These rules govern what can be written where. Violations are bugs.
 | Storage Location | Rule | Who Can Write |
 |---|---|---|
 | `~/.kb/events/raw/` | append-only, short TTL | ingestion-agent only |
-| `~/.kb/events/clean/` | append-only, permanent | privacy-agent only |
+| `~/.kb/events/clean/` | append-only, permanent | ingestion-agent only (after privacy gate) |
 | `~/.kb/events/paused.log` | append-only | privacy-agent only |
 | `~/.kb/index/` | mutable, versioned | memory-agent only |
 | `~/.kb/graph/` | mutable, versioned | memory-agent only |
+| `~/.kb/relationships/` | mutable | memory-agent only |
 | `~/.kb/hashes/map.json` | mutable | privacy-agent only |
-| `~/.kb/hashes/salt` | write-once, immutable | infra-agent (first run only) |
+| `~/.kb/hashes/salt` | write-once, immutable | privacy-agent (`hasher.py` on first hash) |
 | `~/.kb/auth/` | mutable | integration-agent only |
 | `~/.kb/library/` | mutable | memory-agent only |
 | `~/.kb/pages/` | mutable | memory-agent only |
+| `~/.kb/wiki/` | mutable | memory-agent only (`wiki_service`) |
 | `~/.kb/buckets/` | mutable | memory-agent only |
 | `docs/status.md` | mutable | any agent (end of session) |
 
@@ -177,40 +181,43 @@ These rules govern what can be written where. Violations are bugs.
 ### Dependency Graph
 
 ```
-                    ┌─────────────┐
-                    │  DesktopApp │
-                    └──────┬──────┘
-                           │ HTTP
-                    ┌──────▼──────┐
-                    │  frontend_  │
-                    │  backend.py │
-                    └──┬───┬───┬──┘
-                       │   │   │
-           ┌───────────┘   │   └────────────┐
-           │               │                │
-    ┌──────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
-    │  retrieval  │  │  proactive  │  │  ingestion  │
-    └──────┬──────┘  └─────┬──────┘  └─────┬──────┘
-           │               │                │
-           └───────┐        │         ┌─────▼──────┐
-                   │        │         │   privacy   │
-           ┌───────▼────────▼─────────▼──────┐
-           │              memory              │
-           └──────────────────────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  llm_service│
-                    └─────────────┘
-                           │
-                   Ollama / Claude API
+                    ┌─────────────┐     ┌─────────────┐
+                    │ Chrome ext  │     │  DesktopApp │
+                    │  + web/     │     └──────┬──────┘
+                    └──────┬──────┘            │
+                           └────────┬──────────┘
+                                    │ HTTP
+                             ┌──────▼──────┐
+                             │  frontend_  │
+                             │  backend.py │
+                             │  + http/*   │
+                             └──┬───┬───┬──┘
+                                │   │   │
+            ┌───────────────────┘   │   └──────────────────┐
+            │                       │                      │
+     ┌──────▼──────┐         ┌──────▼──────┐        ┌──────▼──────┐
+     │  retrieval  │         │  proactive  │        │  ingestion  │
+     │ library/wiki│         └──────┬──────┘        └──────┬──────┘
+     │ page_context│                │                      │
+     └──────┬──────┘                │               ┌──────▼──────┐
+            │                       │               │   privacy   │
+            └───────────┬───────────┘               └──────┬──────┘
+                        │                                  │
+                 ┌──────▼──────────────────────────────────▼──────┐
+                 │              memory (+ relationships/buckets)   │
+                 └──────────────────────┬─────────────────────────┘
+                                        │
+                                 ┌──────▼──────┐
+                                 │ llm_providers│
+                                 └─────────────┘
 ```
 
 **Reading the graph:**
 - Arrows point from consumer → dependency
-- Changing an interface in `memory` affects: retrieval, proactive, ingestion (via privacy)
-- Changing `llm_service` affects: memory, retrieval, proactive
+- Changing an interface in `memory` affects: retrieval, proactive, library, wiki, page context
+- Changing `llm_providers` / `llm_service` affects: memory, retrieval, proactive, wiki compile
 - `privacy` is a strict dependency of ingestion — ingestion cannot ship without it
-- `DesktopApp` depends only on the HTTP API surface, not on internal modules
+- Clients depend only on the HTTP API surface, not on internal modules
 
 **Rule:** Before changing a module, read every node that points to it. Notify their owners.
 

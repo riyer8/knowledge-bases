@@ -1,5 +1,7 @@
 # Roadmap
 
+_Last updated: 2026-09-06_
+
 Status key: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ---
@@ -106,10 +108,13 @@ Inspired by [Karpathy's knowledge base workflow](https://x.com/karpathy/status/2
 
 Primary loop: highlight on the page → notes in the side panel → Copy JSON onto a personal site. Spec: [notes-export.md](specs/notes-export.md).
 
+Pending pitfalls, Desktop integration gap, and sprint order: [extension-pitfalls-and-next.md](extension-pitfalls-and-next.md).
+
 - [x] Notes editor is the export source of truth
 - [x] Bookshelf JS object (`:::quote` fences) matches the editor
 - [x] Persist `dateAdded` on first save
 - [x] Dashboard + Saved show the same notes document
+- [ ] Extension trust (draft-aware paint, draft write mutex, reinject) — Sprint A
 - [ ] Library-wide bookshelf export
 - [ ] Saved list filters
 - [ ] Desktop library notes parity

@@ -1,5 +1,7 @@
 # Architectural Decisions
 
+_Last updated: 2026-09-06_
+
 Record of non-obvious choices. Add a new dated section when making a cross-cutting change.
 
 ---

@@ -1,5 +1,7 @@
 # Engineering Workflow
 
+_Last updated: 2026-09-06_
+
 How to work in this repo — for humans and AI agents. The full constitution is in
 [constitution.md](constitution.md). Session steps are in [init.md](../init.md).
 
@@ -51,20 +53,20 @@ Do not expand scope without re-declaring.
 
 See [storage.md](storage.md) and [constitution.md](constitution.md). Summary:
 
-- `events/raw/`, `events/clean/`, `paused.log` → append-only
-- `library/`, `index/`, `graph/`, `buckets/` → memory-agent
-- `hashes/` → privacy-agent (salt is write-once)
+- `events/raw/`, `events/clean/`, `paused.log` → append-only (`clean/` written by ingestion after privacy)
+- `library/`, `pages/`, `wiki/`, `index/`, `graph/`, `buckets/`, `relationships/` → memory-agent
+- `hashes/` → privacy-agent (salt write-once on first hash)
 
 ---
 
 ## Dependency graph
 
 ```text
-Clients (extension, DesktopApp)
-        → frontend_backend.py
-        → retrieval | proactive | ingestion
+Clients (extension, web/, DesktopApp)
+        → frontend_backend.py + core/http/*
+        → retrieval | proactive | ingestion | library | wiki | page_context
         → privacy (mandatory for ingestion)
-        → memory + library
+        → memory (+ relationships, buckets)
         → llm_providers
 ```
 
@@ -102,7 +104,10 @@ Format: `docs/traces/PM-NNN-short-title.md`
 | [privacy-pipeline.md](specs/privacy-pipeline.md) | Any ingestion or storage change |
 | [event-schema.md](specs/event-schema.md) | Ingestion, integrations |
 | [name-anonymization.md](specs/name-anonymization.md) | Privacy, retrieval, UI display |
-| [buckets.md](specs/buckets.md) | Phase 3 classification work |
+| [buckets.md](specs/buckets.md) | Life classification (archived from nav) |
+| [notes-export.md](specs/notes-export.md) | Notes document / bookshelf Copy JSON |
+| [archived.md](archived.md) | Life/Wiki nav archive + revive steps |
+| [extension-pitfalls-and-next.md](extension-pitfalls-and-next.md) | Extension reading-loop follow-ons |
 
 ---
 

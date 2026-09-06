@@ -1,5 +1,7 @@
 # Event Schema
 
+_Last updated: 2026-09-06_
+
 All data flowing through the system is represented as events. This schema is the
 contract between ingestion-agent and every downstream module.
 
@@ -11,7 +13,7 @@ contract between ingestion-agent and every downstream module.
 {
   "id": "uuid-v4",
   "timestamp": "2026-05-19T14:32:00Z",
-  "source": "screen_capture | manual_text | manual_file | manual_url | gcal | gmail | imessage | slack",
+  "source": "screen_capture | manual_text | manual_file | manual_url | gcal | gmail | imessage",
   "content": {
     "text": "raw extracted text",
     "metadata": {}
@@ -45,7 +47,7 @@ contract between ingestion-agent and every downstream module.
   "flagged_important": false,
   "sensitivity_score": 0.3,
   "entities": [
-    {"hash": "a3f9...", "type": "person", "positions": [12, 20]}
+    {"type": "PERSON", "hash": "a3f9b72c", "start": 12}
   ],
   "raw_event": false
 }
@@ -65,7 +67,7 @@ contract between ingestion-agent and every downstream module.
 | `capture_context` | object | App/window/URL at time of capture |
 | `flagged_important` | boolean | User explicitly flagged this moment |
 | `sensitivity_score` | float [0.0–1.0] | Post-privacy pipeline sensitivity rating |
-| `entities` | array | Detected entities with position and hash |
+| `entities` | array | Detected entities: `{type, hash, start}` (`PERSON` / `EMAIL` / `PHONE`) |
 | `raw_event` | boolean | True = pre-privacy, False = post-privacy |
 
 ---

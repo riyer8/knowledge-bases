@@ -1,5 +1,7 @@
 # Product Vision
 
+_Last updated: 2026-09-06_
+
 ## Thesis
 
 Don't describe this as "an AI assistant that answers questions about webpages." That's crowded.

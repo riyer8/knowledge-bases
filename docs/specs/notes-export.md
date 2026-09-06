@@ -1,5 +1,7 @@
 # Notes and bookshelf export
 
+_Last updated: 2026-09-06_
+
 The **Notes editor** is the working UI. **Local drafts** (`chrome.storage.local`, canonical `pageDraft:<url>`) are the persistent store until you click **+ Save**. Library `quotes.json` is only for on-page highlight IDs. Library `pages/{id}.json` → `metadata.notes` is what Saved / graph / wiki / dashboard read after Save.
 
 ## Persistence (local-first)

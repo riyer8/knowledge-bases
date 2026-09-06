@@ -1,6 +1,6 @@
 # Context — Design System
 
-_Last updated: 2026-09-02_
+_Last updated: 2026-09-06_
 
 This document defines the visual language, interaction patterns, and implementation
 plan for **Context** across the Chrome extension, local dashboard (`/app/`), and macOS app.
@@ -135,15 +135,15 @@ Min tap height: **36px** in extension, **40px** in dashboard.
 
 ### Navigation
 
-- **Extension:** horizontal tabs (Page | Saved | Life | Graph | Wiki) + gear for Settings
-- **Dashboard:** left sidebar with active state (`accent-soft` background)
-- **Page sub-nav:** Quotes | Chat segmented control
+- **Extension:** horizontal tabs (**Page | Saved | Graph**) + gear for Settings. Life and Wiki stay in the DOM but are archived from nav.
+- **Dashboard:** left sidebar with active state (`accent-soft` background); Life/Wiki archived from nav.
+- **Page sub-nav:** **Details | Notes | Chat** segmented control (default: Details)
 
 ### Cards
 
-- Saved page cards: title, site, summary preview, delete on hover/right
-- Quote cards: left accent border, italic blockquote
-- Wiki article cards: title + excerpt
+- Saved page cards: title, site, summary / notes preview, delete on hover/right
+- Quote marks on-page + Notes document (`:::quote` fences) — not a separate Quotes tab
+- Wiki article cards (archived surface): title + excerpt
 
 ### Chat
 
@@ -154,7 +154,7 @@ Min tap height: **36px** in extension, **40px** in dashboard.
 ### Empty states
 
 Centered, muted, one line of guidance + optional action.  
-Example: *“Highlight text on the page to save a quote here.”*
+Example: *“Highlight text on the page to add it to Notes.”*
 
 ### Status bar (extension footer)
 
@@ -166,15 +166,15 @@ Single line: connection state, last action. Errors in `--danger`.
 
 ### Page (extension)
 
-1. Header: title (editable), URL, collapsible Details, Save / + Wiki / Explore
-2. Sub-tabs: Quotes (default) | Chat
-3. Selection bar appears when text highlighted on page
-4. Quote compose: inline card with preview + note
+1. Header: title (editable), URL, Save / Explore (Wiki affordances archived)
+2. Sub-tabs: **Details** (default) | **Notes** | **Chat**
+3. On-page highlight toolbar (⌥H) even when the panel is closed
+4. Notes document is the export source of truth; Details holds metadata + Copy JSON
 
 ### Saved
 
 - List → detail drill-down
-- Detail: summary (markdown), quotes, chat history, Delete page, Add to wiki
+- Detail: same notes document as the editor, chat history, Delete page
 - Delete from list **or** detail
 
 ### Graph
@@ -183,15 +183,16 @@ Single line: connection state, last action. Errors in `--danger`.
 - Click node → open in Saved / Library
 - Empty: “Save pages to see connections”
 
-### Wiki
+### Wiki (archived from nav)
 
-- Extension: compact list + ask; link to full dashboard
-- Dashboard: sidebar (index / articles / raw) + markdown reader + compile + health + ask
+- Extension / dashboard: hidden from primary nav; revive steps in [archived.md](archived.md)
+- Desktop: Wiki panel still available
+- Dashboard `/app/` can still host wiki browsing when un-archived
 
-### Life
+### Life (archived from nav)
 
-- Bucket chips (7-day breakdown)
-- Event cards with bucket dropdown + Save override
+- Extension / dashboard: hidden from primary nav
+- Desktop: Life panel still available (bucket chips, overrides)
 
 ### Settings
 
@@ -221,9 +222,9 @@ Single line: connection state, last action. Errors in `--danger`.
 
 | Surface | Width | Primary actions |
 |---|---|---|
-| Chrome side panel | ~360px | Save quote, chat, save page |
-| Dashboard `/app/` | full browser | Browse library, graph, wiki, life |
-| macOS app | native windows | Same API, SwiftUI (follow tokens in future pass) |
+| Chrome side panel | ~360px | Highlight → Notes, chat, save page, Copy JSON |
+| Dashboard `/app/` | full browser | Browse library + notes, graph |
+| macOS app | native windows | Chat, library (quotes-oriented today), graph, pet, Life/Wiki panels |
 
 ---
 

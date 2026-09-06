@@ -1,5 +1,7 @@
 # Privacy Pipeline Spec
 
+_Last updated: 2026-09-06_
+
 ## Purpose
 
 Every piece of data entering the system must pass through this pipeline before storage.
@@ -50,14 +52,13 @@ If `should_pause` is True:
 
 Uses spaCy `en_core_web_sm` for named entity recognition.
 
-**Detected entity types:**
-- `PERSON` — personal names
-- `EMAIL` — email addresses (also regex: `\S+@\S+\.\S+`)
-- `PHONE` — phone numbers (also regex: common phone patterns)
-- `GPE` — geopolitical entities (cities, countries — lower sensitivity)
-- `ORG` — organizations (lower sensitivity, usually not hashed)
+**Detected entity types (stored / hashed today):**
+- `PERSON` — personal names (spaCy NER)
+- `EMAIL` — email addresses (regex)
+- `PHONE` — phone numbers (regex)
 
-**Output:** list of detected entities with type, text, and position in original string
+**Output:** list of `DetectedEntity` with `entity_type`, `text`, `start`, `end`.
+Clean-event records after sanitization are `{ "type", "hash", "start" }`.
 
 ---
 
@@ -67,11 +68,12 @@ For each `PERSON` entity detected:
 1. Normalize: lowercase, strip punctuation
 2. Hash: `SHA-256(normalized_name + per_install_salt)`
 3. Truncate hash to 8 chars for readability: `a3f9b72c`
-4. Store in `~/.kb/hashes/map.json`: `{ "a3f9b72c": "Original Name" }`
+4. Store in `~/.kb/hashes/map.json` as a rich entry, e.g.
+   `{ "a3f9b72c": { "display_name": "Original Name", "first_seen": "...", "aliases": [], "user_edited": false } }`
 5. Replace name in text with `[PERSON:a3f9b72c]`
 
 **Per-install salt:**
-- Generated on first run: `secrets.token_hex(32)`
+- Generated on first hash in `core/privacy/hasher.py`: `secrets.token_hex(32)`
 - Stored in `~/.kb/hashes/salt` (file permissions: 600)
 - Never committed to git, never synced
 
@@ -113,12 +115,13 @@ Scoring factors:
 
 ## Reverse Rendering (UI Layer)
 
-The UI resolves hashes back to display names before showing anything to the user.
-This happens in `DesktopApp/Models/NameResolver.swift`.
+Hashes are resolved back to display names before the user sees chat/retrieval output.
+This happens in `core/retrieval/context_assembler.py` (`render_response` + `resolve_hash`),
+not in a Swift `NameResolver`.
 
-The hash map (`~/.kb/hashes/map.json`) is read-only from the frontend.
-The display name is the original name as seen at first hash time.
-User can edit display names in Settings → Relationships.
+The hash map (`~/.kb/hashes/map.json`) is read-only from clients.
+Display names can be edited via relationship profiles (`GET`/`POST /relationships/*`,
+Desktop Life / Relationships UI).
 
 ---
 

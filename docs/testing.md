@@ -1,5 +1,7 @@
 # Testing
 
+_Last updated: 2026-09-06_
+
 ## Unit tests
 
 Run the full suite:
@@ -69,9 +71,11 @@ of that gate.
 
 ## Browser smoke (Chrome extension reading loop)
 
-Requires a running backend and Playwright:
+Requires a running backend, Playwright, and Node deps:
 
 ```bash
+npm install   # once — installs playwright from package.json
+
 # terminal 1
 ./start.sh   # or however you normally boot http://127.0.0.1:8765
 
@@ -86,4 +90,13 @@ API-only backend smoke (no browser):
 ```bash
 python3 scripts/e2e_smoke.py
 ```
+
+## Node helpers under pytest
+
+When Node is available, pytest also runs:
+
+- `tests/test_notes_export.js` (via `tests/test_notes_export.py`) — notes ↔ bookshelf export
+- `tests/test_page_drafts.js` — local draft store behavior
+
+Key library/notes Python coverage: `tests/test_library_service.py`, `tests/test_library_documents.py`.
 

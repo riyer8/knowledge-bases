@@ -1,5 +1,7 @@
 # Session Traces
 
+_Last updated: 2026-09-06_
+
 Optional execution logs for non-trivial engineering sessions. Use when work spans multiple
 modules, touches privacy/ingestion contracts, or needs an audit trail for the next session.
 

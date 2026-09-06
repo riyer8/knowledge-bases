@@ -1,5 +1,7 @@
 # Context Chrome Extension
 
+_Last updated: 2026-09-06_
+
 Highlight passages like [Obsidian Web Clipper](https://obsidian.md/clipper), keep notes locally, copy bookshelf JSON onto your site. Connects to the local Python backend — no full-page markdown clip, just the passages you choose.
 
 ## Setup
@@ -90,6 +92,6 @@ KB_LLM_PROVIDER=auto
 - Highlights persist and repaint when you revisit a page
 - Notes editor: quotes + your commentary; Copy JSON matches the document (`:::quote` fences)
 - Extracts structured page context for chat
-- PDF text extraction via backend
+- PDF text extraction via `POST /library/extract-document`
 - Unified chat with streaming via `POST /ask`
 - Knowledge graph: saved pages linked by shared topics

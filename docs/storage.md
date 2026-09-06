@@ -1,5 +1,7 @@
 # Storage Layout
 
+_Last updated: 2026-09-06_
+
 All runtime data lives under **`~/.kb/`** (override with `KB_ROOT` in `.env`). Nothing in this
 tree is committed to git.
 
@@ -11,9 +13,9 @@ tree is committed to git.
 ~/.kb/
 ├── library/                    # Extension + desktop saved reading library
 │   ├── saved_pages.json        # Index of saved pages
-│   ├── pages/{id}.json         # Page detail (title, url, summary)
+│   ├── pages/{id}.json         # Page detail (title, url, summary, metadata.notes)
 │   ├── chats/{id}.jsonl        # Per-page chat history
-│   └── quotes.json             # Highlighted quotes
+│   └── quotes.json             # Highlight IDs / quote records
 ├── wiki/                       # LLM-maintained markdown wiki
 │   ├── raw/                    # Source documents (from saved pages, clips)
 │   ├── articles/               # Compiled concept articles with [[wikilinks]]
@@ -27,11 +29,13 @@ tree is committed to git.
 │   └── paused.log              # Pause metadata only — never content
 ├── index/                      # Vector embeddings for semantic search
 ├── graph/                      # Knowledge graph + concepts.json
+├── relationships/
+│   └── profiles.json           # Editable person profiles
 ├── hashes/
-│   ├── map.json                # hash → display name (privacy layer)
-│   └── salt                    # Write-once per install
+│   ├── map.json                # hash → {display_name, first_seen, aliases, ...}
+│   └── salt                    # Write-once per install (created on first hash)
 ├── buckets/
-│   └── classifications.json    # Life bucket assignments (Phase 3)
+│   └── classifications.json    # Life bucket assignments
 └── auth/                       # OAuth tokens for integrations
 ```
 
@@ -41,8 +45,8 @@ tree is committed to git.
 
 | Path | Rule | Module |
 |---|---|---|
-| `events/raw/` | Append-only | `core/ingestion/` |
-| `events/clean/` | Append-only | `core/privacy/` |
+| `events/raw/` | Append-only | `core/ingestion/event_writer.py` |
+| `events/clean/` | Append-only (after privacy gate) | `core/ingestion/event_writer.py` |
 | `events/paused.log` | Append-only, no PII | `core/privacy/` |
 | `library/` | Mutable | `core/library_service.py` |
 | Extension `pageDraft:*` | Local-only notes until + Save | `chrome-extension/sidepanel/page-drafts.js` |
@@ -50,7 +54,8 @@ tree is committed to git.
 | `pages/` | Mutable | `core/page_context_service.py` |
 | `index/` | Mutable | `core/memory/` |
 | `graph/` | Mutable | `core/memory/` |
-| `hashes/` | Mutable map; salt write-once | `core/privacy/` |
+| `relationships/` | Mutable | `core/memory/relationships.py` |
+| `hashes/` | Mutable map; salt write-once on first hash | `core/privacy/hasher.py` |
 | `auth/` | Mutable | `core/integrations/` |
 | `buckets/` | Mutable | `core/memory/` |
 
@@ -66,8 +71,8 @@ Violating write boundaries is a bug. See [constitution.md](constitution.md).
 | Extension footer **Delete all data** | Full `~/.kb/` wipe (`POST /delete-all`) |
 | Desktop Settings **Clear Saved Library** | Same as `POST /library/clear` |
 | Desktop Settings **Delete All Data** | Same as `POST /delete-all` |
-| `POST /library/clear` | Saved pages, quotes, library graph only |
-| `POST /delete-all` | Everything: events, index, graph, hashes, buckets, pages, relationships, OAuth tokens |
+| `POST /library/clear` | Saved pages, quotes, library chats only |
+| `POST /delete-all` | Everything wiped by `delete_all_data()`: library, events, index, graph, hashes, buckets, pages, wiki, relationships, auth, paused.log |
 
 Backups are the user's responsibility — there is no cloud sync by design.
 See [decisions.md](decisions.md) DECISION-001.
@@ -77,5 +82,7 @@ See [decisions.md](decisions.md) DECISION-001.
 ## Name anonymization
 
 Stored text contains `[PERSON:hash]` tokens, not real names. The hash map at
-`hashes/map.json` is used only at the UI/retrieval layer to render display names.
-The LLM never receives the mapping. See [specs/name-anonymization.md](specs/name-anonymization.md).
+`hashes/map.json` maps each hash to an object (`display_name`, `first_seen`, `aliases`,
+`user_edited`, …). Retrieval resolves tokens via `core/retrieval/context_assembler.py`
+(`render_response` + `resolve_hash`). The LLM never receives the mapping.
+See [specs/name-anonymization.md](specs/name-anonymization.md).

@@ -1,5 +1,7 @@
 # Documentation
 
+_Last updated: 2026-09-06_
+
 **Context** — local-first personal knowledge system. Start here.
 
 ---
@@ -36,8 +38,9 @@
 | [Storage](storage.md) | `~/.kb/` layout and write rules |
 | [API Reference](api.md) | HTTP endpoints for all clients |
 | [Project Structure](project-structure.md) | Repo tree and hotkeys |
-| [Testing](testing.md) | Unit tests + privacy eval harness |
+| [Testing](testing.md) | Unit tests + privacy eval + browser smoke |
 | [Chrome Extension](../chrome-extension/README.md) | Extension setup and troubleshooting |
+| [Extension pitfalls](extension-pitfalls-and-next.md) | Reading-loop trust gaps + sprint order |
 
 ---
 
@@ -47,6 +50,7 @@
 |---|---|
 | [Constitution](constitution.md) | **Read first** — engineering rules and non-negotiables |
 | [init.md](../init.md) | Session initialization protocol (repo root) |
+| [AGENTS.md](../AGENTS.md) | Cursor/agent entry pointing at `init.md` |
 | [Engineering Workflow](engineering.md) | Scope declarations, traces, postmortems |
 | [Agent Ownership](agents.md) | Module boundaries and responsibilities |
 | [Decisions](decisions.md) | Architectural decision log |
@@ -72,12 +76,14 @@
 ```text
 knowledge-bases/
 ├── core/              # Python backend
+├── web/               # Local dashboard (/app/)
 ├── chrome-extension/  # Chrome side panel
 ├── DesktopApp/        # macOS Context.app source
 ├── docs/              # ← you are here
-├── scripts/           # Launcher, install, build helpers
+├── scripts/           # Launcher, install, build, e2e helpers
 ├── tests/             # pytest suite + eval fixtures
 ├── demo/              # Presentation seed script
+├── AGENTS.md          # Cursor/agent entry → init.md
 ├── init.md            # Session protocol (repo root)
 ```
 

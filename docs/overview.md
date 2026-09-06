@@ -1,5 +1,7 @@
 # Context — Overview
 
+_Last updated: 2026-09-06_
+
 > An AI that remembers what you've read and understands what you're looking at right now.
 
 **Context** is a local-first personal knowledge system for macOS. A Chrome extension captures
@@ -14,14 +16,15 @@ memory from the desktop. Everything stays on your machine under `~/.kb/`.
 | Highlight quotes and write notes | Extension Notes panel + on-page clipper (⌥H) |
 | Copy bookshelf JSON onto a personal site | Extension Details / Notes, dashboard Library |
 | Unified chat with page + memory context | Extension side panel |
-| Saved library (pages, notes, per-page chat) | Extension + dashboard + macOS app |
+| Saved library (pages, notes, per-page chat) | Extension + dashboard (`web/`); macOS library is pages/quotes today |
 | Knowledge graph (saved pages, linked by shared topics) | Extension + macOS app |
-| Proactive insights | Extension banner + macOS pet popup |
+| Proactive insights | macOS pet / `⌘⇧P` popup (`GET /proactive`) |
 | iMessage ingest (read-only, macOS) | Backend `/integrations/imessage/*` |
 | Settings (API keys, data controls) | Extension Settings (gear) + macOS Settings |
 | Screen capture + privacy pipeline | macOS app + `core/ingestion/` |
 | Manual inputs (files, URLs, notes) | macOS app |
 | Semantic search + connections | Backend API |
+| Wiki / Life (backend live; archived from extension/dashboard nav) | Desktop panels + APIs — see [archived.md](archived.md) |
 
 ## Quick start
 
@@ -62,10 +65,12 @@ OpenAI; otherwise Ollama. All LLM calls go through `core/llm_providers.py` / `co
 
 | Path | Contents |
 |---|---|
-| `~/.kb/library/` | Saved pages, quotes, per-page chat |
+| `~/.kb/library/` | Saved pages, quotes, notes, per-page chat |
+| `~/.kb/wiki/` | Raw sources + compiled wiki articles |
 | `~/.kb/graph/` | Concept knowledge graph |
+| `~/.kb/relationships/` | Relationship profiles |
 | `~/.kb/index/` | Semantic embeddings |
-| `~/.kb/events/` | Raw and clean event logs |
+| `~/.kb/events/` | Raw and clean event logs + paused.log |
 | `~/.kb/hashes/` | Name hash map and salt |
 
 Reset options (extension **Settings** gear → Data, and desktop Settings):
@@ -84,6 +89,7 @@ Full reference: [api.md](api.md). Core library endpoints:
 | `GET` | `/library/pages` | List saved pages |
 | `GET` | `/library/pages/{id}` | Page detail + chat + quotes |
 | `POST` | `/library/quotes` | Save a highlighted quote |
+| `POST` | `/library/extract-document` | PDF / document text extract |
 | `GET` | `/library/graph` | Page-centric graph (saved pages linked by shared topics) |
 | `PATCH` | `/library/pages/{id}` | Update page title and/or metadata |
 | `PATCH` | `/library/quotes/{id}` | Edit quote text or note |
