@@ -416,6 +416,7 @@ function bindEvents() {
     refreshExportJsonPreview();
   });
   els.metaNotes?.addEventListener("input", () => {
+    if (notesStructuralUpdate) return;
     stabilizeNotesQuotes();
     repairBrokenNoteQuotes();
     decorateNoteQuoteControls();
@@ -426,7 +427,7 @@ function bindEvents() {
     void syncHighlightsToPage();
   });
   els.metaNotes?.addEventListener("keydown", handleNotesKeydown);
-  els.metaNotes?.addEventListener("mousedown", handleNotesBlankClick);
+  els.metaNotes?.addEventListener("mousedown", handleNotesMouseDown);
   els.metaNotes?.addEventListener("click", handleNotesQuoteClick);
   els.metaNotes?.addEventListener("paste", handleNotesPaste);
   els.metaTldr?.addEventListener("blur", savePageDetails);
@@ -861,14 +862,30 @@ function getNotesMarkdown() {
   return ContextNotes.htmlToMarkdown(els.metaNotes);
 }
 
+/** Ignore contenteditable "input" while we surgically change notes DOM. */
+let notesStructuralUpdate = false;
+
+function withNotesStructuralUpdate(fn) {
+  notesStructuralUpdate = true;
+  try {
+    return fn();
+  } finally {
+    window.setTimeout(() => {
+      notesStructuralUpdate = false;
+    }, 0);
+  }
+}
+
 function setNotesMarkdown(value) {
   if (!els.metaNotes) return;
-  els.metaNotes.innerHTML = ContextNotes.markdownToHtml(value);
-  stabilizeNotesQuotes();
-  decorateNoteQuoteControls();
-  rememberNoteQuoteBodies();
-  updateNotesEmptyState();
-  refreshExportJsonPreview();
+  withNotesStructuralUpdate(() => {
+    els.metaNotes.innerHTML = ContextNotes.markdownToHtml(value);
+    stabilizeNotesQuotes();
+    decorateNoteQuoteControls();
+    rememberNoteQuoteBodies();
+    updateNotesEmptyState();
+    refreshExportJsonPreview();
+  });
 }
 
 function decorateNoteQuoteControls() {
@@ -897,18 +914,63 @@ function quoteTextFromBlockquote(quoteEl) {
   return ContextNotes.normalizeSelection(clone.innerText || "");
 }
 
+/**
+ * Remove one quote from the editor by deleting its DOM nodes only.
+ * Avoids markdown round-trip, which can wipe the whole document if serialization
+ * races with contenteditable during the × click.
+ */
+function removeQuoteElementsFromEditor(quoteEl, note = "") {
+  if (!quoteEl || !els.metaNotes?.contains(quoteEl)) return;
+
+  const victims = new Set([quoteEl]);
+  let el = quoteEl.nextElementSibling;
+  while (el && isBlankParagraph(el)) {
+    victims.add(el);
+    el = el.nextElementSibling;
+  }
+
+  const noteText = ContextNotes.normalizeSelection(note);
+  if (noteText && el && el.tagName.toLowerCase() === "p") {
+    const paraText = ContextNotes.normalizeSelection(el.innerText || "");
+    if (paraText === noteText) {
+      victims.add(el);
+    }
+  }
+
+  for (const node of victims) node.remove();
+  ensureNotesWritableParagraph();
+}
+
 function removeNoteQuoteBlock(quoteEl) {
   if (!quoteEl || !els.metaNotes?.contains(quoteEl)) return;
+
   const text = quoteTextFromBlockquote(quoteEl);
+  const matchKey = ContextNotes.quoteMatchKey(text);
   const match = (state.quotes || []).find(
-    (quote) => ContextNotes.quoteMatchKey(quote.text) === ContextNotes.quoteMatchKey(text)
+    (quote) => ContextNotes.quoteMatchKey(quote.text) === matchKey
   );
-  const next = ContextNotes.removeQuoteFromNotes(
-    getNotesMarkdown(),
-    match || { text }
-  );
-  setNotesMarkdown(next);
-  if (match) void deleteQuoteRecord(match, { silent: true });
+
+  withNotesStructuralUpdate(() => {
+    // Prefer library note when present; otherwise keep neighboring freeform paragraphs.
+    removeQuoteElementsFromEditor(quoteEl, match?.note || "");
+    stabilizeNotesQuotes();
+    decorateNoteQuoteControls();
+    rememberNoteQuoteBodies();
+    updateNotesEmptyState();
+    refreshExportJsonPreview();
+  });
+
+  // Drop the library record (if any) and always repaint so the page mark disappears.
+  if (match) {
+    void deleteQuoteRecord(match, { silent: true });
+  } else {
+    if (matchKey) {
+      state.quotes = (state.quotes || []).filter(
+        (item) => ContextNotes.quoteMatchKey(item.text) !== matchKey
+      );
+    }
+    void syncHighlightsToPage();
+  }
   schedulePageDraftSave();
   void savePageDetails({ quiet: true });
   setStatus("Quote removed");
@@ -927,6 +989,10 @@ function clearAllNotes() {
   for (const quote of toDelete) {
     void deleteQuoteRecord(quote, { silent: true });
   }
+  state.quotes = (state.quotes || []).filter(
+    (quote) => !bodies.includes(ContextNotes.quoteMatchKey(quote.text))
+  );
+  void syncHighlightsToPage();
   schedulePageDraftSave();
   void savePageDetails({ quiet: true });
   setStatus("Notes cleared");
@@ -960,6 +1026,7 @@ function pruneQuotesRemovedFromNotes() {
   state.lastNoteQuoteBodies = currentBodies.map((body) =>
     ContextNotes.normalizeSelection(body)
   );
+  let changed = false;
   for (const text of removed) {
     // If the quote text is still visible in the editor (e.g. last blockquote
     // temporarily unwrapped), keep the library quote and page highlight.
@@ -967,13 +1034,18 @@ function pruneQuotesRemovedFromNotes() {
     const quote = (state.quotes || []).find(
       (item) => ContextNotes.quoteMatchKey(item.text) === ContextNotes.quoteMatchKey(text)
     );
-    if (!quote) continue;
+    if (!quote) {
+      changed = true;
+      continue;
+    }
     // Drop locally first so a concurrent repaint cannot revive a deleted highlight.
     state.quotes = state.quotes.filter((item) => item !== quote);
+    changed = true;
     if (quote?.id && !String(quote.id).startsWith("local-")) {
       void deleteQuoteRecord(quote, { silent: true, skipStateFilter: true });
     }
   }
+  if (changed) void syncHighlightsToPage();
 }
 
 function notesEditorStillHasQuote(text) {
@@ -1035,6 +1107,17 @@ function repairBrokenNoteQuotes() {
     blockquote.appendChild(match);
     wrappedKeys.add(key);
   }
+}
+
+function handleNotesMouseDown(event) {
+  const deleteBtn = event.target.closest?.("[data-delete-quote]");
+  if (deleteBtn && els.metaNotes?.contains(deleteBtn)) {
+    // Stop contenteditable from treating × as an edit (can nuke the document).
+    event.preventDefault();
+    event.stopPropagation();
+    return;
+  }
+  handleNotesBlankClick(event);
 }
 
 function handleNotesQuoteClick(event) {
@@ -1196,6 +1279,7 @@ function handleNotesPaste(event) {
 
 function buildBookshelfEntry(overrides = {}) {
   const meta = overrides.metadata || collectMetadataFromForm();
+  // Always fence through the exporter (handles > blockquotes → :::quote).
   return ContextBookshelf.buildEntry({
     title: overrides.title || getDisplayTitle(),
     url: overrides.url || state.page?.url || "",
@@ -1211,10 +1295,9 @@ function buildBookshelfEntry(overrides = {}) {
 }
 
 function refreshExportJsonPreview() {
-  const entry = buildBookshelfEntry();
-  if (els.exportJsonPreview) {
-    els.exportJsonPreview.textContent = ContextBookshelf.format(entry);
-  }
+  if (!els.exportJsonPreview) return;
+  const text = ContextBookshelf.format(buildBookshelfEntry());
+  els.exportJsonPreview.textContent = text;
 }
 
 async function copyBookshelfJson() {
@@ -2029,11 +2112,23 @@ async function askQuestion(presetQuestion) {
     const decoder = new TextDecoder();
     let answer = "";
     let buffer = "";
+    let renderTimer = 0;
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+    const paintAnswer = (final = false) => {
+      if (final) {
+        window.clearTimeout(renderTimer);
+        setAssistantMarkdown(assistantNode, answer);
+        return;
+      }
+      window.clearTimeout(renderTimer);
+      renderTimer = window.setTimeout(() => {
+        setAssistantMarkdown(assistantNode, answer);
+        els.messages.scrollTop = els.messages.scrollHeight;
+      }, 80);
+    };
+
+    const ingestSse = (chunk) => {
+      buffer += chunk;
       const parts = buffer.split("\n\n");
       buffer = parts.pop() || "";
       for (const part of parts) {
@@ -2043,15 +2138,25 @@ async function askQuestion(presetQuestion) {
         if (payload.error) throw new Error(payload.error);
         if (payload.token) {
           answer += payload.token;
-          assistantNode.textContent = answer;
+          paintAnswer(false);
         }
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (value) ingestSse(decoder.decode(value, { stream: !done }));
+      if (done) {
+        ingestSse(decoder.decode());
+        // Flush a trailing event that never got a final blank separator.
+        if (buffer.trim()) ingestSse("\n\n");
+        break;
       }
     }
 
     state.history.push({ role: "user", content: question });
     state.history.push({ role: "assistant", content: answer });
-    assistantNode.classList.add("markdown-body");
-    assistantNode.innerHTML = renderMarkdown(answer);
+    paintAnswer(true);
     setStatus("Answer ready");
     return { answer, assistantNode };
   } catch (err) {
@@ -2153,8 +2258,7 @@ async function openSavedPage(pageId) {
       const node = document.createElement("div");
       node.className = `message ${turn.role}`;
       if (turn.role === "assistant") {
-        node.classList.add("markdown-body");
-        node.innerHTML = renderMarkdown(turn.content);
+        setAssistantMarkdown(node, turn.content);
       } else {
         node.textContent = turn.content;
       }
@@ -2488,14 +2592,29 @@ function appendMessage(role, text) {
   const node = document.createElement("div");
   node.className = `message ${role}`;
   if (role === "assistant") {
-    node.classList.add("markdown-body");
-    node.innerHTML = renderMarkdown(text);
+    setAssistantMarkdown(node, text);
   } else {
     node.textContent = text;
   }
   els.messages.appendChild(node);
   els.messages.scrollTop = els.messages.scrollHeight;
   return node;
+}
+
+/** Always prefer rendered markdown; never leave raw ** / ### in the bubble. */
+function setAssistantMarkdown(node, text) {
+  if (!node) return;
+  node.classList.add("markdown-body");
+  const source = String(text || "");
+  try {
+    if (typeof renderMarkdown === "function") {
+      node.innerHTML = renderMarkdown(source);
+      return;
+    }
+  } catch (err) {
+    console.warn("Context markdown render failed:", err);
+  }
+  node.textContent = source;
 }
 
 function removeChatEmptyHint() {

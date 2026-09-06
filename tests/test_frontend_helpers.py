@@ -39,6 +39,19 @@ def test_markdown_bold_and_italic():
     assert "<em>italic</em>" in html
 
 
+def test_markdown_underscore_emphasis():
+    html = _render_markdown("__bold__ and _italic_")
+    assert "<strong>bold</strong>" in html
+    assert "<em>italic</em>" in html
+
+
+def test_markdown_bold_allows_inner_star():
+    html = _render_markdown("**bold with a *star* inside**")
+    assert "<strong>" in html and "</strong>" in html
+    assert "**" not in html
+    assert "<em>star</em>" in html
+
+
 def test_markdown_escapes_html():
     html = _render_markdown("<script>alert(1)</script>")
     assert "<script>" not in html
@@ -71,6 +84,43 @@ def test_markdown_splits_inline_numbered_list():
     assert "<ol>" in html
     assert html.count("<li>") == 2
     assert "<strong>&quot;Alpha&quot;</strong>" in html
+
+
+def test_markdown_unicode_and_paren_lists():
+    html = _render_markdown("• Alpha\n1) Beta\n2) Gamma")
+    assert "<ul>" in html
+    assert "<ol>" in html
+    assert "<li>Alpha</li>" in html
+    assert "<li>Beta</li>" in html
+
+
+def test_markdown_list_continuation_indent():
+    html = _render_markdown(
+        "- **[Alpha](https://a.com)** — a.com\n  reason one\n- **[Beta](https://b.com)** — b.com"
+    )
+    assert html.count("<li>") == 2
+    assert "reason one" in html
+    assert "<li>reason one</li>" not in html
+
+
+def test_markdown_demotes_latex_and_packed_headings():
+    sample = (
+        "We load vector \\( x \\) and \\( y \\). ### Breakdown: - **Loading**: "
+        "- We load both. "
+        "\\[ A = \\frac{\\text{Total FLOPs}}{\\text{Total Bytes}} = \\frac{2N - 1}{4N} \\] "
+        "As \\( N \\to \\infty \\), \\( A \\approx \\frac{1}{2} \\)."
+    )
+    html = _render_markdown(sample)
+    assert "\\(" not in html
+    assert "\\[" not in html
+    assert "\\frac" not in html
+    assert "\\text" not in html
+    assert "<h3>Breakdown:</h3>" in html
+    assert "<strong>Loading</strong>" in html
+    assert "(Total FLOPs)/(Total Bytes)" in html
+    assert "(2N - 1)/(4N)" in html
+    assert "→" in html
+    assert "≈" in html
 
 
 def test_theme_modes_defined():

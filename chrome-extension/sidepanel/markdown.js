@@ -8,11 +8,77 @@
       .replace(/"/g, "&quot;");
   }
 
+  const LATEX_SYMBOLS = {
+    to: "→",
+    rightarrow: "→",
+    leftarrow: "←",
+    approx: "≈",
+    infty: "∞",
+    times: "×",
+    cdot: "·",
+    dots: "…",
+    ldots: "…",
+    pm: "±",
+    leq: "≤",
+    geq: "≥",
+    neq: "≠",
+    alpha: "α",
+    beta: "β",
+    gamma: "γ",
+    delta: "δ",
+    theta: "θ",
+    lambda: "λ",
+    mu: "μ",
+    pi: "π",
+    sigma: "σ",
+    omega: "ω",
+  };
+
+  /** Turn common LaTeX bits into readable plain text (no KaTeX dependency). */
+  function simplifyLatexInner(inner) {
+    let out = String(inner || "");
+    // Repeat a few times for shallow nesting like \frac{\text{a}}{b}
+    for (let i = 0; i < 4; i += 1) {
+      const before = out;
+      out = out.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "($1)/($2)");
+      out = out.replace(/\\(?:text|mathrm|mathbf|textrm|mathit|operatorname)\s*\{([^{}]*)\}/g, "$1");
+      out = out.replace(/\\sqrt\s*\{([^{}]*)\}/g, "√($1)");
+      if (out === before) break;
+    }
+    out = out.replace(
+      /\\(to|rightarrow|leftarrow|approx|infty|times|cdot|dots|ldots|pm|leq|geq|neq|alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|omega)\b/g,
+      (_, name) => LATEX_SYMBOLS[name] || name
+    );
+    out = out.replace(/\\([{}_%&#])/g, "$1");
+    out = out.replace(/\\([a-zA-Z]+)\b/g, "$1");
+    return out.replace(/\s+/g, " ").trim();
+  }
+
+  function demoteLatex(text) {
+    let s = String(text || "");
+    s = s.replace(/\\\[([\s\S]*?)\\\]/g, (_, inner) => `\n\n${simplifyLatexInner(inner)}\n\n`);
+    s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_, inner) => `\n\n${simplifyLatexInner(inner)}\n\n`);
+    s = s.replace(/\\\(([\s\S]*?)\\\)/g, (_, inner) => simplifyLatexInner(inner));
+    s = s.replace(/\$([^$\n]+?)\$/g, (_, inner) => simplifyLatexInner(inner));
+    // Orphan commands outside delimiters (models sometimes emit these raw)
+    s = s.replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "($1)/($2)");
+    s = s.replace(/\\(?:text|mathrm|mathbf|textrm|mathit)\s*\{([^{}]*)\}/g, "$1");
+    s = s.replace(
+      /\\(to|rightarrow|approx|infty|times|cdot|ldots|pm|leq|geq|neq)\b/g,
+      (_, name) => LATEX_SYMBOLS[name] || name
+    );
+    return s;
+  }
+
   function inlineMarkdown(text) {
-    let html = text;
+    let html = String(text || "");
     html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    // Bold before italic; allow single * or _ inside bold spans.
+    html = html.replace(/\*\*((?:[^*]|\*(?!\*))+?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/__((?:[^_]|_(?!_))+?)__/g, "<strong>$1</strong>");
+    // No lookbehind — keeps this file parseable in older Chromium builds.
+    html = html.replace(/\*([^*\n]+?)\*/g, "<em>$1</em>");
+    html = html.replace(/(^|[^A-Za-z0-9_])_([^_\n]+?)_($|[^A-Za-z0-9_])/g, "$1<em>$2</em>$3");
     html = html.replace(
       /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
@@ -24,17 +90,31 @@
     return html;
   }
 
-  /** Split mid-paragraph "1. **Title** … 2. **Title**" into real list lines. */
+  /**
+   * Normalize LLM-ish markdown so packed lists / headings become real lines.
+   */
   function normalizeLooseLists(text) {
     return String(text || "")
       .replace(/\r\n/g, "\n")
-      .replace(/\s+(\d{1,2})\.\s+(?=\*\*|\[|"|“|‘)/g, "\n$1. ");
+      // Mid-paragraph headings: "... memory). ### Breakdown"
+      .replace(/\s+(#{1,4})\s+/g, "\n\n$1 ")
+      // Unicode / loose bullets → "- "
+      .replace(/^[ \t]*[•·‣▪◦]\s+/gm, "- ")
+      .replace(/\s+[•·‣▪◦]\s+/g, "\n- ")
+      // "1)" / "1）" ordered markers → "1. "
+      .replace(/^(\d{1,3})[\)）]\s+/gm, "$1. ")
+      // Mid-paragraph numbered runs: "… 1. **Title** … 2. **Title**"
+      .replace(/\s+(\d{1,2})[.)]\s+(?=\*\*|__|\[|"|“|‘|[A-Z])/g, "\n$1. ")
+      // Break list items after sentence punctuation: ": - We load"
+      .replace(/([.:;])\s+([-*])\s+/g, "$1\n$2 ")
+      // Mid-paragraph bullets: "… - **Title** … - **Title**"
+      .replace(/\s+([-*])\s+(?=\*\*|__|\[|"|“|‘|[A-Z])/g, "\n$1 ");
   }
 
   function renderMarkdown(text) {
     if (!text) return "";
     const codeBlocks = [];
-    let src = normalizeLooseLists(text);
+    let src = normalizeLooseLists(demoteLatex(text));
 
     src = src.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
       const idx = codeBlocks.length;
@@ -100,13 +180,29 @@
         continue;
       }
 
-      const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+        flushParagraph();
+        flushList();
+        flushBlockquote();
+        blocks.push("<hr>");
+        continue;
+      }
+
+      const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
       if (heading) {
         flushParagraph();
         flushList();
         flushBlockquote();
-        const level = heading[1].length;
-        blocks.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+        const level = Math.min(heading[1].length, 3);
+        let title = heading[2];
+        // "### Title: Sentence continues…" → real heading + paragraph
+        const splitTitle = title.match(/^(.{1,90}?):\s+([A-Z].{12,})$/);
+        if (splitTitle && !/^\*\*/.test(splitTitle[2])) {
+          blocks.push(`<h${level}>${inlineMarkdown(splitTitle[1])}</h${level}>`);
+          paragraph.push(splitTitle[2]);
+          continue;
+        }
+        blocks.push(`<h${level}>${inlineMarkdown(title)}</h${level}>`);
         continue;
       }
 
@@ -122,7 +218,19 @@
         flushBlockquote();
       }
 
-      const unordered = trimmed.match(/^[-*]\s+(.+)$/);
+      // Indented continuation of the current list item (explore "why" lines, etc.)
+      if (
+        listType &&
+        listItems.length &&
+        /^\s{2,}\S/.test(line) &&
+        !/^[-*+]\s+/.test(trimmed) &&
+        !/^\d{1,3}\.\s+/.test(trimmed)
+      ) {
+        listItems[listItems.length - 1] += ` ${trimmed}`;
+        continue;
+      }
+
+      const unordered = trimmed.match(/^[-*+]\s+(.+)$/);
       if (unordered) {
         pushListItem("ul", unordered[1]);
         continue;

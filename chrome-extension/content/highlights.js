@@ -30,7 +30,88 @@ function runtimeSend(message) {
   }
 }
 
+function runtimeAlive() {
+  return Boolean(chrome.runtime?.id);
+}
+
+function isStaleExtensionError(err) {
+  const message = String(err?.message || err || "").toLowerCase();
+  return (
+    message.includes("extension context invalidated") ||
+    message.includes("receiving end does not exist") ||
+    message.includes("message port closed")
+  );
+}
+
+function friendlyRuntimeError(err) {
+  if (!runtimeAlive() || isStaleExtensionError(err)) {
+    return "Extension updated — refreshing this page…";
+  }
+  return err?.message || "Save failed";
+}
+
+let listenersAttached = false;
+
+function teardownListeners() {
+  if (!listenersAttached) return;
+  listenersAttached = false;
+  document.removeEventListener("mousedown", onDocumentMouseDown, true);
+  document.removeEventListener("mouseup", onPointerReleased, true);
+  document.removeEventListener("touchend", onPointerReleased, true);
+  document.removeEventListener("keyup", onPointerReleased, true);
+  document.removeEventListener("selectionchange", onSelectionChange);
+  document.removeEventListener("scroll", onViewportChange, true);
+  window.removeEventListener("resize", onViewportChange);
+  document.removeEventListener("click", onHighlightClick, true);
+  document.removeEventListener("keydown", onPageKeydown, true);
+  window.clearTimeout(toolbarTimer);
+  window.clearTimeout(retryTimer);
+  window.clearTimeout(toastTimer);
+  paintObserver?.disconnect();
+  paintObserver = null;
+  hideToolbar();
+  hideNotePopover();
+}
+
+function guardStaleHandler() {
+  if (runtimeAlive()) return false;
+  teardownListeners();
+  return true;
+}
+
+function refreshPageForStaleExtension() {
+  const key = "__ctx_stale_reload";
+  try {
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+  } catch {
+    /* private mode / blocked storage */
+  }
+  window.setTimeout(() => {
+    try {
+      location.reload();
+    } catch {
+      /* ignore */
+    }
+  }, 450);
+}
+
+function attachListeners() {
+  if (listenersAttached) return;
+  listenersAttached = true;
+  document.addEventListener("mousedown", onDocumentMouseDown, true);
+  document.addEventListener("mouseup", onPointerReleased, true);
+  document.addEventListener("touchend", onPointerReleased, true);
+  document.addEventListener("keyup", onPointerReleased, true);
+  document.addEventListener("selectionchange", onSelectionChange);
+  document.addEventListener("scroll", onViewportChange, true);
+  window.addEventListener("resize", onViewportChange);
+  document.addEventListener("click", onHighlightClick, true);
+  document.addEventListener("keydown", onPageKeydown, true);
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (!runtimeAlive()) return false;
   if (message?.type === "PANEL_OPENED") {
     setPanelOpenFlag(true);
     scheduleToolbarUpdate(0);
@@ -64,39 +145,42 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
-chrome.runtime.sendMessage({ type: "GET_PANEL_STATE" }, (response) => {
-  if (chrome.runtime.lastError) return;
-  if (response && "open" in response) setPanelOpenFlag(response.open);
-});
-
-chrome.storage.session.get("panelOpen", (data) => {
-  if (chrome.runtime.lastError) return;
-  if (data?.panelOpen) setPanelOpenFlag(true);
-});
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "session" && changes.panelOpen) {
-    setPanelOpenFlag(changes.panelOpen.newValue);
+if (typeof globalThis.__ctxHighlightsTeardown === "function") {
+  try {
+    globalThis.__ctxHighlightsTeardown();
+  } catch {
+    /* previous content-script generation */
   }
-});
+}
+globalThis.__ctxHighlightsTeardown = teardownListeners;
 
-document.addEventListener("mousedown", onDocumentMouseDown, true);
-document.addEventListener("mouseup", onPointerReleased, true);
-document.addEventListener("touchend", onPointerReleased, true);
-document.addEventListener("keyup", onPointerReleased, true);
-document.addEventListener("selectionchange", onSelectionChange);
-document.addEventListener("scroll", onViewportChange, true);
-window.addEventListener("resize", onViewportChange);
-document.addEventListener("click", onHighlightClick, true);
-document.addEventListener("keydown", onPageKeydown, true);
+if (runtimeAlive()) {
+  chrome.runtime.sendMessage({ type: "GET_PANEL_STATE" }, (response) => {
+    if (chrome.runtime.lastError) return;
+    if (response && "open" in response) setPanelOpenFlag(response.open);
+  });
 
-trackClientNavigation(() => {
-  paintedKeys = new Set();
-  hideNotePopover();
+  chrome.storage.session.get("panelOpen", (data) => {
+    if (chrome.runtime.lastError) return;
+    if (data?.panelOpen) setPanelOpenFlag(true);
+  });
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "session" && changes.panelOpen) {
+      setPanelOpenFlag(changes.panelOpen.newValue);
+    }
+  });
+
+  attachListeners();
+
+  trackClientNavigation(() => {
+    paintedKeys = new Set();
+    hideNotePopover();
+    loadAndPaintHighlights();
+  });
+
   loadAndPaintHighlights();
-});
-
-loadAndPaintHighlights();
+}
 
 function setPanelOpenFlag(open) {
   panelOpen = Boolean(open);
@@ -115,6 +199,7 @@ function toolbarHasFocus() {
 }
 
 function onDocumentMouseDown(event) {
+  if (guardStaleHandler()) return;
   if (isOurUiTarget(event.target)) return;
   pointerSelecting = true;
   hideToolbar();
@@ -122,18 +207,21 @@ function onDocumentMouseDown(event) {
 }
 
 function onPointerReleased(event) {
+  if (guardStaleHandler()) return;
   if (isOurUiTarget(event.target)) return;
   pointerSelecting = false;
   scheduleToolbarUpdate(30);
 }
 
 function onSelectionChange() {
+  if (guardStaleHandler()) return;
   // While dragging, wait for mouseup/touchend so the range can settle.
   if (pointerSelecting) return;
   scheduleToolbarUpdate(60);
 }
 
 function onViewportChange() {
+  if (guardStaleHandler()) return;
   if (!toolbar || toolbar.hidden) return;
   scheduleToolbarUpdate(0);
 }
@@ -144,6 +232,7 @@ function scheduleToolbarUpdate(delayMs = 40) {
 }
 
 function updateToolbarForSelection() {
+  if (guardStaleHandler()) return;
   if (toolbarHasFocus()) return;
 
   const selection = window.getSelection();
@@ -169,6 +258,7 @@ function updateToolbarForSelection() {
 }
 
 function onPageKeydown(event) {
+  if (guardStaleHandler()) return;
   // Prefer the extension command (background → HIGHLIGHT_SELECTION). This
   // handler is a fallback when the page has focus and the command is slow;
   // saveInFlight dedupes if both fire.
@@ -195,7 +285,9 @@ function isSaveableSelection(text) {
 }
 
 function ensureToolbar() {
-  if (toolbar) return toolbar;
+  if (toolbar?.isConnected) return toolbar;
+  const existing = document.getElementById(TOOLBAR_ID);
+  if (existing) existing.remove();
 
   toolbar = document.createElement("div");
   toolbar.id = TOOLBAR_ID;
@@ -290,6 +382,11 @@ async function quickSaveQuote(text, note = "") {
   const normalized = normalizeSelection(text);
   if (!isSaveableSelection(normalized)) return false;
   if (saveInFlight) return false;
+  if (!runtimeAlive()) {
+    showToast(friendlyRuntimeError(), true);
+    refreshPageForStaleExtension();
+    return false;
+  }
   saveInFlight = true;
 
   const saveBtn = toolbar?.querySelector('[data-action="save"]');
@@ -319,10 +416,16 @@ async function quickSaveQuote(text, note = "") {
       saveBtn.disabled = false;
       saveBtn.textContent = "Highlight";
     }
-    const message = err?.message || "Save failed";
+    const stale = !runtimeAlive() || isStaleExtensionError(err);
+    const message = friendlyRuntimeError(err);
     showToast(message, true);
-    runtimeSend({ type: "QUOTE_SAVE_FAILED", error: message });
-    console.warn("Context quote save failed:", err);
+    if (stale) {
+      teardownListeners();
+      refreshPageForStaleExtension();
+    } else {
+      runtimeSend({ type: "QUOTE_SAVE_FAILED", error: message });
+      console.warn("Context quote save failed:", err);
+    }
     return false;
   } finally {
     saveInFlight = false;
@@ -536,6 +639,7 @@ function marksForQuote(quoteId, text) {
 }
 
 function onHighlightClick(event) {
+  if (guardStaleHandler()) return;
   const mark = event.target?.closest?.("mark.ctx-highlight");
   if (!mark) return;
   event.preventDefault();

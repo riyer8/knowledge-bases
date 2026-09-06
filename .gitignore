@@ -37,3 +37,7 @@ chrome-extension/.extension-id
 
 # Runtime graph state (legacy desktop graph)
 .graph-dependencies.json
+
+# Local browser e2e leftovers
+node_modules/
+.tmp-e2e/

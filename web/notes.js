@@ -276,7 +276,10 @@
     const rest = after.slice(lead);
     if (!rest.startsWith(trimmedNote)) return fenceEnd;
     const trailing = rest.slice(trimmedNote.length);
+    // Only consume when the note is its own paragraph (end or newline), never a prefix.
     if (trailing && !trailing.startsWith("\n")) return fenceEnd;
+    const firstLine = rest.split(/\r?\n/, 1)[0];
+    if (firstLine !== trimmedNote) return fenceEnd;
     return fenceEnd + lead + trimmedNote.length;
   }
 
@@ -287,10 +290,12 @@
   }
 
   function removeQuoteFromNotes(notes, quote) {
-    const range = quoteBlockRange(notes, quote?.text);
-    if (!range) return notes;
-    const end = consumeFollowingNote(notes, range.end, quote?.note);
-    return `${notes.slice(0, range.start)}${notes.slice(end)}`
+    const source = String(notes || "");
+    if (!source.trim()) return source;
+    const range = quoteBlockRange(source, quote?.text);
+    if (!range) return source;
+    const end = consumeFollowingNote(source, range.end, quote?.note);
+    return `${source.slice(0, range.start)}${source.slice(end)}`
       .replace(/\n{3,}/g, "\n\n")
       .trim();
   }
@@ -317,8 +322,9 @@
     const out = [];
     for (const body of bodies) {
       const key = quoteMatchKey(body);
-      const rec = key ? byKey.get(key) : null;
-      if (key) seen.add(key);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      const rec = byKey.get(key);
       out.push({
         id: rec?.id || "",
         // Prefer the library quote (page selection). Notes may add bold/italic
@@ -327,17 +333,7 @@
         note: rec?.note || "",
       });
     }
-    // Keep page highlights for saved quotes even if the notes editor temporarily
-    // lost the last blockquote wrapper (common contenteditable edge case).
-    for (const quote of records || []) {
-      const key = quoteMatchKey(quote?.text);
-      if (!key || seen.has(key)) continue;
-      out.push({
-        id: quote.id || "",
-        text: quote.text,
-        note: quote.note || "",
-      });
-    }
+    // Notes are the source of truth: quotes removed from notes are not painted.
     return out;
   }
 

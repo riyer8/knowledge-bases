@@ -68,6 +68,31 @@ assert.ok(fromEditor.includes(":::quote\nSecond quote\n:::"));
 assert.ok(fromEditor.includes("Commentary with *italic*."));
 assert.ok(!fromEditor.includes("> Hello"));
 
+// Exporter must fence even when raw editor markdown uses > blockquotes.
+const rawEditorNotes = [
+  "> Hardware is bound by compute, bandwidth, and memory",
+  "",
+  "My commentary.",
+  "",
+  "> Arithmetic intensity is FLOPs per byte",
+].join("\n");
+const fencedExport = ContextBookshelf.format(
+  ContextBookshelf.buildEntry({
+    title: "Rooflines",
+    url: "https://example.com/roofline",
+    dateAdded: "2026-09-05",
+    notes: rawEditorNotes,
+  })
+);
+assert.ok(fencedExport.includes(":::quote\nHardware is bound by compute, bandwidth, and memory\n:::"));
+assert.ok(fencedExport.includes(":::quote\nArithmetic intensity is FLOPs per byte\n:::"));
+assert.ok(fencedExport.includes("My commentary."));
+assert.ok(!/^>/m.test(fencedExport.split("notes:")[1] || ""), "exported notes must not keep raw > quotes");
+assert.strictEqual(
+  ContextBookshelf.toExportNotes(rawEditorNotes),
+  ContextNotes.markdownBlockquotesToFences(rawEditorNotes)
+);
+
 const appended = ContextNotes.appendQuoteToNotes("", {
   text: "Self-attention allows parallel training",
   note: "key idea",
@@ -131,13 +156,81 @@ assert.ok(multiMd.includes("> First line"));
 assert.ok(multiMd.includes("> Second line"));
 assert.ok(!multiMd.includes("First lineSecond line"));
 
-// Saved quotes still paint when notes temporarily omit the last blockquote body.
+// Notes are the source of truth for page highlights — orphan library quotes do not paint.
 const partialNotes = "> Older quote only";
-const unionHighlights = ContextNotes.quotesForHighlights(partialNotes, [
+const notesScopedHighlights = ContextNotes.quotesForHighlights(partialNotes, [
   { id: "old", text: "Older quote only", note: "" },
   { id: "new", text: "Newest quote on page", note: "keep me" },
 ]);
-assert.strictEqual(unionHighlights.length, 2);
-assert.ok(unionHighlights.some((item) => item.id === "new" && item.text === "Newest quote on page"));
+assert.strictEqual(notesScopedHighlights.length, 1);
+assert.strictEqual(notesScopedHighlights[0].id, "old");
+assert.ok(!notesScopedHighlights.some((item) => item.id === "new"));
+
+// After removing a quote from notes, highlights payload must drop it too.
+const syncedNotes = [
+  "> Keep this quote",
+  "",
+  "commentary",
+  "",
+  "> Delete this quote",
+].join("\n");
+const records = [
+  { id: "keep", text: "Keep this quote", note: "" },
+  { id: "drop", text: "Delete this quote", note: "" },
+];
+assert.strictEqual(ContextNotes.quotesForHighlights(syncedNotes, records).length, 2);
+const afterDrop = ContextNotes.removeQuoteFromNotes(syncedNotes, { text: "Delete this quote" });
+const remaining = ContextNotes.quotesForHighlights(afterDrop, records);
+assert.strictEqual(remaining.length, 1);
+assert.strictEqual(remaining[0].id, "keep");
+
+// Deleting one quote must keep siblings and freeform commentary.
+const multiQuotes = [
+  "> First quote about FLOPs",
+  "",
+  "Thoughts on first.",
+  "",
+  "> Second quote about bandwidth",
+  "",
+  "attached note",
+  "",
+  "> Third quote",
+  "",
+  "Closing thoughts.",
+].join("\n");
+const afterMiddle = ContextNotes.removeQuoteFromNotes(multiQuotes, {
+  text: "Second quote about bandwidth",
+  note: "attached note",
+});
+assert.ok(afterMiddle.includes("> First quote about FLOPs"));
+assert.ok(afterMiddle.includes("Thoughts on first."));
+assert.ok(afterMiddle.includes("> Third quote"));
+assert.ok(afterMiddle.includes("Closing thoughts."));
+assert.ok(!afterMiddle.includes("Second quote about bandwidth"));
+assert.ok(!afterMiddle.includes("attached note"));
+
+const afterFirst = ContextNotes.removeQuoteFromNotes(multiQuotes, {
+  text: "First quote about FLOPs",
+  note: "",
+});
+assert.ok(afterFirst.includes("Thoughts on first."));
+assert.ok(afterFirst.includes("> Second quote about bandwidth"));
+assert.ok(afterFirst.includes("attached note"));
+assert.ok(afterFirst.includes("> Third quote"));
+
+// Note must not be consumed when it is only a prefix of the next paragraph.
+const prefixTrap = [
+  "> First",
+  "",
+  "More thoughts remain here.",
+  "",
+  "> Second",
+].join("\n");
+const afterPrefix = ContextNotes.removeQuoteFromNotes(prefixTrap, {
+  text: "First",
+  note: "More",
+});
+assert.ok(afterPrefix.includes("More thoughts remain here."));
+assert.ok(afterPrefix.includes("> Second"));
 
 console.log("notes export round-trip ok");

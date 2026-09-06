@@ -11,11 +11,35 @@ try {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   ensureBackend().catch(() => {});
+  void reinjectContentScripts();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureBackend().catch(() => {});
 });
+
+/** After Reload on chrome://extensions, open tabs keep dead content scripts until refresh. */
+async function reinjectContentScripts() {
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (!tab.id || !tab.url) return;
+      if (!/^https?:/i.test(tab.url)) return;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content/extract.js", "content/highlights.js"],
+        });
+        await chrome.scripting.insertCSS({
+          target: { tabId: tab.id },
+          files: ["content/highlights.css"],
+        });
+      } catch {
+        // Restricted pages (chrome://, PDF viewer, etc.) cannot be injected.
+      }
+    })
+  );
+}
 
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "highlight-selection") {

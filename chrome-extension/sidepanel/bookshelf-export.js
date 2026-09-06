@@ -1,6 +1,4 @@
 (function (root) {
-  const Notes = root.ContextNotes || (typeof require === "function" ? require("./notes.js") : null);
-
   function todayDateAdded(now = new Date()) {
     const date = now instanceof Date ? now : new Date(now);
     const year = date.getFullYear();
@@ -41,10 +39,51 @@
       .join(", ")}]`;
   }
 
+  /** Fallback if ContextNotes is unavailable (stale panel / load-order race). */
+  function blockquotesToFencesFallback(notes) {
+    const lines = String(notes || "").split("\n");
+    const out = [];
+    let quote = [];
+    const flush = () => {
+      if (!quote.length) return;
+      const body = quote.map((line) => line.replace(/^>\s?/, "")).join("\n").trim();
+      out.push(`:::quote\n${body}\n:::`);
+      quote = [];
+    };
+    for (const line of lines) {
+      if (/^>/.test(line)) quote.push(line);
+      else {
+        flush();
+        out.push(line);
+      }
+    }
+    flush();
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function getNotesApi() {
+    if (root.ContextNotes) return root.ContextNotes;
+    if (typeof require === "function") {
+      try {
+        return require("./notes.js");
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function toExportNotes(rawNotes) {
+    const trimmed = String(rawNotes || "").trim();
+    if (!trimmed) return "";
+    const Notes = getNotesApi();
+    if (Notes?.markdownBlockquotesToFences) {
+      return Notes.markdownBlockquotesToFences(trimmed);
+    }
+    return blockquotesToFencesFallback(trimmed);
+  }
+
   function buildEntry(fields) {
-    const notes = Notes
-      ? Notes.markdownBlockquotesToFences(String(fields?.notes || "").trim())
-      : String(fields?.notes || "").trim();
     return {
       title: String(fields?.title || "").trim(),
       url: String(fields?.url || "").trim(),
@@ -55,7 +94,7 @@
       tldr: String(fields?.tldr || "").trim(),
       thoughts: String(fields?.thoughts || "").trim(),
       tags: normalizeTags(fields?.tags),
-      notes,
+      notes: toExportNotes(fields?.notes),
     };
   }
 
@@ -81,6 +120,7 @@
     normalizeTags,
     buildEntry,
     format,
+    toExportNotes,
   };
 
   root.ContextBookshelf = ContextBookshelf;
