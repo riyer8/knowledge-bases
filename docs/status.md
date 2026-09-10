@@ -1,6 +1,6 @@
 # Project Status
 
-_Last updated: 2026-09-06_
+_Last updated: 2026-09-09_
 
 ## Start here tomorrow
 
@@ -25,8 +25,12 @@ Life, Wiki, and integrations remain in the tree but are [archived from nav](arch
 The Python backend on `localhost:8765` serves Chrome extension and macOS app. Storage is
 unified at `~/.kb/`. Documentation lives entirely in `docs/` (plus root `init.md` / `AGENTS.md`).
 
+Public repo hardening (2026-09-09): MIT license, expanded root README, `.env.example` completeness,
+git-history secret scan. No product behavior changes.
+
 ## Recently completed
 
+- **Public repo hardening (2026-09-09):** MIT `LICENSE`, expanded root `README.md` (setup + screenshots + env-dependent tests), `.env.example` covers launcher/`CONTEXT_REPO_ROOT` vars. gitleaks 8.24.3 + trufflehog 3.88.27: no secrets in git history.
 - **Docs haul (2026-09-06):** aligned markdown with code (architecture, API, storage, agents, design, specs, init/constitution mutation tables). Code remains source of truth.
 - Notes editor is the export source of truth (no quote-list seeding)
 - Bookshelf JS object with `:::quote` fences matches the Notes document
@@ -65,7 +69,7 @@ Full rationale: [decisions.md](decisions.md)
 | `chrome-extension/` | in progress | reading loop is primary |
 | `web/` | done | library shows notes + Copy JSON |
 | `DesktopApp/` | parked | library still quote-list; follow-on |
-| `docs/` | refreshed | matched to code 2026-09-06 |
+| `docs/` | refreshed | public README/LICENSE 2026-09-09; matched to code 2026-09-06 |
 
 ## Known issues
 
@@ -73,6 +77,7 @@ Full rationale: [decisions.md](decisions.md)
 - PDF quotes save; on-page paint is HTML-only
 - Phase 5 integrations (Amazon, Health, scraper) intentionally deferred
 - Desktop library notes parity still open (Sprint D)
+- `pytest tests/test_integrations.py::test_gmail_sync_ingests_threads` hits the live LLM during ingest (Ollama if no OpenAI key; OpenAI if `.env` has one). Environmental, not a product bug — documented in root README.
 
 ## Recently hardened (extension 0.1.8)
 

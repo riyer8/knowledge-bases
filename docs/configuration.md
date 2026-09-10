@@ -1,6 +1,6 @@
 # Configuration
 
-_Last updated: 2026-09-06_
+_Last updated: 2026-09-09_
 
 All configuration flows through `core/config.py` and `.env`. Copy `.env.example` to `.env`
 at the repo root.
@@ -68,13 +68,14 @@ Scopes: Calendar and Gmail **read-only**. See [getting-started.md](getting-start
 
 ## Launcher (Chrome extension)
 
-The extension uses a separate HTTP launcher on port **8798** (not configurable via `.env`):
+The extension uses a separate HTTP launcher (defaults below). `node scripts/install-launcher.mjs` registers a LaunchAgent that starts `python3 main.py` when the extension opens.
 
-```bash
-node scripts/install-launcher.mjs
-```
+| Variable | Default | Purpose |
+|---|---|---|
+| `CONTEXT_LAUNCHER_PORT` | `8798` | Launcher HTTP port (`scripts/launcher.mjs`) |
+| `KB_API_URL` | `http://127.0.0.1:8765` | URL the launcher health-checks before spawning the backend |
 
-This registers a LaunchAgent that starts `python3 main.py` when the extension opens.
+These are process environment variables for the launcher, not required in `.env` for the Python backend. They are documented in `.env.example` so a from-scratch setup sees every knob the code reads.
 
 ---
 

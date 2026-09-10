@@ -1,6 +1,6 @@
 # Roadmap
 
-_Last updated: 2026-09-06_
+_Last updated: 2026-09-09_
 
 Status key: `[ ]` not started · `[~]` in progress · `[x]` done
 
@@ -99,6 +99,7 @@ Inspired by [Karpathy's knowledge base workflow](https://x.com/karpathy/status/2
 - [x] Keep [status.md](status.md) current after major sessions
 - [x] Add eval suites before shipping new modules (see [testing.md](testing.md))
 - [x] Retrieval latency benchmarks (`tests/test_retrieval_latency.py`, p95 < 2s)
+- [x] Public repo hardening: MIT license, root README, `.env.example` completeness (2026-09-09)
 - Keep [architecture.md](architecture.md) aligned with code
 - Log non-obvious choices in [decisions.md](decisions.md)
 
